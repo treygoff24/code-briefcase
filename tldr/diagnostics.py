@@ -25,6 +25,7 @@ import os
 import re
 import shutil
 import subprocess
+import tempfile
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Callable, TypedDict
@@ -311,6 +312,7 @@ PROJECT_OXLINT_IGNORE_PATTERNS = (
     ".next/**",
     "coverage/**",
 )
+JS_TS_PROJECT_CONFIG_NAMES = ("tsconfig.json", "jsconfig.json")
 
 def _detect_language(file_path: str) -> str:
     """Detect language from file extension."""
@@ -362,6 +364,85 @@ def _resolve_tool(name: str, start: Path) -> str | None:
         if candidate.is_file() and os.access(candidate, os.X_OK):
             return str(candidate)
     return shutil.which(name)
+
+
+def _find_js_ts_project_config(start: Path) -> Path | None:
+    """Find the nearest TypeScript/JavaScript project config for a source path."""
+    search_dir = start if start.is_dir() else start.parent
+    for depth, parent in enumerate([search_dir, *search_dir.parents]):
+        if depth >= _MAX_RESOLVE_DEPTH:
+            break
+        for name in JS_TS_PROJECT_CONFIG_NAMES:
+            candidate = parent / name
+            if candidate.is_file():
+                return candidate
+    return None
+
+
+def _write_single_file_tsconfig(
+    project_config: Path,
+    target_file: Path,
+    *,
+    allow_js: bool,
+) -> tempfile.TemporaryDirectory:
+    """Create an ephemeral tsconfig that checks one file through project config.
+
+    Passing a file directly to tsc ignores tsconfig settings in TypeScript 5 and
+    errors in TypeScript 6. Running the whole project respects aliases but leaks
+    unrelated diagnostics. A tiny config that extends the real config and
+    overrides the root set with a single absolute file gives single-file hooks
+    project-correct behavior without project-wide noise.
+    """
+    temp_dir = tempfile.TemporaryDirectory(prefix="tldr-tsc-")
+    config_path = Path(temp_dir.name) / "tsconfig.json"
+    compiler_options: dict[str, object] = {"noEmit": True}
+    if allow_js:
+        compiler_options["allowJs"] = True
+
+    config_path.write_text(
+        json.dumps(
+            {
+                "extends": str(project_config.resolve()),
+                "compilerOptions": compiler_options,
+                "files": [str(target_file.resolve())],
+                "include": [],
+            },
+            indent=2,
+        )
+        + "\n"
+    )
+    return temp_dir
+
+
+def _write_javascript_project_tsconfig(
+    project_path: Path,
+    project_config: Path | None,
+) -> tempfile.TemporaryDirectory:
+    """Create an ephemeral project config that checks JS/JSX under project_path."""
+    temp_dir = tempfile.TemporaryDirectory(prefix="tldr-js-tsc-")
+    config_path = Path(temp_dir.name) / "tsconfig.json"
+    project_root = project_path.resolve()
+    payload: dict[str, object] = {
+        "compilerOptions": {
+            "allowJs": True,
+            "noEmit": True,
+        },
+        "include": [
+            f"{project_root}/**/*.js",
+            f"{project_root}/**/*.jsx",
+        ],
+        "exclude": [
+            f"{project_root}/node_modules/**",
+            f"{project_root}/dist/**",
+            f"{project_root}/build/**",
+            f"{project_root}/.next/**",
+        ],
+    }
+    if project_config is not None:
+        payload["extends"] = str(project_config.resolve())
+
+    config_path.write_text(json.dumps(payload, indent=2) + "\n")
+    return temp_dir
 
 
 def _parse_pyright_output(stdout: str) -> list[dict]:
@@ -1033,18 +1114,48 @@ def _run_js_ts_diagnostics(
     )
 
     tasks: list[tuple[str, list[str], int]] = []
+    tsc_cwd = None
+    tsc_filter_path = None
+    tsc_temp_config: tempfile.TemporaryDirectory | None = None
     if tsc:
         cmd = [tsc, "--noEmit"]
-        if allow_js:
-            cmd.append("--allowJs")
-        cmd.extend(["--pretty", "false", str(path)])
+        project_config = _find_js_ts_project_config(path)
+        if project_config:
+            tsc_temp_config = _write_single_file_tsconfig(
+                project_config,
+                path,
+                allow_js=allow_js,
+            )
+            cmd.extend(
+                [
+                    "--pretty",
+                    "false",
+                    "--project",
+                    str(Path(tsc_temp_config.name) / "tsconfig.json"),
+                ]
+            )
+            tsc_cwd = project_config.parent
+            tsc_filter_path = path
+        else:
+            if allow_js:
+                cmd.append("--allowJs")
+            cmd.extend(["--pretty", "false", str(path)])
         tasks.append(("tsc", cmd, 30))
     if oxlint:
         tasks.append(("oxlint", [oxlint, "--format=json", str(path)], 10))
     if oxfmt:
         tasks.append(("oxfmt", [oxfmt, "--check", str(path)], 15))
 
-    return _collect_js_ts_results(path, tasks)
+    try:
+        return _collect_js_ts_results(
+            path,
+            tasks,
+            cwd=tsc_cwd,
+            tsc_filter_path=tsc_filter_path,
+        )
+    finally:
+        if tsc_temp_config is not None:
+            tsc_temp_config.cleanup()
 
 
 def _collect_js_ts_results(
@@ -1052,6 +1163,7 @@ def _collect_js_ts_results(
     tasks: list[tuple[str, list[str], int]],
     *,
     cwd: Path | None = None,
+    tsc_filter_path: Path | None = None,
 ) -> tuple[list[dict], list[str]]:
     """Run JS/TS tool tasks in parallel; preserve submission order in results.
 
@@ -1074,9 +1186,23 @@ def _collect_js_ts_results(
             if result is None:
                 continue
             if name == "tsc":
-                diagnostics.extend(_parse_tsc_output(result.stdout))
+                tsc_diagnostics = _parse_tsc_output(result.stdout)
+                if tsc_filter_path is not None:
+                    tsc_diagnostics = _filter_diagnostics_to_file(
+                        tsc_diagnostics,
+                        tsc_filter_path,
+                        cwd,
+                    )
+                diagnostics.extend(tsc_diagnostics)
             elif name == "oxlint":
-                diagnostics.extend(_parse_oxlint_output(result.stdout))
+                oxlint_diagnostics = _parse_oxlint_output(result.stdout)
+                if tsc_filter_path is not None:
+                    oxlint_diagnostics = _filter_diagnostics_to_file(
+                        oxlint_diagnostics,
+                        tsc_filter_path,
+                        cwd,
+                    )
+                diagnostics.extend(oxlint_diagnostics)
             elif name == "oxfmt":
                 if _oxfmt_signals_drift(result):
                     diagnostics.append(_oxfmt_drift_diagnostic(drift_target))
@@ -1096,6 +1222,41 @@ def _run_subprocess(
         return subprocess.run(cmd, **kwargs)
     except subprocess.TimeoutExpired:
         return None
+
+
+def _filter_diagnostics_to_file(
+    diagnostics: list[dict],
+    target_path: Path,
+    cwd: Path | None,
+) -> list[dict]:
+    """Keep only diagnostics that belong to target_path.
+
+    Project-aware tsc is the correct way to respect path aliases, JSX settings,
+    and framework tsconfigs, but it can report unrelated project errors. Single
+    file diagnostics are hook-facing, so they should surface only findings for
+    the edited file. Some tools also report project-relative paths; normalize
+    matching diagnostics to the absolute target path for unambiguous output.
+    """
+    filtered = []
+    target = target_path.resolve()
+    base = cwd or target.parent
+
+    for diagnostic in diagnostics:
+        raw_file = diagnostic.get("file")
+        if not raw_file:
+            continue
+
+        candidate = Path(raw_file)
+        if not candidate.is_absolute():
+            candidate = base / candidate
+        if candidate.resolve() != target:
+            continue
+
+        normalized = dict(diagnostic)
+        normalized["file"] = str(target)
+        filtered.append(normalized)
+
+    return filtered
 
 
 def _oxfmt_signals_drift(result: subprocess.CompletedProcess) -> bool:
@@ -1135,11 +1296,24 @@ def _run_js_ts_project_diagnostics(
     oxfmt = _resolve_tool("oxfmt", path) if include_lint else None
 
     tasks: list[tuple[str, list[str], int]] = []
+    tsc_temp_config: tempfile.TemporaryDirectory | None = None
     if tsc:
         cmd = [tsc, "--noEmit"]
         if allow_js:
-            cmd.append("--allowJs")
-        cmd.extend(["--pretty", "false"])
+            tsc_temp_config = _write_javascript_project_tsconfig(
+                path,
+                _find_js_ts_project_config(path),
+            )
+            cmd.extend(
+                [
+                    "--pretty",
+                    "false",
+                    "--project",
+                    str(Path(tsc_temp_config.name) / "tsconfig.json"),
+                ]
+            )
+        else:
+            cmd.extend(["--pretty", "false"])
         tasks.append(("tsc", cmd, 120))
     if oxlint:
         oxlint_cmd = [oxlint, "--format=json", "--no-error-on-unmatched-pattern"]
@@ -1152,7 +1326,11 @@ def _run_js_ts_project_diagnostics(
     if oxfmt:
         tasks.append(("oxfmt", [oxfmt, "--check", ".", "!**/*.d.ts"], 60))
 
-    return _collect_js_ts_results(path, tasks, cwd=path)
+    try:
+        return _collect_js_ts_results(path, tasks, cwd=path)
+    finally:
+        if tsc_temp_config is not None:
+            tsc_temp_config.cleanup()
 
 
 def _run_go_diagnostics(path: Path, include_lint: bool) -> tuple[list[dict], list[str]]:

@@ -60,3 +60,6 @@ thoughts/
 # TLDR cache (per-project)
 .tldr/
 archive/
+
+# Local dogfood harness output
+dogfood-output/

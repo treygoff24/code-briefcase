@@ -280,6 +280,9 @@ Python, TypeScript, JavaScript, Go, Rust, Java, C, C++, Ruby, PHP, C#, Kotlin, S
 
 Diagnostics for TypeScript and JavaScript use `tsc` for type checking plus
 `oxlint` and `oxfmt` for lint/format feedback when those tools are installed.
+Single-file JS/TS diagnostics are project-aware: TLDR extends the nearest
+`tsconfig.json`/`jsconfig.json` in an ephemeral one-file config so path aliases
+and JSX settings work without leaking unrelated project-wide errors.
 
 Language is auto-detected or specify with `--lang`.
 

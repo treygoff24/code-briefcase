@@ -64,7 +64,9 @@ exit 1
     ]
 
 
-def test_project_javascript_runs_tsc_with_allow_js(tmp_path, monkeypatch, make_executable):
+def test_project_javascript_uses_ephemeral_project_config(
+    tmp_path, monkeypatch, make_executable
+):
     monkeypatch.setattr(diag.shutil, "which", lambda name: None)
 
     source = tmp_path / "src" / "sample.js"
@@ -76,8 +78,12 @@ def test_project_javascript_runs_tsc_with_allow_js(tmp_path, monkeypatch, make_e
         tmp_path / "node_modules" / ".bin" / "tsc",
         f"""#!/bin/sh
 printf '%s\n' "$@" > {tsc_args_file}
-exit 0
+echo "src/sample.js(2,7): error TS2322: Type 'number' is not assignable to type 'string'."
+exit 2
 """,
+    )
+    (tmp_path / "tsconfig.json").write_text(
+        '{"compilerOptions":{"allowJs":true,"checkJs":true}}\n'
     )
     make_executable(
         tmp_path / "node_modules" / ".bin" / "oxlint",
@@ -92,9 +98,13 @@ exit 0
     )
 
     result = diag.get_project_diagnostics(str(tmp_path), language="javascript")
+    args = tsc_args_file.read_text().splitlines()
 
     assert result["tools"] == ["tsc", "oxlint", "oxfmt"]
-    assert "--allowJs" in tsc_args_file.read_text().splitlines()
+    assert result["error_count"] == 1
+    assert result["diagnostics"][0]["source"] == "tsc"
+    assert "--project" in args
+    assert args[args.index("--project") + 1].endswith("tsconfig.json")
 
 
 def test_project_oxfmt_skips_all_declaration_files(tmp_path, monkeypatch, make_executable):

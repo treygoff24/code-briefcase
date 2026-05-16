@@ -740,6 +740,12 @@ Wraps language-specific type checkers, linters, and formatter checks:
 | C/C++ | gcc/clang | cppcheck | - |
 | Ruby | - | rubocop | - |
 | PHP | - | phpstan | - |
+
+For single-file JavaScript and TypeScript checks, TLDR runs `tsc` through an
+ephemeral config that extends the nearest project config and includes only the
+target file. That preserves aliases, JSX settings, and other project compiler
+options while keeping post-edit diagnostics scoped to the file the agent just
+changed.
 | Kotlin | kotlinc | ktlint | - |
 | Swift | swiftc | swiftlint | - |
 | C# | dotnet build | - | - |
