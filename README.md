@@ -261,7 +261,7 @@ The bug is obvious. Line 28 uses `user` without going through the null check pat
 ### Diagnostics
 | Command | What It Does |
 |---------|--------------|
-| `tldr diagnostics <file>` | Type check + lint |
+| `tldr diagnostics <file>` | Type check + lint/format diagnostics |
 | `tldr change-impact [files]` | Find tests affected by changes |
 | `tldr doctor` | Check/install diagnostic tools |
 
@@ -277,6 +277,9 @@ The bug is obvious. Line 28 uses `user` without going through the null check pat
 ## Supported Languages
 
 Python, TypeScript, JavaScript, Go, Rust, Java, C, C++, Ruby, PHP, C#, Kotlin, Scala, Swift, Lua, Elixir
+
+Diagnostics for TypeScript and JavaScript use `tsc` for type checking plus
+`oxlint` and `oxfmt` for lint/format feedback when those tools are installed.
 
 Language is auto-detected or specify with `--lang`.
 

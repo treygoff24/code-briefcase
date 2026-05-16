@@ -224,6 +224,7 @@ Semantic Search:
     extract_p.add_argument("--function", dest="filter_function", help="Filter to specific function")
     extract_p.add_argument("--method", dest="filter_method", help="Filter to specific method (Class.method)")
     extract_p.add_argument("--lang", default=None, help="Language (auto-detected from extension if not specified)")
+    extract_p.add_argument("--format", choices=["json"], default="json", help="Output format (currently only json supported)")
 
     # tldr context <entry>
     ctx_p = subparsers.add_parser("context", help="Get relevant context for LLM")
@@ -429,7 +430,7 @@ Semantic Search:
 
     # tldr doctor [--install LANG]
     doctor_p = subparsers.add_parser(
-        "doctor", help="Check and install diagnostic tools (type checkers, linters)"
+        "doctor", help="Check and install diagnostic tools (type checkers, linters, formatters)"
     )
     doctor_p.add_argument(
         "--install", metavar="LANG", help="Install missing tools for language (e.g., python, go)"
@@ -986,93 +987,22 @@ Semantic Search:
             import shutil
             import subprocess
 
-            # Tool definitions: language -> (type_checker, linter, install_commands)
-            TOOL_INFO = {
-                "python": {
-                    "type_checker": ("pyright", "pip install pyright  OR  npm install -g pyright"),
-                    "linter": ("ruff", "pip install ruff"),
-                },
-                "typescript": {
-                    "type_checker": ("tsc", "npm install -g typescript"),
-                    "linter": None,
-                },
-                "javascript": {
-                    "type_checker": None,
-                    "linter": ("eslint", "npm install -g eslint"),
-                },
-                "go": {
-                    "type_checker": ("go", "https://go.dev/dl/"),
-                    "linter": ("golangci-lint", "brew install golangci-lint  OR  go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest"),
-                },
-                "rust": {
-                    "type_checker": ("cargo", "https://rustup.rs/"),
-                    "linter": ("cargo-clippy", "rustup component add clippy"),
-                },
-                "java": {
-                    "type_checker": ("javac", "Install JDK: https://adoptium.net/"),
-                    "linter": ("checkstyle", "brew install checkstyle  OR  download from checkstyle.org"),
-                },
-                "c": {
-                    "type_checker": ("gcc", "xcode-select --install  OR  apt install gcc"),
-                    "linter": ("cppcheck", "brew install cppcheck  OR  apt install cppcheck"),
-                },
-                "cpp": {
-                    "type_checker": ("g++", "xcode-select --install  OR  apt install g++"),
-                    "linter": ("cppcheck", "brew install cppcheck  OR  apt install cppcheck"),
-                },
-                "ruby": {
-                    "type_checker": None,
-                    "linter": ("rubocop", "gem install rubocop"),
-                },
-                "php": {
-                    "type_checker": None,
-                    "linter": ("phpstan", "composer global require phpstan/phpstan"),
-                },
-                "kotlin": {
-                    "type_checker": ("kotlinc", "brew install kotlin  OR  sdk install kotlin"),
-                    "linter": ("ktlint", "brew install ktlint"),
-                },
-                "swift": {
-                    "type_checker": ("swiftc", "xcode-select --install"),
-                    "linter": ("swiftlint", "brew install swiftlint"),
-                },
-                "csharp": {
-                    "type_checker": ("dotnet", "https://dotnet.microsoft.com/download"),
-                    "linter": None,
-                },
-                "scala": {
-                    "type_checker": ("scalac", "brew install scala  OR  sdk install scala"),
-                    "linter": None,
-                },
-                "elixir": {
-                    "type_checker": ("elixir", "brew install elixir  OR  asdf install elixir"),
-                    "linter": ("mix", "Included with Elixir"),
-                },
-                "lua": {
-                    "type_checker": None,
-                    "linter": ("luacheck", "luarocks install luacheck"),
-                },
-            }
+            from .diagnostics import LANG_TOOLS, TOOL_SLOTS
 
-            # Install commands for --install flag
-            INSTALL_COMMANDS = {
-                "python": ["pip", "install", "pyright", "ruff"],
-                "go": ["go", "install", "github.com/golangci/golangci-lint/cmd/golangci-lint@latest"],
-                "rust": ["rustup", "component", "add", "clippy"],
-                "ruby": ["gem", "install", "rubocop"],
-                "kotlin": ["brew", "install", "kotlin", "ktlint"],
-                "swift": ["brew", "install", "swiftlint"],
-                "lua": ["luarocks", "install", "luacheck"],
+            install_commands = {
+                lang: config["install_command"]
+                for lang, config in LANG_TOOLS.items()
+                if "install_command" in config
             }
 
             if args.install:
                 lang = args.install.lower()
-                if lang not in INSTALL_COMMANDS:
+                if lang not in install_commands:
                     print(f"Error: No auto-install available for '{lang}'", file=sys.stderr)
-                    print(f"Available: {', '.join(sorted(INSTALL_COMMANDS.keys()))}", file=sys.stderr)
+                    print(f"Available: {', '.join(sorted(install_commands.keys()))}", file=sys.stderr)
                     sys.exit(1)
 
-                cmd = INSTALL_COMMANDS[lang]
+                cmd = install_commands[lang]
                 print(f"Installing tools for {lang}: {' '.join(cmd)}")
                 try:
                     subprocess.run(cmd, check=True)
@@ -1084,30 +1014,21 @@ Semantic Search:
                     print(f"✗ Command not found: {cmd[0]}", file=sys.stderr)
                     sys.exit(1)
             else:
-                # Check all tools
                 results = {}
-                for lang, tools in TOOL_INFO.items():
-                    lang_result = {"type_checker": None, "linter": None}
+                for lang, config in sorted(LANG_TOOLS.items()):
+                    lang_result = {slot: [] for slot in TOOL_SLOTS}
 
-                    if tools["type_checker"]:
-                        tool_name, install_cmd = tools["type_checker"]
-                        path = shutil.which(tool_name)
-                        lang_result["type_checker"] = {
-                            "name": tool_name,
-                            "installed": path is not None,
-                            "path": path,
-                            "install": install_cmd if not path else None,
-                        }
-
-                    if tools["linter"]:
-                        tool_name, install_cmd = tools["linter"]
-                        path = shutil.which(tool_name)
-                        lang_result["linter"] = {
-                            "name": tool_name,
-                            "installed": path is not None,
-                            "path": path,
-                            "install": install_cmd if not path else None,
-                        }
+                    for slot in TOOL_SLOTS:
+                        for tool in config.get(slot, []):
+                            executable = tool["executable"]
+                            path = shutil.which(executable)
+                            lang_result[slot].append({
+                                "name": tool["name"],
+                                "executable": executable,
+                                "installed": path is not None,
+                                "path": path,
+                                "install": tool["install"] if not path else None,
+                            })
 
                     results[lang] = lang_result
 
@@ -1119,29 +1040,18 @@ Semantic Search:
                     print()
 
                     missing_count = 0
-                    for lang, checks in sorted(results.items()):
-                        has_issues = False
+                    for lang, checks in results.items():
                         lines = []
 
-                        tc = checks["type_checker"]
-                        if tc:
-                            if tc["installed"]:
-                                lines.append(f"  ✓ {tc['name']} - {tc['path']}")
-                            else:
-                                lines.append(f"  ✗ {tc['name']} - not found")
-                                lines.append(f"    → {tc['install']}")
-                                has_issues = True
-                                missing_count += 1
-
-                        linter = checks["linter"]
-                        if linter:
-                            if linter["installed"]:
-                                lines.append(f"  ✓ {linter['name']} - {linter['path']}")
-                            else:
-                                lines.append(f"  ✗ {linter['name']} - not found")
-                                lines.append(f"    → {linter['install']}")
-                                has_issues = True
-                                missing_count += 1
+                        for slot in TOOL_SLOTS:
+                            for tool in checks[slot]:
+                                label = tool["name"]
+                                if tool["installed"]:
+                                    lines.append(f"  ✓ {label} - {tool['path']}")
+                                else:
+                                    lines.append(f"  ✗ {label} - not found")
+                                    lines.append(f"    → {tool['install']}")
+                                    missing_count += 1
 
                         if lines:
                             print(f"{lang.capitalize()}:")

@@ -1,0 +1,16 @@
+# oxlint fixture capture
+
+Command: npx -y oxlint@latest --format=json tests/fixtures/oxlint_sample.ts
+Exit: 0
+
+stderr:
+
+First lines of JSON:
+    { "diagnostics": [{"message": "`debugger` statement is not allowed","code": "eslint(no-debugger)","severity": "warning","causes": [],"url": "https://oxc.rs/docs/guide/usage/linter/rules/eslint/no-debugger.html","help": "Remove the debugger statement","filename": "tests/fixtures/oxlint_sample.ts","labels": [{"span": {"offset": 20,"length": 9,"line": 2,"column": 3}}],"related": []},
+    {"message": "Variable 'unused' is declared but never used. Unused variables should start with a '_'.","code": "eslint(no-unused-vars)","severity": "warning","causes": [],"url": "https://oxc.rs/docs/guide/usage/linter/rules/eslint/no-unused-vars.html","help": "Consider removing this declaration.","filename": "tests/fixtures/oxlint_sample.ts","labels": [{"label": "'unused' is declared here","span": {"offset": 38,"length": 6,"line": 3,"column": 9}}],"related": []}],
+                  "number_of_files": 1,
+                  "number_of_rules": 95,
+                  "threads_count": 16,
+                  "start_time": 0.005587125
+                }
+                

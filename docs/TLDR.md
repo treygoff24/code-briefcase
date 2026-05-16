@@ -676,7 +676,7 @@ tldr dead [path] --entry main cli      # Find unreachable code
 tldr arch [path]                       # Detect architecture layers
 tldr imports <file>                    # Parse imports from a file
 tldr importers <module> [path]         # Find all files that import a module
-tldr diagnostics <file|path>           # Type check + lint (pyright/ruff)
+tldr diagnostics <file|path>           # Type check + lint/format diagnostics
 tldr change-impact [files...]          # Find tests affected by changes
 tldr doctor                            # Check/install diagnostic tools
 ```
@@ -684,7 +684,7 @@ tldr doctor                            # Check/install diagnostic tools
 ### Diagnostic Tool Setup
 
 ```bash
-# Check which type checkers/linters are installed
+# Check which type checkers/linters/formatters are installed
 tldr doctor
 # → Shows installed ✓ and missing ✗ tools per language
 
@@ -723,27 +723,28 @@ tldr diagnostics src/ --format text
 # → Found 2 errors, 5 warnings
 # → E src/auth.py:45:12: Expected int, got str [reportArgumentType]
 
-# Type check only (skip linter)
+# Type check only (skip linter/formatter)
 tldr diagnostics src/ --no-lint
 ```
 
-Wraps language-specific type checkers and linters:
+Wraps language-specific type checkers, linters, and formatter checks:
 
-| Language | Type Checker | Linter |
-|----------|--------------|--------|
-| Python | pyright | ruff |
-| TypeScript | tsc | - |
-| Go | go vet | golangci-lint |
-| Rust | cargo check | clippy |
-| Java | javac | checkstyle |
-| C/C++ | gcc/clang | cppcheck |
-| Ruby | - | rubocop |
-| PHP | - | phpstan |
-| Kotlin | kotlinc | ktlint |
-| Swift | swiftc | swiftlint |
-| C# | dotnet build | - |
-| Scala | scalac | - |
-| Elixir | mix compile | credo |
+| Language | Type Checker | Linter | Formatter |
+|----------|--------------|--------|-----------|
+| Python | pyright | ruff | - |
+| TypeScript | tsc | oxlint | oxfmt |
+| JavaScript | tsc (`--allowJs`) | oxlint | oxfmt |
+| Go | go vet | golangci-lint | - |
+| Rust | cargo check | clippy | - |
+| Java | javac | checkstyle | - |
+| C/C++ | gcc/clang | cppcheck | - |
+| Ruby | - | rubocop | - |
+| PHP | - | phpstan | - |
+| Kotlin | kotlinc | ktlint | - |
+| Swift | swiftc | swiftlint | - |
+| C# | dotnet build | - | - |
+| Scala | scalac | - | - |
+| Elixir | mix compile | credo | - |
 
 Tools are optional - if not installed, silently skipped.
 

@@ -450,14 +450,22 @@ class TestDiagnostics:
         assert result.get("error_count", 0) == 0, \
             f"valid file should have no errors, got: {result}"
 
-    def test_diagnostics_invalid_file(self, temp_ts_file):
+    def test_diagnostics_invalid_file(self, temp_ts_file, make_executable):
         """diagnostics should detect TypeScript errors."""
         invalid_ts = """
 function broken(x: number): string {
     return x;  // Type error: number not assignable to string
 }
 """
-        filepath, _ = temp_ts_file(invalid_ts)
+        filepath, tmpdir = temp_ts_file(invalid_ts)
+        make_executable(
+            Path(tmpdir) / "node_modules" / ".bin" / "tsc",
+            f"""#!/bin/sh
+echo "{filepath}(3,5): error TS2322: Type 'number' is not assignable to type 'string'."
+exit 2
+""",
+        )
+
         result = run_tldr(["diagnostics", filepath])
 
         # Should detect the type error
