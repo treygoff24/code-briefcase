@@ -25,7 +25,7 @@
   - daemon._handle_impact() expects stale edge keys (caller, callee, file) instead of the actual edge shape (from_file, from_func, to_file, to_func).
   - daemon._handle_diagnostics() returns an old errors/summary schema while direct tldr diagnostics returns top-level diagnostics/error_count/warning_count.
 - Claude Code hook docs confirm command hooks can emit JSON with hookSpecificOutput, permissionDecision, updatedInput, and systemMessage.
-- Codex hook docs confirm config shape and command handler fields (type, command, timeout, async, statusMessage), but hook-output behavior is less documented. Treat Codex hook output as best-effort context until verified by dogfood tests.
+- Codex CLI 0.130 hook docs confirm hooks.json/config.toml discovery, command handler fields (type, command, timeout, statusMessage), and hookSpecificOutput.additionalContext for SessionStart, PreToolUse, and PostToolUse. Codex hooks are narrower than Claude hooks: they do not expose Read, and file edits are reported as apply_patch with Edit/Write matcher aliases.
 
 ## Product Shape
 
@@ -59,12 +59,12 @@ PreToolUse Read
   - for Claude, optionally add limit/offset to avoid giant reads
   - bypass small files, tests, config, secrets, non-code, and targeted reads
 
-PreToolUse Edit/Write/MultiEdit
+PreToolUse Edit/Write/MultiEdit; Codex apply_patch
   - identify target file and likely symbol
   - inject structure, nearby functions/classes, callers/callees, and diagnostics state
   - never mutate tool input except for explicit safety-preserving adjustments
 
-PostToolUse Edit/Write/MultiEdit
+PostToolUse Edit/Write/MultiEdit; Codex apply_patch
   - run fast file diagnostics when supported
   - notify daemon/dirty state
   - report only actionable errors/warnings
@@ -81,7 +81,7 @@ Stop / PreCompact
 - Do not replace Claude/Codex native tools. TLDR should guide and compress context, not become a mandatory read/edit proxy.
 - Do not install or mutate global user config without an explicit install command and backup.
 - Do not add remote services or credentials.
-- Do not claim Codex hook output injection is fully supported until verified against the installed client.
+- Do not claim Codex Read hooks are supported; Codex hook integration is limited to documented SessionStart and apply_patch-backed edit events unless future CLI docs add more events.
 
 ---
 
@@ -562,8 +562,8 @@ The normalized HookEvent must preserve both tool_result and tool_response payloa
 
 Add render_hook_response(response, client):
 - No-op response returns {}
-- Claude response can include continue, suppressOutput, hookSpecificOutput.permissionDecision, hookSpecificOutput.updatedInput, hookSpecificOutput.additionalContext, and systemMessage.
-- Codex/generic response returns conservative JSON with continue, suppressOutput, and systemMessage only until hook output semantics are dogfooded.
+- Claude response can include continue, suppressOutput, hookSpecificOutput.hookEventName, hookSpecificOutput.permissionDecision, hookSpecificOutput.updatedInput, hookSpecificOutput.additionalContext, and systemMessage.
+- Codex response uses the documented hookSpecificOutput.hookEventName + additionalContext shape for SessionStart, PreToolUse, and PostToolUse, and avoids unsupported PreToolUse continue/suppressOutput controls.
 
 **Step 5: Add tests**
 
@@ -571,7 +571,7 @@ Create tests/test_hooks_runtime.py:
 - parse Claude tool event
 - render no-op is empty
 - render Claude pre-tool response includes permissionDecision, updatedInput, and additionalContext
-- render Codex response is valid JSON and does not include Claude-only hookSpecificOutput unless verified later
+- render Codex PreToolUse/PostToolUse/SessionStart responses use hookSpecificOutput.hookEventName + additionalContext
 - parse Codex payload with tool_input
 - parse Codex payload with tool_response / toolResponse, including tool_response.filePath
 - session-start no-op can be imported and rendered safely
@@ -648,7 +648,7 @@ Behavior:
 - call extract_file
 - build nav map
 - for Claude: return permission_decision allow, updated_input with file_path and limit, additional_context with nav map
-- for Codex/generic: return context in message/additional_context without relying on input mutation until dogfooded
+- no Codex Read hook is installed because Codex CLI 0.130 does not expose Read as a PreToolUse hook event
 
 **Step 4: Write read hook tests**
 
@@ -662,7 +662,7 @@ Create tests/test_hooks_read.py:
 **Step 5: Implement pre-edit context hook**
 
 In tldr/hooks/edit.py implement:
-- extract_target_file(event) for Edit, Write, MultiEdit, Update
+- extract_target_file(event) for Claude Edit/Write/MultiEdit/Update and Codex apply_patch
 - build_pre_edit_response(event, budget=2000)
 - use extract_file(file_path) for structure
 - use tldr.api.get_imports(file_path, language=detected)
@@ -726,7 +726,7 @@ Expected: PASS.
 
 **Step 1: Implement edited-file extraction**
 
-Support Edit, Write, MultiEdit, Update. Read candidate file paths in this order:
+Support Claude Edit/Write/MultiEdit/Update and Codex apply_patch. Read candidate file paths in this order:
 1. tool_input.file_path
 2. tool_input.path
 3. tool_response.file_path
@@ -986,7 +986,7 @@ Resolve hook commands at install time:
 
 Commands should look like:
 - tldr hooks run session-start --client claude
-- tldr hooks run pre-read --client codex
+- tldr hooks run pre-edit --client codex
 
 **Step 2: Define desired Claude hook config entries**
 
@@ -1005,13 +1005,22 @@ Codex config shape:
 ~~~json
 {
   "hooks": {
-    "PreToolUse": [{
-      "matcher": "^Read$",
+    "SessionStart": [{
+      "matcher": "startup|resume|clear",
       "hooks": [{
         "type": "command",
-        "command": "tldr hooks run pre-read --client codex",
+        "command": "tldr hooks run session-start --client codex",
         "timeout": 10,
-        "statusMessage": "TLDR building read map"
+        "statusMessage": "TLDR starting context"
+      }]
+    }],
+    "PreToolUse": [{
+      "matcher": "apply_patch|Edit|Write",
+      "hooks": [{
+        "type": "command",
+        "command": "tldr hooks run pre-edit --client codex",
+        "timeout": 10,
+        "statusMessage": "TLDR building edit context"
       }]
     }]
   }
@@ -1019,10 +1028,9 @@ Codex config shape:
 ~~~
 
 Use events:
-- SessionStart
-- PreToolUse matcher ^Read$
-- PreToolUse matcher ^(Edit|Write|MultiEdit|Update)$
-- PostToolUse matcher ^(Edit|Write|MultiEdit|Update)$
+- SessionStart matcher startup|resume|clear
+- PreToolUse matcher apply_patch|Edit|Write
+- PostToolUse matcher apply_patch|Edit|Write
 
 **Step 4: Implement merge logic**
 
@@ -1303,7 +1311,7 @@ Clarify:
 - session hook never downloads the model
 - MCP is optional/manual
 - Claude hooks are the most automatic path
-- Codex hooks are supported where the installed client honors hook output; MCP is the portable fallback for Codex if hook output is ignored
+- Codex hooks are supported for documented SessionStart and apply_patch edit events; MCP is the portable fallback for Codex read context
 
 **Step 2: Update MCP docs**
 
@@ -1328,7 +1336,7 @@ Create scripts/dogfood_agent_context.py that:
 - creates a temp Python project
 - runs tldr pack
 - runs hooks run pre-read --client claude with a Claude fixture
-- runs hooks run pre-read --client codex with a Codex fixture
+- runs hooks run pre-edit --client codex with an apply_patch-shaped Codex fixture
 - runs hooks run post-edit --client codex with a Codex fixture containing tool_response.filePath
 - runs hooks run post-edit with simulated diagnostics if needed
 - starts daemon and queries context over socket
@@ -1391,7 +1399,7 @@ Run:
 Expected output includes:
 - pack: ok
 - claude_pre_read: ok
-- codex_pre_read: ok
+- codex_apply_patch_pre_edit: ok
 - codex_post_edit: ok
 - post_edit: ok
 - daemon_context: ok
@@ -1483,7 +1491,7 @@ If the installed codex mcp add --help output changes, use that help output at im
 
 | Risk | Consequence | Mitigation |
 |---|---|---|
-| Hook output is ignored by Codex | Codex gets less automatic context | Keep Codex MCP + skill path; dogfood before claiming parity |
+| Codex lacks a Read hook | Codex gets less automatic read context | Keep Codex MCP as the explicit read-context path |
 | Semantic model downloads during hook | Slow/expensive session start | Never call semantic index/search from hooks unless cache exists and explicit config enables it |
 | Hook spam annoys agent | More noise, less useful context | Silent no-op by default; emit only concise high-signal summaries |
 | Config overwrite | Breaks existing Claude/Codex setup | Merge only, timestamped backups, dry-run default for docs |
@@ -1498,13 +1506,13 @@ If the installed codex mcp add --help output changes, use that help output at im
 - tldr pack returns budgeted context and does not require semantic index.
 - tldr hooks run pre-read --client claude returns valid Claude hook JSON for large code files.
 - tldr hooks run post-edit --client claude reports current diagnostics schema correctly.
-- tldr hooks run pre-read --client codex returns valid conservative Codex hook JSON from a Codex-shaped payload.
-- tldr hooks run post-edit --client codex can extract edited file paths from tool_input.file_path, tool_response.filePath, and toolResponse.filePath.
+- tldr hooks run pre-edit --client codex returns valid Codex hook JSON with hookSpecificOutput.additionalContext from an apply_patch-shaped payload.
+- tldr hooks run post-edit --client codex can extract edited file paths from apply_patch commands, tool_input.file_path, tool_response.filePath, and toolResponse.filePath.
 - tldr hooks install claude/codex --dry-run shows merge-safe changes.
 - tldr hooks doctor reports both client surfaces without mutating them.
 - README accurately distinguishes CLI, hooks, MCP, daemon, and semantic search.
 - No global config is modified by tests or dogfood scripts.
-- Before global Codex activation, run a live installed-client smoke or explicitly mark Codex hook output as unproven and rely on MCP for Codex.
+- Before global Codex activation, run the temp-config current CLI smoke and keep MCP documented as the Codex read-context fallback.
 - Plan reviewer has no blocking findings.
 
 ## Plan Review Log

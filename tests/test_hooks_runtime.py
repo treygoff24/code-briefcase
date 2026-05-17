@@ -35,19 +35,70 @@ def test_render_claude_pre_tool_response_includes_specific_output():
             additional_context="context",
         ),
         client="claude",
+        event_name="PreToolUse",
     )
 
+    assert rendered["hookSpecificOutput"]["hookEventName"] == "PreToolUse"
     assert rendered["hookSpecificOutput"]["permissionDecision"] == "allow"
     assert rendered["hookSpecificOutput"]["updatedInput"]["limit"] == 200
     assert rendered["hookSpecificOutput"]["additionalContext"] == "context"
+    assert "systemMessage" not in rendered
 
 
-def test_render_codex_response_is_conservative_json():
-    rendered = render_hook_response(HookResponse(message="hello"), client="codex")
+def test_render_claude_post_tool_response_includes_event_name_and_context():
+    rendered = render_hook_response(
+        HookResponse(message="diagnostic", additional_context="diagnostic"),
+        client="claude",
+        event_name="PostToolUse",
+    )
+
+    assert rendered["hookSpecificOutput"]["hookEventName"] == "PostToolUse"
+    assert rendered["hookSpecificOutput"]["additionalContext"] == "diagnostic"
+    assert "systemMessage" not in rendered
+
+
+def test_render_codex_pre_tool_response_uses_supported_context_shape():
+    rendered = render_hook_response(
+        HookResponse(message="context", additional_context="context", suppress_output=False),
+        client="codex",
+        event_name="PreToolUse",
+    )
 
     json.dumps(rendered)
-    assert rendered["systemMessage"] == "hello"
-    assert "hookSpecificOutput" not in rendered
+    assert rendered["hookSpecificOutput"] == {
+        "hookEventName": "PreToolUse",
+        "additionalContext": "context",
+    }
+    assert "continue" not in rendered
+    assert "suppressOutput" not in rendered
+    assert "systemMessage" not in rendered
+
+
+def test_render_codex_post_tool_response_uses_supported_context_shape():
+    rendered = render_hook_response(
+        HookResponse(message="diagnostic", additional_context="diagnostic"),
+        client="codex",
+        event_name="PostToolUse",
+    )
+
+    assert rendered["hookSpecificOutput"]["hookEventName"] == "PostToolUse"
+    assert rendered["hookSpecificOutput"]["additionalContext"] == "diagnostic"
+
+
+def test_render_codex_session_start_message_uses_hook_specific_context():
+    rendered = render_hook_response(
+        HookResponse(message="TLDR session hook: daemon start requested", suppress_output=True),
+        client="codex",
+        event_name="SessionStart",
+    )
+
+    assert rendered["hookSpecificOutput"] == {
+        "hookEventName": "SessionStart",
+        "additionalContext": "TLDR session hook: daemon start requested",
+    }
+    assert "continue" not in rendered
+    assert "suppressOutput" not in rendered
+    assert "systemMessage" not in rendered
 
 
 def test_parse_codex_payload_with_tool_input(tmp_path):
@@ -56,6 +107,7 @@ def test_parse_codex_payload_with_tool_input(tmp_path):
         client="codex",
     )
 
+    assert event.event_name == "PreToolUse"
     assert event.tool_name == "Read"
     assert event.tool_input["path"] == "app.py"
 

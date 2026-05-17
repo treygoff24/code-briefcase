@@ -8,7 +8,7 @@ from tldr.api import extract_file, get_imports
 from tldr.hooks.read import CODE_EXTENSIONS, _looks_secret, resolve_event_path
 from tldr.hooks.runtime import HookEvent, HookResponse
 
-EDIT_TOOLS = {"Edit", "Write", "MultiEdit", "Update"}
+EDIT_TOOLS = {"Edit", "Write", "MultiEdit", "Update", "apply_patch"}
 
 
 def extract_target_file(event: HookEvent) -> Path | None:
@@ -16,7 +16,45 @@ def extract_target_file(event: HookEvent) -> Path | None:
         path = resolve_event_path(event, event.tool_input.get(key))
         if path is not None:
             return path
+    for path in extract_apply_patch_paths(event):
+        return path
     return None
+
+
+def extract_apply_patch_paths(event: HookEvent) -> list[Path]:
+    """Extract touched files from Codex apply_patch hook input.
+
+    Codex 0.130 reports file edits as tool_name="apply_patch" and puts the
+    patch text in tool_input.command. Keep this parser conservative: it only
+    recognizes file headers emitted by apply_patch/git-style patches and leaves
+    all path resolution to the normal hook cwd handling.
+    """
+    if event.tool_name != "apply_patch":
+        return []
+
+    command = str(event.tool_input.get("command") or event.tool_input.get("cmd") or "")
+    paths: list[Path] = []
+    seen: set[Path] = set()
+    patterns = (
+        r"^\*\*\* (?:Update|Add|Delete) File: (.+)$",
+        r"^\*\*\* (?:Move|Rename) to: (.+)$",
+        r"^\+\+\+ b/(.+)$",
+        r"^--- a/(.+)$",
+    )
+    for line in command.splitlines():
+        for pattern in patterns:
+            match = re.match(pattern, line.strip())
+            if not match:
+                continue
+            raw_path = match.group(1).strip()
+            if raw_path == "/dev/null":
+                continue
+            path = resolve_event_path(event, raw_path)
+            if path is not None and path not in seen:
+                paths.append(path)
+                seen.add(path)
+            break
+    return paths
 
 
 def _likely_symbol(tool_input: dict[str, Any]) -> str | None:

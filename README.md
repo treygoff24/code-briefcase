@@ -50,9 +50,10 @@ tldr hooks install codex --scope global --dry-run
 ```
 
 Claude hooks are the most automatic path because Claude hook JSON supports
-permission decisions, updated tool input, and additional context. Codex hooks are
-installed conservatively: TLDR emits best-effort context where the installed
-client honors hook output, and MCP remains the portable explicit fallback.
+permission decisions, updated tool input, and additional context before reads.
+Codex CLI 0.130 hooks are supported for session start and `apply_patch`-backed
+edit context/diagnostics. Codex does not currently expose a Read hook, so MCP
+remains the explicit fallback for manual Codex context pulls.
 
 ---
 

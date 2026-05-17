@@ -93,3 +93,78 @@ def test_codex_toolresponse_filepath_finds_file(tmp_path, monkeypatch):
     build_post_edit_response(_event(tmp_path, {"toolResponse": {"filePath": "app.py"}}))
 
     assert seen["path"] == "app.py"
+
+
+def test_codex_apply_patch_command_finds_updated_file(tmp_path, monkeypatch):
+    source = tmp_path / "app.py"
+    source.write_text("def main():\n    return 1\n")
+    seen = {}
+
+    def fake(path, language=None):
+        seen["path"] = Path(path).name
+        return {
+            "diagnostics": [
+                {"file": "app.py", "line": 1, "column": 1, "source": "pyright", "message": "bad"}
+            ],
+            "error_count": 1,
+            "warning_count": 0,
+        }
+
+    monkeypatch.setattr("tldr.hooks.post_edit.get_diagnostics", fake)
+    monkeypatch.setattr("tldr.hooks.post_edit.notify_daemon", lambda *a, **k: None)
+
+    response = build_post_edit_response(
+        _event(
+            tmp_path,
+            {
+                "toolName": "apply_patch",
+                "toolInput": {
+                    "command": "*** Begin Patch\n*** Update File: app.py\n@@\n def main():\n*** End Patch"
+                },
+            },
+        )
+    )
+
+    assert seen["path"] == "app.py"
+    assert "bad" in response.additional_context
+
+
+def test_codex_apply_patch_move_prefers_destination_file(tmp_path, monkeypatch):
+    source = tmp_path / "new.py"
+    source.write_text("def main():\n    return 1\n")
+    seen = {}
+
+    def fake(path, language=None):
+        seen["path"] = Path(path).name
+        return {
+            "diagnostics": [
+                {"file": "new.py", "line": 1, "column": 1, "source": "pyright", "message": "bad"}
+            ],
+            "error_count": 1,
+            "warning_count": 0,
+        }
+
+    monkeypatch.setattr("tldr.hooks.post_edit.get_diagnostics", fake)
+    monkeypatch.setattr("tldr.hooks.post_edit.notify_daemon", lambda *a, **k: None)
+
+    response = build_post_edit_response(
+        _event(
+            tmp_path,
+            {
+                "toolName": "apply_patch",
+                "toolInput": {
+                    "command": (
+                        "*** Begin Patch\n"
+                        "*** Update File: old.py\n"
+                        "*** Move to: new.py\n"
+                        "@@\n"
+                        " def main():\n"
+                        "*** End Patch"
+                    )
+                },
+            },
+        )
+    )
+
+    assert seen["path"] == "new.py"
+    assert "bad" in response.additional_context

@@ -45,8 +45,10 @@ tldr hooks install claude --scope global --dry-run
 tldr hooks install codex --scope global --dry-run
 ```
 
-Hooks provide automatic context around reads and edits. MCP provides explicit
-manual tool calls and is the portable fallback when a client ignores hook output.
+Hooks provide automatic context around supported client events. Claude Code can
+inject context before reads and edits. Codex CLI 0.130 can inject context around
+session start and `apply_patch`-backed edits; Codex does not currently expose a
+Read hook, so MCP remains the explicit manual fallback for Codex read context.
 
 MCP dynamic project configuration:
 
@@ -612,9 +614,9 @@ but installable TLDR hooks use `tldr hooks run ...`:
 | Hook | Triggers On | TLDR Operation |
 |------|-------------|----------------|
 | `session-start` | Session start | Ensure `.tldrignore`, request daemon start, warm small repos |
-| `pre-read` | Before Read | Inject a nav map for large code files |
-| `pre-edit` | Before Edit/Write/MultiEdit | Extract file structure for safer edits |
-| `post-edit` | After Edit/Write/MultiEdit | **Shift-left validation** - catch type errors immediately |
+| `pre-read` | Claude before Read | Inject a nav map for large code files |
+| `pre-edit` | Claude Edit/Write/MultiEdit; Codex apply_patch | Extract file structure for safer edits |
+| `post-edit` | Claude Edit/Write/MultiEdit; Codex apply_patch | **Shift-left validation** - catch type errors immediately |
 
 ### Hook Implementation Pattern
 

@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Any
 
 from tldr.diagnostics import _detect_language, get_diagnostics
-from tldr.hooks.edit import EDIT_TOOLS
+from tldr.hooks.edit import EDIT_TOOLS, extract_apply_patch_paths
 from tldr.hooks.read import CODE_EXTENSIONS, resolve_event_path
 from tldr.hooks.runtime import HookEvent, HookResponse
 
@@ -24,6 +24,15 @@ def extract_edited_file(event: HookEvent) -> Path | None:
             path = resolve_event_path(event, source.get(key))
             if path is not None:
                 return path
+    patch_paths = [
+        path for path in extract_apply_patch_paths(event)
+        if path.suffix.lower() in CODE_EXTENSIONS
+    ]
+    for path in patch_paths:
+        if path.exists():
+            return path
+    if patch_paths:
+        return patch_paths[0]
     return None
 
 
@@ -88,4 +97,4 @@ def build_post_edit_response(event: HookEvent) -> HookResponse:
     message = format_diagnostic_message(file_path, result)
     if not message:
         return HookResponse.noop()
-    return HookResponse(message=message, suppress_output=False)
+    return HookResponse(message=message, additional_context=message, suppress_output=False)

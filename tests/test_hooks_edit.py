@@ -45,3 +45,23 @@ def test_output_stays_under_budget(tmp_path):
     response = build_pre_edit_response(_event(tmp_path, "Edit", "big.py"), budget=100)
 
     assert len(response.additional_context) <= 420
+
+
+def test_codex_apply_patch_update_returns_existing_file_context(tmp_path):
+    source = tmp_path / "auth.py"
+    source.write_text("def login():\n    return True\n")
+    event = parse_hook_event(
+        {
+            "hook_event_name": "PreToolUse",
+            "tool_name": "apply_patch",
+            "tool_input": {
+                "command": "*** Begin Patch\n*** Update File: auth.py\n@@\n def login():\n*** End Patch"
+            },
+            "cwd": str(tmp_path),
+        },
+        client="codex",
+    )
+
+    response = build_pre_edit_response(event)
+
+    assert "login" in response.additional_context

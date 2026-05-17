@@ -80,23 +80,28 @@ def main() -> int:
             "tool_input": {"file_path": "app.py"},
             "cwd": str(project),
         }
-        codex_read = {
+        codex_apply_patch = {
             "event": "preToolUse",
-            "toolName": "Read",
-            "toolInput": {"file_path": "app.py"},
+            "toolName": "apply_patch",
+            "toolInput": {
+                "command": "*** Begin Patch\n*** Update File: app.py\n@@\n def main() -> int:\n*** End Patch"
+            },
             "cwd": str(project),
         }
         codex_post = {
             "event": "postToolUse",
-            "toolName": "Edit",
-            "tool_response": {"filePath": "app.py"},
+            "toolName": "apply_patch",
+            "toolInput": codex_apply_patch["toolInput"],
             "cwd": str(project),
         }
 
         results = {
             "pack": run_cli(["pack", "main", "--project", str(project), "--file", "app.py", "--json"]),
             "claude_pre_read": run_cli(["hooks", "run", "pre-read", "--client", "claude"], input_payload=claude_read),
-            "codex_pre_read": run_cli(["hooks", "run", "pre-read", "--client", "codex"], input_payload=codex_read),
+            "codex_apply_patch_pre_edit": run_cli(
+                ["hooks", "run", "pre-edit", "--client", "codex"],
+                input_payload=codex_apply_patch,
+            ),
             "codex_post_edit": run_cli(["hooks", "run", "post-edit", "--client", "codex"], input_payload=codex_post),
             "post_edit": run_cli(["hooks", "run", "post-edit", "--client", "claude"], input_payload={**claude_read, "tool_name": "Edit"}),
             "daemon_context": daemon_context(project),

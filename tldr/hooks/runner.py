@@ -30,7 +30,7 @@ def run_hook(event_name: str, payload: dict[str, Any] | None, client: str = "gen
 
         response = HookResponse.noop()
 
-    return render_hook_response(response, client=client)
+    return render_hook_response(response, client=client, event_name=event.event_name or event_name)
 
 
 def run_hook_from_stdin(event_name: str, client: str = "generic") -> int:

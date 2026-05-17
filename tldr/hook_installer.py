@@ -96,13 +96,12 @@ def _desired_groups(client: str, tldr_path: str) -> dict[str, list[dict[str, Any
 
     if codex:
         return {
-            "SessionStart": [group(".*", "session-start", "TLDR starting context")],
+            "SessionStart": [group("startup|resume|clear", "session-start", "TLDR starting context")],
             "PreToolUse": [
-                group("^Read$", "pre-read", "TLDR building read map"),
-                group("^(Edit|Write|MultiEdit|Update)$", "pre-edit", "TLDR building edit context"),
+                group("apply_patch|Edit|Write", "pre-edit", "TLDR building edit context"),
             ],
             "PostToolUse": [
-                group("^(Edit|Write|MultiEdit|Update)$", "post-edit", "TLDR checking edited file")
+                group("apply_patch|Edit|Write", "post-edit", "TLDR checking edited file")
             ],
         }
 
@@ -129,6 +128,13 @@ def _group_hooks(group: dict[str, Any]) -> list[dict[str, Any]]:
     return hooks if isinstance(hooks, list) else []
 
 
+def _contains_legacy_tldr_hook(hooks: list[dict[str, Any]]) -> bool:
+    return any(
+        any(marker in str(hook.get("command", "")) for marker in LEGACY_MARKERS)
+        for hook in hooks
+    )
+
+
 def merge_hook_group(
     existing: dict[str, Any],
     desired: dict[str, list[dict[str, Any]]],
@@ -139,7 +145,27 @@ def merge_hook_group(
     actions: list[str] = []
 
     for event, desired_groups in desired.items():
-        groups = [dict(group) for group in hooks_root.get(event, [])]
+        groups = []
+        for group in hooks_root.get(event, []):
+            group = dict(group)
+            old_hooks = _group_hooks(group)
+            kept_hooks = [
+                hook for hook in old_hooks
+                if not _is_tldr_owned(str(hook.get("command", "")))
+            ]
+            if len(kept_hooks) == len(old_hooks):
+                groups.append(group)
+                continue
+
+            matcher = group.get("matcher")
+            label = "legacy TLDR hook" if _contains_legacy_tldr_hook(old_hooks) else "stale TLDR hook"
+            if kept_hooks:
+                group["hooks"] = kept_hooks
+                groups.append(group)
+                actions.append(f"remove {label} from {event} {matcher}")
+            else:
+                actions.append(f"remove {label} group for {event} {matcher}")
+
         for desired_group in desired_groups:
             matcher = desired_group.get("matcher")
             for group in groups:
@@ -152,10 +178,7 @@ def merge_hook_group(
                     if not _is_tldr_owned(str(hook.get("command", "")))
                 ]
                 if len(kept_hooks) != len(old_hooks):
-                    if any(
-                        any(marker in str(hook.get("command", "")) for marker in LEGACY_MARKERS)
-                        for hook in old_hooks
-                    ):
+                    if _contains_legacy_tldr_hook(old_hooks):
                         actions.append(f"replace legacy TLDR hook for {event} {matcher}")
                     else:
                         actions.append(f"replace TLDR hook for {event} {matcher}")
@@ -192,6 +215,8 @@ def install_hooks(
     desired = _desired_groups(client, executable)
     merged, actions = merge_hook_group(existing, desired)
     changed = merged != existing
+    if not changed:
+        actions = []
     backup_path = None
 
     if changed and not dry_run:
