@@ -10,7 +10,7 @@ readme = "README.md"
 requires-python = ">=3.10"
 license = {text = "AGPL-3.0"}
 authors = [{name = "parcadei"}]
-maintainers = [{name = "parcadei"}]
+maintainers = [{name = "Trey Goff"}]
 keywords = ["code-analysis", "llm", "ai", "tree-sitter", "call-graph", "cfg", "dfg", "pdg", "mcp", "static-analysis"]
 classifiers = [
     "Development Status :: 5 - Production/Stable",
@@ -72,15 +72,17 @@ dev = [
     "black>=21.0",
     "flake8>=3.8",
     "mypy>=0.900",
+    "ruff>=0.15.13",
     "rich>=13.0",
     "shtab>=1.7.0",
 ]
 
 [project.urls]
-Homepage = "https://github.com/parcadei/llm-tldr"
-Repository = "https://github.com/parcadei/llm-tldr"
-Issues = "https://github.com/parcadei/llm-tldr/issues"
-Documentation = "https://github.com/parcadei/llm-tldr#readme"
+Homepage = "https://github.com/treygoff24/llm-tldr"
+Repository = "https://github.com/treygoff24/llm-tldr"
+Issues = "https://github.com/treygoff24/llm-tldr/issues"
+Documentation = "https://github.com/treygoff24/llm-tldr#readme"
+Upstream = "https://github.com/parcadei/llm-tldr"
 
 [project.scripts]
 tldr = "tldr.cli:main"

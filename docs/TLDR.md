@@ -26,14 +26,42 @@ Your codebase is 100,000 lines. Claude can read ~200,000 tokens. Math says you'r
 # Install
 pip install llm-tldr
 
-# Index your project (builds all analysis layers)
+# Index your project call graph/cache
 tldr warm /path/to/project
 
 # Get LLM-ready context for a function
 tldr context process_data --project /path/to/project
 ```
 
-That's it. The daemon auto-starts and keeps indexes in memory for instant queries.
+For embeddings, run `tldr semantic index /path/to/project` explicitly. Hooks and
+session warmups do not download semantic models.
+
+### Agent Context Quickstart
+
+```bash
+tldr pack "understand auth flow" --project . --budget 3000
+tldr hooks doctor
+tldr hooks install claude --scope global --dry-run
+tldr hooks install codex --scope global --dry-run
+```
+
+Hooks provide automatic context around reads and edits. MCP provides explicit
+manual tool calls and is the portable fallback when a client ignores hook output.
+
+MCP dynamic project configuration:
+
+```json
+{
+  "mcpServers": {
+    "tldr": {
+      "command": "tldr-mcp",
+      "args": ["--project", "auto"]
+    }
+  }
+}
+```
+
+`--project auto` resolves from agent project environment variables and `PWD`.
 
 ---
 
@@ -463,7 +491,8 @@ So searching for `"JWT validation"` finds functions that call `jwt.decode`, are 
 
 ```bash
 # One-time index build
-tldr warm /path/to/project  # Builds semantic index automatically
+tldr warm /path/to/project  # Builds the call graph cache
+tldr semantic index /path/to/project  # Builds the semantic index explicitly
 
 # Query (uses daemon, ~100ms)
 tldr semantic "your natural language query" /path/to/project
@@ -576,32 +605,21 @@ Compare to **30 seconds** per CLI spawn.
 
 > **Note:** This section is specific to [Claude Code](https://claude.ai/claude-code) users. TLDR originated as part of [Continuous Claude](https://github.com/parcadei/Continuous-Claude-v3), which provides these hooks out of the box. For standalone usage, see the CLI and MCP sections above.
 
-TLDR integrates via TypeScript hooks that query the daemon for zero-overhead code understanding:
+TLDR integrates via package-owned Python hooks that query TLDR for low-overhead
+code understanding. Older TypeScript/Node hook prototypes can remain external,
+but installable TLDR hooks use `tldr hooks run ...`:
 
 | Hook | Triggers On | TLDR Operation |
 |------|-------------|----------------|
-| `session-start-tldr-cache` | Session start | Auto-start daemon, warm indexes |
-| `session-start-dead-code` | Session start | Detect unreachable functions |
-| `tldr-context-inject` | Before Task/Read | Inject function context into prompt |
-| `smart-search-router` | Before Grep | Use TLDR pattern search instead |
-| `edit-context-inject` | Before Edit | Extract file structure for safer edits |
-| `signature-helper` | Before Edit | Find function signatures in scope |
-| `arch-context-inject` | Before Task | Inject architecture layer info |
-| `post-edit-diagnostics` | After Edit/Write | **Shift-left validation** - catch type errors immediately |
+| `session-start` | Session start | Ensure `.tldrignore`, request daemon start, warm small repos |
+| `pre-read` | Before Read | Inject a nav map for large code files |
+| `pre-edit` | Before Edit/Write/MultiEdit | Extract file structure for safer edits |
+| `post-edit` | After Edit/Write/MultiEdit | **Shift-left validation** - catch type errors immediately |
 
 ### Hook Implementation Pattern
 
-```typescript
-// .claude/hooks/src/any-hook.ts
-import { queryDaemonSync } from './daemon-client.js';
-
-// Query daemon (100ms, in-memory indexes)
-const result = queryDaemonSync(projectDir, {
-  cmd: 'dead',
-  language: 'python'
-});
-
-// Fallback: If daemon not running, client auto-spawns CLI
+```bash
+tldr hooks run pre-read --client claude < claude-hook-event.json
 ```
 
 **Result:** Claude gets code understanding automatically, without manual commands, without 30-second waits.

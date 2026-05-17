@@ -448,18 +448,28 @@ class TLDRDaemon:
             self._ensure_call_graph_loaded()
             call_graph = self.indexes.get("call_graph", {})
 
-            # Find all callers of the function
             callers = []
             edges = call_graph.get("edges", [])
             for edge in edges:
-                if edge.get("callee") == func_name:
-                    callers.append({
-                        "caller": edge.get("caller"),
-                        "file": edge.get("file"),
-                        "line": edge.get("line"),
-                    })
+                if isinstance(edge, dict):
+                    from_file = edge.get("from_file")
+                    from_func = edge.get("from_func")
+                    to_file = edge.get("to_file")
+                    to_func = edge.get("to_func")
+                else:
+                    from_file, from_func, to_file, to_func = edge
 
-            return {"status": "ok", "callers": callers}
+                if to_func == func_name:
+                    callers.append(
+                        {
+                            "caller": from_func,
+                            "caller_file": from_file,
+                            "callee": to_func,
+                            "callee_file": to_file,
+                        }
+                    )
+
+            return {"status": "ok", "callers": callers, "count": len(callers)}
         except Exception as e:
             logger.exception("Impact analysis failed")
             return {"status": "error", "message": str(e)}
@@ -469,7 +479,9 @@ class TLDRDaemon:
         if "call_graph" in self.indexes:
             return
 
-        call_graph_path = self.tldr_dir / "call_graph.json"
+        cache_path = self.tldr_dir / "cache" / "call_graph.json"
+        legacy_path = self.tldr_dir / "call_graph.json"
+        call_graph_path = cache_path if cache_path.exists() else legacy_path
         if call_graph_path.exists():
             try:
                 self.indexes["call_graph"] = json.loads(call_graph_path.read_text())
@@ -872,107 +884,32 @@ class TLDRDaemon:
         thread.start()
 
     def _handle_diagnostics(self, command: dict) -> dict:
-        """Handle diagnostics command - type check + lint.
-
-        Runs pyright for type checking and ruff for linting.
-        Returns structured errors for pre-test validation.
-
-        Args:
-            command: Dict with optional:
-                - file: Single file to check
-                - project: If True, check whole project
-                - no_lint: If True, skip ruff (type check only)
-
-        Returns:
-            Response with errors list and summary
-        """
-        import subprocess
-
+        """Handle diagnostics command using the current diagnostics schema."""
         file_path = command.get("file")
         check_project = command.get("project", False)
         no_lint = command.get("no_lint", False)
-
-        target = str(self.project) if check_project else file_path
-        if not target:
-            return {"status": "error", "message": "Missing required parameter: file or project"}
-
-        errors = []
-
-        # Run pyright for type checking
+        language = command.get("language")
         try:
-            pyright_cmd = ["pyright", "--outputjson", target]
-            result = subprocess.run(
-                pyright_cmd,
-                capture_output=True,
-                text=True,
-                timeout=60,
-                cwd=str(self.project),
-            )
-            if result.stdout:
-                try:
-                    pyright_output = json.loads(result.stdout)
-                    for diag in pyright_output.get("generalDiagnostics", []):
-                        errors.append({
-                            "type": "type",
-                            "severity": diag.get("severity", "error"),
-                            "file": diag.get("file", ""),
-                            "line": diag.get("range", {}).get("start", {}).get("line", 0),
-                            "message": diag.get("message", ""),
-                            "rule": diag.get("rule", "pyright"),
-                        })
-                except json.JSONDecodeError:
-                    pass
-        except FileNotFoundError:
-            logger.debug("pyright not found, skipping type check")
-        except subprocess.TimeoutExpired:
-            logger.warning("pyright timed out")
-        except Exception as e:
-            logger.debug(f"pyright error: {e}")
+            from tldr.diagnostics import get_diagnostics, get_project_diagnostics
 
-        # Run ruff for linting (unless disabled)
-        if not no_lint:
-            try:
-                ruff_cmd = ["ruff", "check", "--output-format=json", target]
-                result = subprocess.run(
-                    ruff_cmd,
-                    capture_output=True,
-                    text=True,
-                    timeout=30,
-                    cwd=str(self.project),
+            if check_project:
+                result = get_project_diagnostics(
+                    str(self.project),
+                    language=language or "python",
+                    include_lint=not no_lint,
                 )
-                if result.stdout:
-                    try:
-                        ruff_output = json.loads(result.stdout)
-                        for diag in ruff_output:
-                            errors.append({
-                                "type": "lint",
-                                "severity": "warning" if diag.get("fix") else "error",
-                                "file": diag.get("filename", ""),
-                                "line": diag.get("location", {}).get("row", 0),
-                                "message": diag.get("message", ""),
-                                "rule": diag.get("code", "ruff"),
-                            })
-                    except json.JSONDecodeError:
-                        pass
-            except FileNotFoundError:
-                logger.debug("ruff not found, skipping lint")
-            except subprocess.TimeoutExpired:
-                logger.warning("ruff timed out")
-            except Exception as e:
-                logger.debug(f"ruff error: {e}")
-
-        type_errors = len([e for e in errors if e["type"] == "type"])
-        lint_errors = len([e for e in errors if e["type"] == "lint"])
-
-        return {
-            "status": "ok",
-            "errors": errors,
-            "summary": {
-                "total": len(errors),
-                "type_errors": type_errors,
-                "lint_errors": lint_errors,
-            },
-        }
+            else:
+                if not file_path:
+                    return {"status": "error", "message": "Missing required parameter: file"}
+                result = get_diagnostics(
+                    file_path,
+                    language=language,
+                    include_lint=not no_lint,
+                )
+            return {"status": "ok", **result}
+        except Exception as e:
+            logger.exception("Diagnostics failed")
+            return {"status": "error", "message": str(e)}
 
     def _handle_change_impact(self, command: dict) -> dict:
         """Handle change-impact command - find affected tests.

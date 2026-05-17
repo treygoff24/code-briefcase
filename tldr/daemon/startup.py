@@ -404,7 +404,7 @@ def stop_daemon(project_path: str | Path) -> bool:
     try:
         client = _create_client_socket(daemon)
         client.sendall(json.dumps({"cmd": "shutdown"}).encode() + b"\n")
-        response = client.recv(4096)
+        client.recv(4096)
         client.close()
         return True
     except (ConnectionRefusedError, FileNotFoundError, OSError):

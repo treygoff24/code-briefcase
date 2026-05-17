@@ -15,8 +15,7 @@ Based on pflux/python-program-analysis architecture:
 Uses reaching definitions analysis on CFG to build def-use chains.
 """
 import ast
-from dataclasses import dataclass, field
-from typing import Any
+from dataclasses import dataclass
 
 
 @dataclass
@@ -615,7 +614,6 @@ TREE_SITTER_RUST_AVAILABLE = False
 try:
     from tree_sitter import Language, Parser
     import tree_sitter_typescript
-    import tree_sitter_javascript
     TREE_SITTER_AVAILABLE = True
 except ImportError:
     pass
@@ -3381,7 +3379,7 @@ def extract_elixir_dfg(code: str, function_name: str) -> DFGInfo:
 # Luau DFG Extraction
 # =============================================================================
 
-class LuauDefUseVisitor:
+class LuauDefUseVisitor:  # noqa: F811
     """
     Extract variable definitions and uses from Luau tree-sitter parse tree.
 
@@ -3692,7 +3690,7 @@ def _find_luau_function_by_name(root, name: str, source: bytes):
     return search(root)
 
 
-def extract_luau_dfg(code: str, function_name: str) -> DFGInfo:
+def extract_luau_dfg(code: str, function_name: str) -> DFGInfo:  # noqa: F811
     """
     Extract DFG for a Luau function.
 

@@ -11,116 +11,31 @@ Based on staticfg pattern but simplified for TLDR-code use case.
 """
 import ast
 from dataclasses import dataclass, field
-from typing import Any
+from importlib.util import find_spec
 
 # Tree-sitter imports (optional)
-TREE_SITTER_AVAILABLE = False
-TREE_SITTER_GO_AVAILABLE = False
-TREE_SITTER_RUST_AVAILABLE = False
+def _has_module(name: str) -> bool:
+    return find_spec(name) is not None
 
-try:
-    from tree_sitter import Language, Parser
-    import tree_sitter_typescript
-    import tree_sitter_javascript
-    TREE_SITTER_AVAILABLE = True
-except ImportError:
-    pass
 
-try:
-    import tree_sitter_go
-    TREE_SITTER_GO_AVAILABLE = True
-except ImportError:
-    pass
-
-try:
-    import tree_sitter_rust
-    TREE_SITTER_RUST_AVAILABLE = True
-except ImportError:
-    pass
-
-TREE_SITTER_JAVA_AVAILABLE = False
-try:
-    import tree_sitter_java
-    TREE_SITTER_JAVA_AVAILABLE = True
-except ImportError:
-    pass
-
-TREE_SITTER_C_AVAILABLE = False
-try:
-    import tree_sitter_c
-    TREE_SITTER_C_AVAILABLE = True
-except ImportError:
-    pass
-
-TREE_SITTER_RUBY_AVAILABLE = False
-try:
-    import tree_sitter_ruby
-    TREE_SITTER_RUBY_AVAILABLE = True
-except ImportError:
-    pass
-
-TREE_SITTER_PHP_AVAILABLE = False
-try:
-    import tree_sitter_php
-    TREE_SITTER_PHP_AVAILABLE = True
-except ImportError:
-    pass
-
-TREE_SITTER_CPP_AVAILABLE = False
-try:
-    import tree_sitter_cpp
-    TREE_SITTER_CPP_AVAILABLE = True
-except ImportError:
-    pass
-
-TREE_SITTER_SWIFT_AVAILABLE = False
-try:
-    import tree_sitter_swift
-    TREE_SITTER_SWIFT_AVAILABLE = True
-except ImportError:
-    pass
-
-TREE_SITTER_CSHARP_AVAILABLE = False
-try:
-    import tree_sitter_c_sharp
-    TREE_SITTER_CSHARP_AVAILABLE = True
-except ImportError:
-    pass
-
-TREE_SITTER_KOTLIN_AVAILABLE = False
-try:
-    import tree_sitter_kotlin
-    TREE_SITTER_KOTLIN_AVAILABLE = True
-except ImportError:
-    pass
-
-TREE_SITTER_SCALA_AVAILABLE = False
-try:
-    import tree_sitter_scala
-    TREE_SITTER_SCALA_AVAILABLE = True
-except ImportError:
-    pass
-
-TREE_SITTER_ELIXIR_AVAILABLE = False
-try:
-    import tree_sitter_elixir
-    TREE_SITTER_ELIXIR_AVAILABLE = True
-except ImportError:
-    pass
-
-TREE_SITTER_LUA_AVAILABLE = False
-try:
-    import tree_sitter_lua
-    TREE_SITTER_LUA_AVAILABLE = True
-except ImportError:
-    pass
-
-TREE_SITTER_LUAU_AVAILABLE = False
-try:
-    import tree_sitter_luau
-    TREE_SITTER_LUAU_AVAILABLE = True
-except ImportError:
-    pass
+TREE_SITTER_AVAILABLE = all(
+    _has_module(name)
+    for name in ("tree_sitter", "tree_sitter_typescript", "tree_sitter_javascript")
+)
+TREE_SITTER_GO_AVAILABLE = _has_module("tree_sitter_go")
+TREE_SITTER_RUST_AVAILABLE = _has_module("tree_sitter_rust")
+TREE_SITTER_JAVA_AVAILABLE = _has_module("tree_sitter_java")
+TREE_SITTER_C_AVAILABLE = _has_module("tree_sitter_c")
+TREE_SITTER_RUBY_AVAILABLE = _has_module("tree_sitter_ruby")
+TREE_SITTER_PHP_AVAILABLE = _has_module("tree_sitter_php")
+TREE_SITTER_CPP_AVAILABLE = _has_module("tree_sitter_cpp")
+TREE_SITTER_SWIFT_AVAILABLE = _has_module("tree_sitter_swift")
+TREE_SITTER_CSHARP_AVAILABLE = _has_module("tree_sitter_c_sharp")
+TREE_SITTER_KOTLIN_AVAILABLE = _has_module("tree_sitter_kotlin")
+TREE_SITTER_SCALA_AVAILABLE = _has_module("tree_sitter_scala")
+TREE_SITTER_ELIXIR_AVAILABLE = _has_module("tree_sitter_elixir")
+TREE_SITTER_LUA_AVAILABLE = _has_module("tree_sitter_lua")
+TREE_SITTER_LUAU_AVAILABLE = _has_module("tree_sitter_luau")
 
 
 @dataclass
@@ -1123,9 +1038,6 @@ class TreeSitterCFGBuilder:
         else:
             branch = self.new_block("branch", node.start_point[0] + 1)
             branch_block_id = branch.id
-
-        # Get condition text (guard condition)
-        condition = self.get_node_text(node)
 
         # Create after-guard block for normal flow (guard passes)
         after_guard = self.new_block("body", node.end_point[0] + 1)

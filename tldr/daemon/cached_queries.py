@@ -96,8 +96,26 @@ def cached_structure(db: SalsaDB, project: str, language: str, max_results: int)
 def cached_context(db: SalsaDB, project: str, entry: str, language: str, depth: int) -> dict:
     """Cached relevant context - memoized by SalsaDB."""
     from tldr.api import get_relevant_context
-    result = get_relevant_context(project, entry, language=language, depth=depth)
-    return {"status": "ok", "result": result}
+    ctx = get_relevant_context(project, entry, language=language, depth=depth)
+    return {
+        "status": "ok",
+        "result": ctx.to_llm_string(),
+        "entry_point": ctx.entry_point,
+        "depth": ctx.depth,
+        "functions": [
+            {
+                "name": func.name,
+                "file": func.file,
+                "line": func.line,
+                "signature": func.signature,
+                "docstring": func.docstring,
+                "calls": func.calls,
+                "blocks": func.blocks,
+                "cyclomatic": func.cyclomatic,
+            }
+            for func in ctx.functions
+        ],
+    }
 
 
 @salsa_query

@@ -12,6 +12,7 @@ import pytest
 import tempfile
 import subprocess
 import json
+import sys
 from pathlib import Path
 
 
@@ -115,7 +116,7 @@ async function fetchData(url: string): Promise<string> {
 
 def run_tldr(args: list[str], cwd: str = None) -> dict:
     """Run tldr command and return parsed JSON output."""
-    cmd = ["tldr"] + args + ["--lang", "typescript"]
+    cmd = [sys.executable, "-m", "tldr.cli"] + args + ["--lang", "typescript"]
     result = subprocess.run(cmd, capture_output=True, text=True, cwd=cwd)
     if result.returncode != 0:
         pytest.fail(f"tldr command failed: {result.stderr}")
@@ -340,7 +341,6 @@ class TestImpact:
         result = run_tldr(["impact", "helper", "--project", tmpdir])
 
         # main.ts calls helper, so it should appear in impact
-        output = json.dumps(result)
         assert len(result) > 0, \
             f"should find callers of helper, got: {result}"
 

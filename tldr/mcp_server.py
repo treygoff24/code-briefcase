@@ -30,6 +30,39 @@ from mcp.server.fastmcp import FastMCP
 mcp = FastMCP("tldr-code")
 
 
+def _resolve_project(project: str | None = None) -> str:
+    explicit = project not in (None, "", "auto")
+    if explicit:
+        path = Path(str(project)).expanduser().resolve()
+        if not path.exists() or not path.is_dir():
+            raise FileNotFoundError(f"TLDR project does not exist: {path}")
+        return str(path)
+
+    candidates = [
+        os.environ.get("TLDR_PROJECT"),
+        os.environ.get("CLAUDE_PROJECT_DIR"),
+        os.environ.get("CODEX_PROJECT_DIR"),
+        os.environ.get("CODEX_CWD"),
+        os.environ.get("PWD"),
+        ".",
+    ]
+    for candidate in candidates:
+        if not candidate:
+            continue
+        path = Path(candidate).expanduser().resolve()
+        if path.exists() and path.is_dir():
+            return str(path)
+    raise FileNotFoundError("Could not resolve TLDR project root")
+
+
+def _resolve_tool_file(file: str, project: str | None = None) -> tuple[str, str]:
+    root = Path(_resolve_project(project))
+    path = Path(file).expanduser()
+    if not path.is_absolute():
+        path = root / path
+    return str(root), str(path.resolve())
+
+
 def _get_socket_path(project: str) -> Path:
     """Compute socket path matching daemon.py logic."""
     hash_val = hashlib.md5(str(Path(project).resolve()).encode()).hexdigest()[:8]
@@ -171,23 +204,25 @@ def _send_raw(project: str, command: dict) -> dict:
     
         sock.sendall(json.dumps(command).encode() + b"\n")
 
-        # Read response
         chunks = []
         while True:
             chunk = sock.recv(65536)
             if not chunk:
                 break
             chunks.append(chunk)
-            # Check if we have complete JSON
             try:
-                return json.loads(b"".join(chunks))
+                return _decode_socket_response(chunks)
             except json.JSONDecodeError:
                 continue
 
-        return json.loads(b"".join(chunks))
+        return _decode_socket_response(chunks)
     finally:
         if sock:
             sock.close()
+
+
+def _decode_socket_response(chunks: list[bytes]) -> dict:
+    return json.loads(b"".join(chunks))
 
 
 def _send_command(project: str, command: dict) -> dict:
@@ -200,7 +235,7 @@ def _send_command(project: str, command: dict) -> dict:
 
 
 @mcp.tool()
-def tree(project: str = ".", extensions: list[str] | None = None) -> dict:
+def tree(project: str = "auto", extensions: list[str] | None = None) -> dict:
     """Get file tree structure for a project.
 
     Args:
@@ -208,7 +243,7 @@ def tree(project: str = ".", extensions: list[str] | None = None) -> dict:
         extensions: Optional list of extensions to filter (e.g., [".py", ".ts"])
     """
     return _send_command(
-        project,
+        _resolve_project(project),
         {
             "cmd": "tree",
             "extensions": tuple(extensions) if extensions else None,
@@ -219,7 +254,7 @@ def tree(project: str = ".", extensions: list[str] | None = None) -> dict:
 
 @mcp.tool()
 def structure(
-    project: str = ".", language: str = "python", max_results: int = 100
+    project: str = "auto", language: str = "python", max_results: int = 100
 ) -> dict:
     """Get code structure (codemaps) - functions, classes, imports per file.
 
@@ -229,13 +264,13 @@ def structure(
         max_results: Maximum files to analyze
     """
     return _send_command(
-        project,
+        _resolve_project(project),
         {"cmd": "structure", "language": language, "max_results": max_results},
     )
 
 
 @mcp.tool()
-def search(project: str, pattern: str, max_results: int = 100) -> dict:
+def search(pattern: str, project: str = "auto", max_results: int = 100) -> dict:
     """Search files for a regex pattern.
 
     Args:
@@ -244,12 +279,13 @@ def search(project: str, pattern: str, max_results: int = 100) -> dict:
         max_results: Maximum matches to return
     """
     return _send_command(
-        project, {"cmd": "search", "pattern": pattern, "max_results": max_results}
+        _resolve_project(project),
+        {"cmd": "search", "pattern": pattern, "max_results": max_results}
     )
 
 
 @mcp.tool()
-def extract(file: str) -> dict:
+def extract(file: str, project: str = "auto") -> dict:
     """Extract full code structure from a file.
 
     Returns imports, functions, classes, and intra-file call graph.
@@ -257,8 +293,8 @@ def extract(file: str) -> dict:
     Args:
         file: Path to source file
     """
-    project = str(Path(file).parent)
-    return _send_command(project, {"cmd": "extract", "file": file})
+    resolved_project, resolved_file = _resolve_tool_file(file, project)
+    return _send_command(resolved_project, {"cmd": "extract", "file": resolved_file})
 
 
 # === CONTEXT TOOLS (Key differentiator - 95% token savings) ===
@@ -266,7 +302,7 @@ def extract(file: str) -> dict:
 
 @mcp.tool()
 def context(
-    project: str, entry: str, depth: int = 2, language: str = "python"
+    entry: str, project: str = "auto", depth: int = 2, language: str = "python"
 ) -> str:
     """Get token-efficient LLM context starting from an entry point.
 
@@ -283,7 +319,7 @@ def context(
         LLM-ready formatted context string
     """
     result = _send_command(
-        project,
+        _resolve_project(project),
         {"cmd": "context", "entry": entry, "depth": depth, "language": language},
     )
     # Return formatted string for LLM consumption
@@ -299,7 +335,7 @@ def context(
 
 
 @mcp.tool()
-def cfg(file: str, function: str, language: str = "python") -> dict:
+def cfg(file: str, function: str, language: str = "python", project: str = "auto") -> dict:
     """Get control flow graph for a function.
 
     Returns basic blocks, control flow edges, and cyclomatic complexity.
@@ -309,15 +345,15 @@ def cfg(file: str, function: str, language: str = "python") -> dict:
         function: Function name to analyze
         language: Programming language
     """
-    project = str(Path(file).parent)
+    resolved_project, resolved_file = _resolve_tool_file(file, project)
     return _send_command(
-        project,
-        {"cmd": "cfg", "file": file, "function": function, "language": language},
+        resolved_project,
+        {"cmd": "cfg", "file": resolved_file, "function": function, "language": language},
     )
 
 
 @mcp.tool()
-def dfg(file: str, function: str, language: str = "python") -> dict:
+def dfg(file: str, function: str, language: str = "python", project: str = "auto") -> dict:
     """Get data flow graph for a function.
 
     Returns variable references and def-use chains.
@@ -327,10 +363,10 @@ def dfg(file: str, function: str, language: str = "python") -> dict:
         function: Function name to analyze
         language: Programming language
     """
-    project = str(Path(file).parent)
+    resolved_project, resolved_file = _resolve_tool_file(file, project)
     return _send_command(
-        project,
-        {"cmd": "dfg", "file": file, "function": function, "language": language},
+        resolved_project,
+        {"cmd": "dfg", "file": resolved_file, "function": function, "language": language},
     )
 
 
@@ -342,6 +378,7 @@ def slice(
     direction: str = "backward",
     variable: str | None = None,
     language: str = "python",
+    project: str = "auto",
 ) -> dict:
     """Get program slice - lines affecting or affected by a given line.
 
@@ -356,12 +393,12 @@ def slice(
     Returns:
         Dict with lines in the slice and count
     """
-    project = str(Path(file).parent)
+    resolved_project, resolved_file = _resolve_tool_file(file, project)
     return _send_command(
-        project,
+        resolved_project,
         {
             "cmd": "slice",
-            "file": file,
+            "file": resolved_file,
             "function": function,
             "line": line,
             "direction": direction,
@@ -375,7 +412,7 @@ def slice(
 
 
 @mcp.tool()
-def impact(project: str, function: str) -> dict:
+def impact(function: str, project: str = "auto") -> dict:
     """Find all callers of a function (reverse call graph).
 
     Useful before refactoring to understand what would break.
@@ -384,12 +421,12 @@ def impact(project: str, function: str) -> dict:
         project: Project root directory
         function: Function name to find callers of
     """
-    return _send_command(project, {"cmd": "impact", "func": function})
+    return _send_command(_resolve_project(project), {"cmd": "impact", "func": function})
 
 
 @mcp.tool()
 def dead(
-    project: str,
+    project: str = "auto",
     entry_points: list[str] | None = None,
     language: str = "python",
 ) -> dict:
@@ -401,13 +438,13 @@ def dead(
         language: Programming language
     """
     return _send_command(
-        project,
+        _resolve_project(project),
         {"cmd": "dead", "entry_points": entry_points, "language": language},
     )
 
 
 @mcp.tool()
-def arch(project: str, language: str = "python") -> dict:
+def arch(project: str = "auto", language: str = "python") -> dict:
     """Detect architectural layers from call patterns.
 
     Identifies entry layer (controllers), middle layer (services),
@@ -417,39 +454,39 @@ def arch(project: str, language: str = "python") -> dict:
         project: Project root directory
         language: Programming language
     """
-    return _send_command(project, {"cmd": "arch", "language": language})
+    return _send_command(_resolve_project(project), {"cmd": "arch", "language": language})
 
 
 @mcp.tool()
-def calls(project: str, language: str = "python") -> dict:
+def calls(project: str = "auto", language: str = "python") -> dict:
     """Build cross-file call graph for the project.
 
     Args:
         project: Project root directory
         language: Programming language
     """
-    return _send_command(project, {"cmd": "calls", "language": language})
+    return _send_command(_resolve_project(project), {"cmd": "calls", "language": language})
 
 
 # === IMPORT ANALYSIS ===
 
 
 @mcp.tool()
-def imports(file: str, language: str = "python") -> dict:
+def imports(file: str, language: str = "python", project: str = "auto") -> dict:
     """Parse imports from a source file.
 
     Args:
         file: Path to source file
         language: Programming language
     """
-    project = str(Path(file).parent)
+    resolved_project, resolved_file = _resolve_tool_file(file, project)
     return _send_command(
-        project, {"cmd": "imports", "file": file, "language": language}
+        resolved_project, {"cmd": "imports", "file": resolved_file, "language": language}
     )
 
 
 @mcp.tool()
-def importers(project: str, module: str, language: str = "python") -> dict:
+def importers(module: str, project: str = "auto", language: str = "python") -> dict:
     """Find all files that import a given module.
 
     Args:
@@ -458,7 +495,7 @@ def importers(project: str, module: str, language: str = "python") -> dict:
         language: Programming language
     """
     return _send_command(
-        project, {"cmd": "importers", "module": module, "language": language}
+        _resolve_project(project), {"cmd": "importers", "module": module, "language": language}
     )
 
 
@@ -466,7 +503,7 @@ def importers(project: str, module: str, language: str = "python") -> dict:
 
 
 @mcp.tool()
-def semantic(project: str, query: str, k: int = 10) -> dict:
+def semantic(query: str, project: str = "auto", k: int = 10) -> dict:
     """Semantic code search using embeddings.
 
     Searches over function/class summaries using vector similarity.
@@ -478,7 +515,8 @@ def semantic(project: str, query: str, k: int = 10) -> dict:
         k: Number of results to return
     """
     return _send_command(
-        project, {"cmd": "semantic", "action": "search", "query": query, "k": k}
+        _resolve_project(project),
+        {"cmd": "semantic", "action": "search", "query": query, "k": k},
     )
 
 
@@ -486,7 +524,7 @@ def semantic(project: str, query: str, k: int = 10) -> dict:
 
 
 @mcp.tool()
-def diagnostics(path: str, language: str = "python") -> dict:
+def diagnostics(path: str, language: str = "python", project: str = "auto") -> dict:
     """Get type and lint diagnostics.
 
     For Python: runs pyright (types) + ruff (lint).
@@ -495,14 +533,14 @@ def diagnostics(path: str, language: str = "python") -> dict:
         path: File or directory path
         language: Programming language
     """
-    project = str(Path(path).parent) if Path(path).is_file() else path
+    resolved_project, resolved_path = _resolve_tool_file(path, project)
     return _send_command(
-        project, {"cmd": "diagnostics", "file": path, "language": language}
+        resolved_project, {"cmd": "diagnostics", "file": resolved_path, "language": language}
     )
 
 
 @mcp.tool()
-def change_impact(project: str, files: list[str] | None = None) -> dict:
+def change_impact(project: str = "auto", files: list[str] | None = None) -> dict:
     """Find tests affected by changed files.
 
     Uses call graph + import analysis to identify which tests to run.
@@ -511,33 +549,36 @@ def change_impact(project: str, files: list[str] | None = None) -> dict:
         project: Project root directory
         files: List of changed files (auto-detects from git if None)
     """
-    return _send_command(project, {"cmd": "change_impact", "files": files})
+    return _send_command(_resolve_project(project), {"cmd": "change_impact", "files": files})
 
 
 # === DAEMON MANAGEMENT ===
 
 
 @mcp.tool()
-def status(project: str = ".") -> dict:
+def status(project: str = "auto") -> dict:
     """Get daemon status including uptime and cache statistics.
 
     Args:
         project: Project root directory
     """
-    return _send_command(project, {"cmd": "status"})
+    return _send_command(_resolve_project(project), {"cmd": "status"})
 
 
 def main():
     """Entry point for tldr-mcp command."""
     import argparse
-    import os
 
     parser = argparse.ArgumentParser(description="TLDR MCP Server")
-    parser.add_argument("--project", default=".", help="Project root directory")
+    parser.add_argument(
+        "--project",
+        default="auto",
+        help="Project root or 'auto' to resolve from TLDR_PROJECT/CLAUDE_PROJECT_DIR/CODEX_CWD/PWD",
+    )
     args = parser.parse_args()
 
-    # Set default project for tools that need it
-    os.environ["TLDR_PROJECT"] = str(Path(args.project).resolve())
+    if args.project != "auto":
+        os.environ["TLDR_PROJECT"] = _resolve_project(args.project)
 
     mcp.run(transport="stdio")
 

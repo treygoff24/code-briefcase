@@ -4,11 +4,25 @@
 [![Python](https://img.shields.io/pypi/pyversions/llm-tldr)](https://pypi.org/project/llm-tldr/)
 [![License](https://img.shields.io/badge/license-AGPL--3.0-blue)](LICENSE)
 
+> **Fork status:** This repository is a divergent fork of
+> [parcadei/llm-tldr](https://github.com/parcadei/llm-tldr), currently focused
+> on agent-context workflows for Claude Code, Codex, hooks, MCP, and budgeted
+> context packs. See [FORK.md](FORK.md) for attribution, license notes, and
+> publishing rules.
+
 **Give LLMs exactly the code they need. Nothing more.**
 
 ```bash
-# One-liner: Install, index, search
-pip install llm-tldr && tldr warm . && tldr semantic "what you're looking for" .
+pipx install llm-tldr
+
+# Manual use
+tldr pack "understand auth flow" --project . --budget 3000
+tldr context main --project .
+
+# Agent integration dry-run (does not mutate global config)
+tldr hooks doctor
+tldr hooks install claude --scope global --dry-run
+tldr hooks install codex --scope global --dry-run
 ```
 
 Your codebase is 100K lines. Claude's context window is 200K tokens. Raw code won't fit—and even if it did, the LLM would drown in irrelevant details.
@@ -17,9 +31,28 @@ TLDR extracts *structure* instead of dumping *text*. The result: **95% fewer tok
 
 ```bash
 pip install llm-tldr
-tldr warm .                    # Index your project
+tldr warm .                    # Build the call graph cache
 tldr context main --project .  # Get LLM-ready summary
 ```
+
+Semantic search is opt-in: run `tldr semantic index .` when you want embeddings.
+The session-start hook never downloads the semantic model.
+
+### Agent Context Integration
+
+TLDR can run as a package-owned hook runtime for Claude Code and Codex:
+
+```bash
+tldr pack "fix login bug" --project . --budget 3000
+tldr hooks run pre-read --client claude
+tldr hooks install claude --scope global --dry-run
+tldr hooks install codex --scope global --dry-run
+```
+
+Claude hooks are the most automatic path because Claude hook JSON supports
+permission decisions, updated tool input, and additional context. Codex hooks are
+installed conservatively: TLDR emits best-effort context where the installed
+client honors hook output, and MCP remains the portable explicit fallback.
 
 ---
 
@@ -98,14 +131,15 @@ tldr semantic "validate JWT tokens and check expiration" .
 ### Setting Up Semantic Search
 
 ```bash
-# Build the semantic index (one-time, ~2 min for typical project)
-tldr warm /path/to/project
+# Build the semantic index (one-time, explicit)
+tldr semantic index /path/to/project
 
 # Search by behavior
 tldr semantic "database connection pooling" .
 ```
 
-Embedding dependencies (`sentence-transformers`, `faiss-cpu`) are included with `pip install llm-tldr`. The index is cached in `.tldr/cache/semantic.faiss`.
+Embedding dependencies (`sentence-transformers`, `faiss-cpu`) are included with
+`pip install llm-tldr`. The index is cached under `.tldr/cache/semantic/`.
 
 ### Keeping the Index Fresh
 
@@ -290,7 +324,8 @@ Language is auto-detected or specify with `--lang`.
 
 ## MCP Integration
 
-For AI tools (Claude Desktop, Claude Code):
+For AI tools (Claude Desktop, Claude Code, Codex), MCP exposes explicit manual
+TLDR tool calls. Hooks provide automatic context; MCP is the portable fallback.
 
 **Claude Desktop** - Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
 ```json
@@ -298,7 +333,7 @@ For AI tools (Claude Desktop, Claude Code):
   "mcpServers": {
     "tldr": {
       "command": "tldr-mcp",
-      "args": ["--project", "/path/to/your/project"]
+      "args": ["--project", "auto"]
     }
   }
 }
@@ -310,11 +345,15 @@ For AI tools (Claude Desktop, Claude Code):
   "mcpServers": {
     "tldr": {
       "command": "tldr-mcp",
-      "args": ["--project", "."]
+      "args": ["--project", "auto"]
     }
   }
 }
 ```
+
+`--project auto` resolves from `TLDR_PROJECT`, `CLAUDE_PROJECT_DIR`,
+`CODEX_PROJECT_DIR`, `CODEX_CWD`, `PWD`, then the current directory. Explicit
+tool-level `project` arguments still override the environment.
 
 ---
 

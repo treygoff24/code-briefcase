@@ -13,6 +13,8 @@ Usage:
     tldr slice <file> <func> <line>     Program slice
 """
 import argparse
+from importlib import import_module
+from importlib.util import find_spec
 import json
 import os
 import sys
@@ -21,13 +23,16 @@ from pathlib import Path
 # Fix for Windows: Explicitly import tree-sitter bindings early to prevent
 # silent DLL loading failures when running as a console script entry point.
 if os.name == 'nt':
-    try:
-        import tree_sitter
-        import tree_sitter_python
-        import tree_sitter_javascript
-        import tree_sitter_typescript
-    except ImportError:
-        pass
+    for module_name in (
+        "tree_sitter",
+        "tree_sitter_python",
+        "tree_sitter_javascript",
+        "tree_sitter_typescript",
+    ):
+        try:
+            import_module(module_name)
+        except ImportError:
+            pass
 
 from . import __version__
 
@@ -92,14 +97,9 @@ def _show_first_run_tip():
     if marker.exists():
         return
 
-    # Check if Swift is already installed
-    try:
-        import tree_sitter_swift
-        # Swift already works, no tip needed
+    if find_spec("tree_sitter_swift") is not None:
         marker.touch()
         return
-    except ImportError:
-        pass
 
     # Show tip
     import sys
@@ -351,6 +351,20 @@ Semantic Search:
     )
     diag_p.add_argument("--lang", default=None, help="Override language detection")
 
+    # tldr pack [query]
+    pack_p = subparsers.add_parser(
+        "pack",
+        help="Build a budgeted context pack",
+        description="Build a budgeted context pack",
+    )
+    pack_p.add_argument("query", nargs="?", default="", help="Task or question to pack context for")
+    pack_p.add_argument("--project", default=".", help="Project root directory")
+    pack_p.add_argument("--budget", type=int, default=3000, help="Approximate token budget")
+    pack_p.add_argument("--file", action="append", dest="files", help="Explicit file to include (repeatable)")
+    pack_p.add_argument("--changed", action="store_true", help="Pack changed files")
+    pack_p.add_argument("--no-semantic", action="store_true", help="Do not use semantic search results")
+    pack_p.add_argument("--json", action="store_true", help="Output JSON instead of markdown")
+
     # tldr warm <path>
     warm_p = subparsers.add_parser(
         "warm", help="Pre-build call graph cache for faster queries"
@@ -428,6 +442,29 @@ Semantic Search:
     daemon_notify_p.add_argument("file", help="Path to changed file")
     daemon_notify_p.add_argument("--project", "-p", default=".", help="Project path (default: current directory)")
 
+    # tldr hooks run/install/doctor
+    hooks_p = subparsers.add_parser("hooks", help="Agent hook runtime and installer")
+    hooks_sub = hooks_p.add_subparsers(dest="hooks_action", required=True)
+
+    hooks_run_p = hooks_sub.add_parser("run", help="Run a TLDR hook from stdin JSON")
+    hooks_run_p.add_argument(
+        "event_name",
+        choices=["session-start", "pre-read", "pre-edit", "post-edit"],
+        help="Hook event to run",
+    )
+    hooks_run_p.add_argument("--client", default="generic", choices=["claude", "codex", "generic"])
+
+    hooks_install_p = hooks_sub.add_parser("install", help="Install TLDR hooks into an agent config")
+    hooks_install_p.add_argument("client", choices=["claude", "codex"])
+    hooks_install_p.add_argument("--scope", default="global", choices=["global"])
+    hooks_install_p.add_argument("--config", help="Override config path")
+    hooks_install_p.add_argument("--dry-run", action="store_true")
+
+    hooks_doctor_p = hooks_sub.add_parser("doctor", help="Check TLDR hook installation health")
+    hooks_doctor_p.add_argument("--client", action="append", choices=["claude", "codex"])
+    hooks_doctor_p.add_argument("--project", default=".")
+    hooks_doctor_p.add_argument("--json", action="store_true")
+
     # tldr doctor [--install LANG]
     doctor_p = subparsers.add_parser(
         "doctor", help="Check and install diagnostic tools (type checkers, linters, formatters)"
@@ -440,6 +477,48 @@ Semantic Search:
     )
 
     args = parser.parse_args()
+
+    if args.command == "hooks":
+        if args.hooks_action == "run":
+            from .hooks.runner import run_hook_from_stdin
+
+            sys.exit(run_hook_from_stdin(args.event_name, client=args.client))
+
+        from .hook_installer import doctor_report, format_doctor_report, install_hooks
+
+        if args.hooks_action == "install":
+            result = install_hooks(
+                args.client,
+                scope=args.scope,
+                config_path=args.config,
+                dry_run=args.dry_run,
+            )
+            print(result.to_text())
+            return
+
+        report = doctor_report(clients=args.client, project=args.project)
+        if args.json:
+            print(json.dumps(report, indent=2))
+        else:
+            print(format_doctor_report(report))
+        return
+
+    if args.command == "pack":
+        from .context_pack import build_context_pack
+
+        pack = build_context_pack(
+            args.query,
+            project=args.project,
+            budget=args.budget,
+            files=args.files,
+            changed=args.changed,
+            include_semantic=not args.no_semantic,
+        )
+        if args.json:
+            print(json.dumps(pack.to_dict(), indent=2))
+        else:
+            print(pack.to_markdown(), end="")
+        return
 
     # Import here to avoid slow startup for --help
     from .api import (
