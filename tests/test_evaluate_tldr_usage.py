@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -14,6 +15,7 @@ from scripts.evaluate_tldr_usage import (  # noqa: E402
     TelemetryRecord,
     apply_cumulative_token_count,
     apply_token_count,
+    discover_sessions,
     extract_token_usage,
     load_jsonl,
     match_telemetry,
@@ -25,6 +27,7 @@ from scripts.evaluate_tldr_usage import (  # noqa: E402
     path_context_hit,
     project_hash,
     resolve_claude_roots,
+    session_path_may_overlap_window,
     telemetry_context_hit,
     telemetry_path_hash,
     token_usage_is_cumulative,
@@ -200,6 +203,38 @@ def test_resolve_claude_roots_accepts_repeated_and_comma_separated_values(tmp_pa
     roots = resolve_claude_roots([str(work), f"{personal},{work}"])
 
     assert roots == [work, personal]
+
+
+def test_discover_sessions_reads_nested_codex_archives(tmp_path):
+    archived_session = tmp_path / "codex" / "archived_sessions" / "old" / "codex_session.jsonl"
+    archived_session.parent.mkdir(parents=True)
+    archived_session.write_text((FIXTURES / "codex_session.jsonl").read_text(encoding="utf-8"), encoding="utf-8")
+
+    sessions = discover_sessions(
+        codex_root=tmp_path / "codex",
+        claude_roots=[],
+        baseline_start=datetime(2026, 5, 19, tzinfo=timezone.utc),
+        baseline_end=datetime(2026, 5, 20, tzinfo=timezone.utc),
+        treatment_end=datetime(2026, 5, 21, tzinfo=timezone.utc),
+    )
+
+    assert [session.session_id for session in sessions] == ["codex-fixture-1"]
+
+
+def test_session_path_may_overlap_window_skips_dated_old_archives():
+    start = datetime(2026, 5, 19, tzinfo=timezone.utc)
+    end = datetime(2026, 5, 21, tzinfo=timezone.utc)
+
+    assert session_path_may_overlap_window(
+        Path("archived_sessions/keep-codex-fast/2026/05/20/rollout-2026-05-20T12-00-00.jsonl"),
+        start,
+        end,
+    )
+    assert not session_path_may_overlap_window(
+        Path("archived_sessions/keep-codex-fast/2025/11/04/rollout-2025-11-04T12-00-00.jsonl"),
+        start,
+        end,
+    )
 
 
 def test_verdict_insufficient_data_with_small_sample():

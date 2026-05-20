@@ -10,7 +10,7 @@ import re
 import statistics
 from collections import Counter, defaultdict
 from dataclasses import asdict, dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Iterable, Iterator
 
@@ -179,6 +179,21 @@ def iter_session_files(root: Path, patterns: Iterable[str]) -> Iterator[Path]:
         return
     for pattern in patterns:
         yield from root.glob(pattern)
+
+
+def session_path_may_overlap_window(path: Path, start: datetime, end: datetime) -> bool:
+    """Cheaply skip dated archive files that are clearly outside the report window."""
+    dates = []
+    for year, month, day in re.findall(r"(?<!\d)(20\d{2})[-/](\d{2})[-/](\d{2})(?!\d)", path.as_posix()):
+        try:
+            dates.append(datetime(int(year), int(month), int(day), tzinfo=timezone.utc).date())
+        except ValueError:
+            continue
+    if not dates:
+        return True
+    start_day = (start - timedelta(days=1)).date()
+    end_day = (end + timedelta(days=1)).date()
+    return any(start_day <= value <= end_day for value in dates)
 
 
 def resolve_claude_roots(values: list[str] | None) -> list[Path]:
@@ -611,7 +626,17 @@ def discover_sessions(
     treatment_end: datetime,
 ) -> list[SessionSummary]:
     sessions: list[SessionSummary] = []
-    for path in iter_session_files(codex_root, ("sessions/**/*.jsonl", "archived_sessions/*.jsonl")):
+    seen_codex_files: set[Path] = set()
+    for path in iter_session_files(codex_root, ("sessions/**/*.jsonl", "archived_sessions/**/*.jsonl")):
+        if not session_path_may_overlap_window(path, baseline_start, treatment_end):
+            continue
+        try:
+            key = path.resolve()
+        except Exception:
+            key = path
+        if key in seen_codex_files:
+            continue
+        seen_codex_files.add(key)
         summary = parse_codex_file(path, cohort="baseline")
         if summary is None:
             continue
