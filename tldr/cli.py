@@ -460,7 +460,20 @@ Semantic Search:
     hooks_run_p.add_argument("--client", default="generic", choices=["claude", "codex", "droid", "factory", "opencode", "generic"])
 
     hooks_install_p = hooks_sub.add_parser("install", help="Install TLDR hooks into an agent config")
-    hooks_install_p.add_argument("client", choices=["claude", "codex", "droid", "factory", "cursor", "opencode"])
+    hooks_install_p.add_argument(
+        "client",
+        choices=[
+            "claude",
+            "claude-work",
+            "claude-personal",
+            "claude-space",
+            "codex",
+            "droid",
+            "factory",
+            "cursor",
+            "opencode",
+        ],
+    )
     hooks_install_p.add_argument("--scope", default="global", choices=["global"])
     hooks_install_p.add_argument("--config", help="Override config path")
     hooks_install_p.add_argument("--dry-run", action="store_true")
@@ -469,7 +482,21 @@ Semantic Search:
     hooks_install_p.add_argument("--enable-compact-context", action="store_true")
 
     hooks_doctor_p = hooks_sub.add_parser("doctor", help="Check TLDR hook installation health")
-    hooks_doctor_p.add_argument("--client", action="append", choices=["claude", "codex", "droid", "factory", "cursor", "opencode"])
+    hooks_doctor_p.add_argument(
+        "--client",
+        action="append",
+        choices=[
+            "claude",
+            "claude-work",
+            "claude-personal",
+            "claude-space",
+            "codex",
+            "droid",
+            "factory",
+            "cursor",
+            "opencode",
+        ],
+    )
     hooks_doctor_p.add_argument("--project", default=".")
     hooks_doctor_p.add_argument("--json", action="store_true")
 

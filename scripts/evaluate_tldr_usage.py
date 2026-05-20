@@ -15,6 +15,12 @@ from pathlib import Path
 from typing import Any, Iterable, Iterator
 
 MIN_COMPARABLE_SESSIONS = 20
+DEFAULT_CLAUDE_ROOTS = (
+    "~/.claude",
+    "~/.claude-work",
+    "~/.claude-personal",
+    "~/.claude-space",
+)
 TOKEN_FIELDS = (
     "input_tokens",
     "cached_input_tokens",
@@ -173,6 +179,27 @@ def iter_session_files(root: Path, patterns: Iterable[str]) -> Iterator[Path]:
         return
     for pattern in patterns:
         yield from root.glob(pattern)
+
+
+def resolve_claude_roots(values: list[str] | None) -> list[Path]:
+    raw_roots = values or list(DEFAULT_CLAUDE_ROOTS)
+    roots: list[Path] = []
+    seen: set[Path] = set()
+    for raw in raw_roots:
+        for item in str(raw).split(","):
+            item = item.strip()
+            if not item:
+                continue
+            root = Path(item).expanduser()
+            try:
+                key = root.resolve()
+            except Exception:
+                key = root
+            if key in seen:
+                continue
+            seen.add(key)
+            roots.append(root)
+    return roots
 
 
 def normalize_command(command: str, repo_token: str) -> str:
@@ -578,7 +605,7 @@ def assign_cohort(ts: datetime, baseline_start: datetime, baseline_end: datetime
 def discover_sessions(
     *,
     codex_root: Path,
-    claude_root: Path,
+    claude_roots: Iterable[Path],
     baseline_start: datetime,
     baseline_end: datetime,
     treatment_end: datetime,
@@ -593,15 +620,24 @@ def discover_sessions(
             continue
         summary.cohort = cohort
         sessions.append(summary)
-    for path in iter_session_files(claude_root, ("projects/**/*.jsonl",)):
-        summary = parse_claude_file(path, cohort="baseline")
-        if summary is None:
-            continue
-        cohort = assign_cohort(summary.start, baseline_start, baseline_end, treatment_end)
-        if cohort is None:
-            continue
-        summary.cohort = cohort
-        sessions.append(summary)
+    seen_claude_files: set[Path] = set()
+    for claude_root in claude_roots:
+        for path in iter_session_files(claude_root, ("projects/**/*.jsonl",)):
+            try:
+                key = path.resolve()
+            except Exception:
+                key = path
+            if key in seen_claude_files:
+                continue
+            seen_claude_files.add(key)
+            summary = parse_claude_file(path, cohort="baseline")
+            if summary is None:
+                continue
+            cohort = assign_cohort(summary.start, baseline_start, baseline_end, treatment_end)
+            if cohort is None:
+                continue
+            summary.cohort = cohort
+            sessions.append(summary)
     return sessions
 
 
@@ -830,7 +866,7 @@ def build_report(args: argparse.Namespace) -> dict[str, Any]:
 
     sessions = discover_sessions(
         codex_root=Path(args.codex_root).expanduser(),
-        claude_root=Path(args.claude_root).expanduser(),
+        claude_roots=resolve_claude_roots(args.claude_root),
         baseline_start=baseline_start,
         baseline_end=baseline_end,
         treatment_end=treatment_end,
@@ -874,7 +910,14 @@ def main() -> int:
     parser.add_argument("--baseline-end")
     parser.add_argument("--treatment-end")
     parser.add_argument("--codex-root", default="~/.codex")
-    parser.add_argument("--claude-root", default="~/.claude")
+    parser.add_argument(
+        "--claude-root",
+        action="append",
+        help=(
+            "Claude profile root to scan. Can be repeated or comma-separated. "
+            "Defaults to ~/.claude, ~/.claude-work, ~/.claude-personal, and ~/.claude-space."
+        ),
+    )
     parser.add_argument("--tldr-telemetry", default="~/.tldr/telemetry.jsonl")
     parser.add_argument("--annotations", default="reports/tldr-efficacy-annotations.jsonl")
     parser.add_argument("--out", required=True)

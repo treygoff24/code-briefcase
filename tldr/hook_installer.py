@@ -15,6 +15,24 @@ from tldr.command_exec import expand_shebang_command
 
 TLDR_MARKER = "tldr hooks run"
 LEGACY_MARKERS = ("tldr-read.mjs", "post-edit-diagnostics.mjs")
+CLAUDE_PROFILE_CONFIGS = {
+    "claude": "~/.claude/settings.json",
+    "claude-work": "~/.claude-work/settings.json",
+    "claude-personal": "~/.claude-personal/settings.json",
+    "claude-space": "~/.claude-space/settings.json",
+}
+DEFAULT_DOCTOR_CLIENTS = [
+    "claude",
+    "claude-work",
+    "claude-personal",
+    "claude-space",
+    "codex",
+    "droid",
+    "factory",
+    "opencode",
+]
+SHELL_HOOK_CLIENTS = {"claude", "codex", "droid", "factory"}
+TELEMETRY_ENV_PREFIX = "TLDR_TELEMETRY=1 TLDR_TELEMETRY_REDACT_PATHS=1"
 TldrCommand = list[str]
 
 
@@ -44,8 +62,8 @@ class InstallResult:
 
 
 def default_config_path(client: str) -> Path:
-    if client == "claude":
-        return Path("~/.claude/settings.json").expanduser()
+    if client in CLAUDE_PROFILE_CONFIGS:
+        return Path(CLAUDE_PROFILE_CONFIGS[client]).expanduser()
     if client == "codex":
         return Path("~/.codex/hooks.json").expanduser()
     if client in ("droid", "factory"):
@@ -147,7 +165,16 @@ def _validate_tldr_hooks_command(command: TldrCommand) -> None:
 
 
 def _command(tldr_command: TldrCommand, event_name: str, client: str) -> str:
-    return _quote_command(*tldr_command, "hooks", "run", event_name, "--client", client)
+    command = _quote_command(*tldr_command, "hooks", "run", event_name, "--client", client)
+    if client in SHELL_HOOK_CLIENTS:
+        return f"{TELEMETRY_ENV_PREFIX} {command}"
+    return command
+
+
+def _runtime_client(client: str) -> str:
+    if client in CLAUDE_PROFILE_CONFIGS:
+        return "claude"
+    return client
 
 
 def _hook(command: str, timeout: int = 10, status_message: str | None = None) -> dict[str, Any]:
@@ -165,11 +192,12 @@ def _desired_groups(
     enable_tool_guard: bool = False,
     enable_compact_context: bool = False,
 ) -> dict[str, list[dict[str, Any]]]:
-    is_codex = client == "codex"
-    is_droid = client in ("droid", "factory")
+    runtime_client = _runtime_client(client)
+    is_codex = runtime_client == "codex"
+    is_droid = runtime_client in ("droid", "factory")
 
     def group(matcher: str, event: str, status: str) -> dict[str, Any]:
-        command = _command(tldr_command, event, client)
+        command = _command(tldr_command, event, runtime_client)
         hook = _hook(command, status_message=status if is_codex else None)
         return {"matcher": matcher, "hooks": [hook]}
 
@@ -246,11 +274,12 @@ def _is_tldr_owned(command: str) -> bool:
 
 
 def _managed_events(client: str) -> set[str]:
-    if client == "codex":
+    runtime_client = _runtime_client(client)
+    if runtime_client == "codex":
         return {"SessionStart", "PreToolUse", "PostToolUse", "UserPromptSubmit", "PermissionRequest"}
-    if client in ("droid", "factory"):
+    if runtime_client in ("droid", "factory"):
         return {"SessionStart", "PreToolUse", "PostToolUse", "UserPromptSubmit", "PreCompact"}
-    if client == "claude":
+    if runtime_client == "claude":
         return {"SessionStart", "PreToolUse", "PostToolUse"}
     return set()
 
@@ -471,7 +500,7 @@ def doctor_report(
     clients: list[str] | None = None,
     project: str | Path = ".",
 ) -> dict[str, Any]:
-    clients = clients or ["claude", "codex", "droid", "factory", "opencode"]
+    clients = clients or DEFAULT_DOCTOR_CLIENTS
     try:
         tldr_command = _quote_command(*_resolve_tldr_command())
     except Exception:

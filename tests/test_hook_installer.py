@@ -3,7 +3,7 @@ import os
 
 import pytest
 
-from tldr.hook_installer import install_hooks
+from tldr.hook_installer import default_config_path, install_hooks
 
 
 @pytest.fixture
@@ -176,6 +176,72 @@ def test_claude_output_has_hooks_key(tmp_path, fake_tldr):
     install_hooks("claude", config_path=str(config), tldr_path=str(fake_tldr))
 
     assert "hooks" in json.loads(config.read_text())
+
+
+def test_claude_space_default_path_targets_profile_root():
+    path = default_config_path("claude-space")
+
+    assert str(path).endswith(".claude-space/settings.json")
+
+
+def test_claude_space_installer_replaces_legacy_hooks_with_current_claude_runtime(tmp_path, fake_tldr):
+    config = tmp_path / "settings.json"
+    config.write_text(
+        json.dumps(
+            {
+                "hooks": {
+                    "PreToolUse": [
+                        {
+                            "matcher": "Read",
+                            "hooks": [
+                                {
+                                    "type": "command",
+                                    "command": "node ~/.claude-shared/hooks/tldr-read.mjs",
+                                }
+                            ],
+                        },
+                        {
+                            "matcher": "Bash",
+                            "hooks": [{"type": "command", "command": "rtk hook claude"}],
+                        },
+                    ],
+                    "PostToolUse": [
+                        {
+                            "matcher": "Edit|Write|MultiEdit|Update",
+                            "hooks": [
+                                {
+                                    "type": "command",
+                                    "command": "node ~/.claude-shared/hooks/post-edit-diagnostics.mjs",
+                                }
+                            ],
+                        }
+                    ],
+                    "PreCompact": [
+                        {
+                            "matcher": "",
+                            "hooks": [{"type": "command", "command": "node pre-compact.mjs"}],
+                        }
+                    ],
+                }
+            }
+        )
+    )
+
+    result = install_hooks("claude-space", config_path=str(config), tldr_path=str(fake_tldr))
+
+    assert result.changed
+    data = json.loads(config.read_text())
+    serialized = json.dumps(data)
+    assert "tldr-read.mjs" not in serialized
+    assert "post-edit-diagnostics.mjs" not in serialized
+    assert "hooks run session-start --client claude" in serialized
+    assert "hooks run pre-read --client claude" in serialized
+    assert "hooks run pre-edit --client claude" in serialized
+    assert "hooks run post-edit --client claude" in serialized
+    assert "--client claude-space" not in serialized
+    assert "TLDR_TELEMETRY=1 TLDR_TELEMETRY_REDACT_PATHS=1" in serialized
+    assert "rtk hook claude" in serialized
+    assert "node pre-compact.mjs" in serialized
 
 
 def test_existing_legacy_read_hook_is_replaced(tmp_path, fake_tldr):

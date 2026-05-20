@@ -633,10 +633,15 @@ Install examples:
 
 ```bash
 tldr hooks install claude --scope global --dry-run
+tldr hooks install claude-space --scope global --dry-run
 tldr hooks install codex --scope global --dry-run --enable-prompt-guard --enable-tool-guard
 tldr hooks install droid --scope global --dry-run --enable-prompt-guard --enable-tool-guard --enable-compact-context
 tldr hooks install opencode --scope global --dry-run --enable-tool-guard --enable-compact-context
 ```
+
+Claude profile targets `claude`, `claude-work`, `claude-personal`, and
+`claude-space` all install the same Python TLDR runtime with `--client claude`;
+the target name only selects the profile config root.
 
 Cursor remains deliberately guarded. `tldr hooks doctor --client cursor` reports
 `experimental_unverified`, and `tldr hooks install cursor` refuses to write until

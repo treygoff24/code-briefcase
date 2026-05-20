@@ -24,6 +24,7 @@ from scripts.evaluate_tldr_usage import (  # noqa: E402
     normalize_cwd,
     path_context_hit,
     project_hash,
+    resolve_claude_roots,
     telemetry_context_hit,
     telemetry_path_hash,
     token_usage_is_cumulative,
@@ -190,6 +191,15 @@ def test_match_telemetry_by_session_id():
     matched, unmatched, hit_stats = match_telemetry([codex, claude], telemetry)
     assert len(matched) >= 2
     assert hit_stats["trigger_total"] >= 1
+
+
+def test_resolve_claude_roots_accepts_repeated_and_comma_separated_values(tmp_path):
+    work = tmp_path / "claude-work"
+    personal = tmp_path / "claude-personal"
+
+    roots = resolve_claude_roots([str(work), f"{personal},{work}"])
+
+    assert roots == [work, personal]
 
 
 def test_verdict_insufficient_data_with_small_sample():
