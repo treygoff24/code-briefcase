@@ -6,7 +6,7 @@ from typing import Any
 from tldr.diagnostics import _detect_language, get_diagnostics
 from tldr.hooks.edit import EDIT_TOOLS, extract_apply_patch_paths
 from tldr.hooks.read import CODE_EXTENSIONS, resolve_event_path
-from tldr.hooks.outcome import HookExecutionResult, ok, skipped
+from tldr.hooks.outcome import HookExecutionResult, event_relative_path, ok, skipped
 from tldr.hooks.runtime import HookEvent, HookResponse
 
 
@@ -75,7 +75,11 @@ def build_post_edit_response(event: HookEvent) -> HookExecutionResult:
         return skipped(reason="wrong_tool")
 
     edited_files = extract_edited_files(event)
-    trigger = [str(path.relative_to(event.cwd)) for path in edited_files]
+    trigger = [
+        display_path
+        for path in edited_files
+        if (display_path := event_relative_path(event, path)) is not None
+    ]
     messages: list[str] = []
     diagnostics_count = 0
     for file_path in edited_files:

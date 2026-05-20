@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Any
 
 from tldr.api import extract_file
-from tldr.hooks.outcome import HookExecutionResult, ok, skipped
+from tldr.hooks.outcome import HookExecutionResult, event_relative_path, ok, skipped
 from tldr.hooks.runtime import HookEvent, HookResponse
 
 CODE_EXTENSIONS = {
@@ -159,7 +159,8 @@ def build_read_response(event: HookEvent, budget: int = 1200) -> HookExecutionRe
 
     raw_path = event.tool_input.get("file_path") or event.tool_input.get("path")
     file_path = resolve_event_path(event, raw_path)
-    trigger = [str(file_path.relative_to(event.cwd))] if file_path is not None else []
+    trigger_path = event_relative_path(event, file_path)
+    trigger = [trigger_path] if trigger_path is not None else []
     if file_path is None or should_bypass_read(file_path, event.tool_input):
         return skipped(reason="bypass", trigger_files=trigger)
 

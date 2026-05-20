@@ -13,6 +13,7 @@ from tldr.telemetry import record_hook_execution, write_telemetry_record
 
 def test_telemetry_disabled_by_default(monkeypatch, tmp_path):
     monkeypatch.delenv("TLDR_TELEMETRY", raising=False)
+    monkeypatch.setattr("tldr.telemetry.TELEMETRY_ENABLE_FILE", tmp_path / "missing.enabled")
     monkeypatch.setenv("TLDR_TELEMETRY_PATH", str(tmp_path / "telemetry.jsonl"))
     write_telemetry_record({"event": "test"})
     assert not (tmp_path / "telemetry.jsonl").exists()
@@ -36,6 +37,28 @@ def test_telemetry_writes_when_enabled(monkeypatch, tmp_path):
     assert payload["status"] == "ok"
     assert payload["injected_bytes"] == 12
     assert "snippet" not in payload
+
+
+def test_telemetry_can_be_enabled_by_global_flag_file(monkeypatch, tmp_path):
+    monkeypatch.delenv("TLDR_TELEMETRY", raising=False)
+    monkeypatch.setattr("tldr.telemetry.TELEMETRY_ENABLE_FILE", tmp_path / "telemetry.enabled")
+    monkeypatch.setenv("TLDR_TELEMETRY_PATH", str(tmp_path / "telemetry.jsonl"))
+    (tmp_path / "telemetry.enabled").write_text("1\n", encoding="utf-8")
+
+    write_telemetry_record({"event": "test"})
+
+    assert (tmp_path / "telemetry.jsonl").exists()
+
+
+def test_env_can_disable_global_telemetry_flag_file(monkeypatch, tmp_path):
+    monkeypatch.setenv("TLDR_TELEMETRY", "0")
+    monkeypatch.setattr("tldr.telemetry.TELEMETRY_ENABLE_FILE", tmp_path / "telemetry.enabled")
+    monkeypatch.setenv("TLDR_TELEMETRY_PATH", str(tmp_path / "telemetry.jsonl"))
+    (tmp_path / "telemetry.enabled").write_text("1\n", encoding="utf-8")
+
+    write_telemetry_record({"event": "test"})
+
+    assert not (tmp_path / "telemetry.jsonl").exists()
 
 
 def test_unwritable_telemetry_path_is_swallowed(monkeypatch, tmp_path):

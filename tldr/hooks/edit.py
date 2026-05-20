@@ -6,7 +6,7 @@ from typing import Any
 
 from tldr.api import extract_file, get_imports
 from tldr.hooks.read import CODE_EXTENSIONS, _looks_secret, resolve_event_path
-from tldr.hooks.outcome import HookExecutionResult, ok, skipped
+from tldr.hooks.outcome import HookExecutionResult, event_relative_path, ok, skipped
 from tldr.hooks.runtime import HookEvent, HookResponse
 
 EDIT_TOOLS = {"Edit", "Write", "MultiEdit", "Update", "apply_patch"}
@@ -105,11 +105,8 @@ def build_pre_edit_response(event: HookEvent, budget: int = 2000) -> HookExecuti
         return skipped(reason="wrong_tool")
 
     file_path = extract_target_file(event)
-    trigger = (
-        [str(file_path.relative_to(event.cwd))]
-        if file_path is not None
-        else []
-    )
+    trigger_path = event_relative_path(event, file_path)
+    trigger = [trigger_path] if trigger_path is not None else []
     if file_path is None or file_path.suffix.lower() not in CODE_EXTENSIONS or _looks_secret(file_path):
         return skipped(reason="bypass", trigger_files=trigger)
     if not file_path.exists():

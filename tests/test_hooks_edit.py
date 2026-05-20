@@ -65,3 +65,11 @@ def test_codex_apply_patch_update_returns_existing_file_context(tmp_path):
     response = build_pre_edit_response(event)
 
     assert "login" in response.additional_context
+
+
+def test_external_path_skips_without_crashing(tmp_path):
+    external = tmp_path.parent / "external_edit.py"
+
+    response = build_pre_edit_response(_event(tmp_path, "Write", str(external)))
+
+    assert response.status == "skipped"

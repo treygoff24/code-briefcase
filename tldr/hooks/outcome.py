@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Literal
 
 from tldr.hooks.runtime import HookEvent, HookResponse
@@ -44,18 +45,24 @@ class HookExecutionResult:
         return self.response.suppress_output
 
 
-def _rel_path(event: HookEvent, path) -> str | None:
+def event_relative_path(event: HookEvent, path) -> str | None:
     if path is None:
         return None
     try:
-        from tldr.hooks.read import resolve_event_path
-
-        resolved = resolve_event_path(event, str(path))
-        if resolved is None:
-            return None
-        return str(resolved.relative_to(event.cwd))
+        resolved = Path(path).expanduser()
+        if not resolved.is_absolute():
+            resolved = event.cwd / resolved
+        resolved = resolved.resolve()
+        try:
+            return str(resolved.relative_to(event.cwd))
+        except ValueError:
+            return str(resolved)
     except Exception:
         return str(path)
+
+
+def _rel_path(event: HookEvent, path) -> str | None:
+    return event_relative_path(event, path)
 
 
 def _context_bytes(response: HookResponse) -> int:

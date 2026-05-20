@@ -61,3 +61,12 @@ def test_test_file_noops(tmp_path):
     source.write_text("def test_main():\n    assert True\n" + "x = 1\n" * 400)
 
     assert build_read_response(_event(tmp_path, "test_app.py")).is_noop()
+
+
+def test_external_path_skips_without_crashing(tmp_path):
+    external = tmp_path.parent / "external_read.py"
+    external.write_text("def main():\n    return 1\n")
+
+    response = build_read_response(_event(tmp_path, str(external)))
+
+    assert response.status == "skipped"

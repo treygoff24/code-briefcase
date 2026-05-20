@@ -116,6 +116,20 @@ def test_unsupported_extension_noop(tmp_path):
     assert build_post_edit_response(_event(tmp_path, {"toolInput": {"file_path": "README.md"}})).is_noop()
 
 
+def test_external_path_skips_without_crashing(tmp_path, monkeypatch):
+    external = tmp_path.parent / "external_post_edit.py"
+    external.write_text("def main():\n    return 1\n")
+    monkeypatch.setattr(
+        "tldr.hooks.post_edit.get_diagnostics",
+        lambda *a, **k: {"diagnostics": [], "error_count": 0, "warning_count": 0},
+    )
+    monkeypatch.setattr("tldr.hooks.post_edit.notify_daemon", lambda *a, **k: None)
+
+    response = build_post_edit_response(_event(tmp_path, {"toolInput": {"file_path": str(external)}}))
+
+    assert response.status == "skipped"
+
+
 def test_codex_tool_response_filepath_finds_file(tmp_path, monkeypatch):
     source = tmp_path / "app.py"
     source.write_text("def main():\n    return 1\n")

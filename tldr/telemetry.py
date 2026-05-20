@@ -15,12 +15,39 @@ except ImportError:  # pragma: no cover - Windows
 from tldr import __version__
 
 DEFAULT_TELEMETRY_PATH = Path.home() / ".tldr" / "telemetry.jsonl"
+TELEMETRY_ENABLE_FILE = Path.home() / ".tldr" / "telemetry.enabled"
+TELEMETRY_REDACT_PATHS_FILE = Path.home() / ".tldr" / "telemetry.redact_paths"
 MAX_TELEMETRY_BYTES = 50 * 1024 * 1024
 TELEMETRY_FILE_MODE = 0o600
+TRUE_VALUES = {"1", "true", "yes", "on"}
+FALSE_VALUES = {"0", "false", "no", "off", "disabled"}
+
+
+def _truthy_env(name: str) -> bool | None:
+    raw = os.environ.get(name)
+    if raw is None:
+        return None
+    value = raw.strip().lower()
+    if not value:
+        return False
+    return value in TRUE_VALUES
+
+
+def _enabled_flag_file(path: Path) -> bool:
+    try:
+        if not path.exists():
+            return False
+        value = path.read_text(encoding="utf-8").strip().lower()
+        return value not in FALSE_VALUES
+    except Exception:
+        return False
 
 
 def telemetry_enabled() -> bool:
-    return os.environ.get("TLDR_TELEMETRY", "").strip() in {"1", "true", "yes", "on"}
+    enabled = _truthy_env("TLDR_TELEMETRY")
+    if enabled is not None:
+        return enabled
+    return _enabled_flag_file(TELEMETRY_ENABLE_FILE)
 
 
 def telemetry_path() -> Path:
@@ -31,7 +58,10 @@ def telemetry_path() -> Path:
 
 
 def redact_paths_enabled() -> bool:
-    return os.environ.get("TLDR_TELEMETRY_REDACT_PATHS", "").strip() in {"1", "true", "yes", "on"}
+    enabled = _truthy_env("TLDR_TELEMETRY_REDACT_PATHS")
+    if enabled is not None:
+        return enabled
+    return _enabled_flag_file(TELEMETRY_REDACT_PATHS_FILE)
 
 
 def project_hash(project: Path) -> str:
