@@ -130,4 +130,4 @@ def test_parse_codex_payload_with_tool_response_file_path(tmp_path):
 def test_session_start_noop_can_render_for_missing_project(tmp_path):
     event = parse_hook_event({"hook_event_name": "SessionStart", "cwd": str(tmp_path / "missing")})
 
-    assert render_hook_response(build_session_start_response(event), client="claude") == {}
+    assert render_hook_response(build_session_start_response(event).response, client="claude") == {}

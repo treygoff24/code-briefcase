@@ -21,6 +21,55 @@ def test_clean_diagnostics_noop(tmp_path, monkeypatch):
     assert build_post_edit_response(_event(tmp_path, {"toolInput": {"file_path": "app.py"}})).is_noop()
 
 
+def test_diagnostics_count_reports_error_and_warning_totals(tmp_path, monkeypatch):
+    (tmp_path / "a.py").write_text("def a():\n    return 1\n")
+    (tmp_path / "b.py").write_text("def b():\n    return 2\n")
+
+    def fake(path, language=None):
+        name = Path(path).name
+        if name == "a.py":
+            return {
+                "diagnostics": [
+                    {"file": "a.py", "line": 1, "column": 1, "source": "pyright", "message": "a bad"}
+                ],
+                "error_count": 2,
+                "warning_count": 1,
+            }
+        return {
+            "diagnostics": [
+                {"file": "b.py", "line": 1, "column": 1, "source": "pyright", "message": "b bad"}
+            ],
+            "error_count": 1,
+            "warning_count": 0,
+        }
+
+    monkeypatch.setattr("tldr.hooks.post_edit.get_diagnostics", fake)
+    monkeypatch.setattr("tldr.hooks.post_edit.notify_daemon", lambda *a, **k: None)
+
+    response = build_post_edit_response(
+        _event(
+            tmp_path,
+            {
+                "toolName": "apply_patch",
+                "toolInput": {
+                    "command": (
+                        "*** Begin Patch\n"
+                        "*** Update File: a.py\n"
+                        "@@\n"
+                        " def a():\n"
+                        "*** Update File: b.py\n"
+                        "@@\n"
+                        " def b():\n"
+                        "*** End Patch"
+                    )
+                },
+            },
+        )
+    )
+
+    assert response.diagnostics_count == 4
+
+
 def test_error_diagnostics_message_includes_count_and_first_diagnostic(tmp_path, monkeypatch):
     source = tmp_path / "app.py"
     source.write_text("def main():\n    return 1\n")
@@ -40,6 +89,7 @@ def test_error_diagnostics_message_includes_count_and_first_diagnostic(tmp_path,
 
     assert "1 errors, 0 warnings" in response.message
     assert "bad" in response.message
+    assert response.diagnostics_count == 1
 
 
 def test_notify_fallback_marks_dirty_when_daemon_unavailable(tmp_path, monkeypatch):

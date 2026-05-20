@@ -6,6 +6,7 @@ from typing import Any
 
 from tldr.api import extract_file, get_imports
 from tldr.hooks.read import CODE_EXTENSIONS, _looks_secret, resolve_event_path
+from tldr.hooks.outcome import HookExecutionResult, ok, skipped
 from tldr.hooks.runtime import HookEvent, HookResponse
 
 EDIT_TOOLS = {"Edit", "Write", "MultiEdit", "Update", "apply_patch"}
@@ -99,15 +100,20 @@ def _format_structure(file_path: Path, info: dict[str, Any], budget: int) -> str
     return text
 
 
-def build_pre_edit_response(event: HookEvent, budget: int = 2000) -> HookResponse:
+def build_pre_edit_response(event: HookEvent, budget: int = 2000) -> HookExecutionResult:
     if event.tool_name not in EDIT_TOOLS:
-        return HookResponse.noop()
+        return skipped(reason="wrong_tool")
 
     file_path = extract_target_file(event)
+    trigger = (
+        [str(file_path.relative_to(event.cwd))]
+        if file_path is not None
+        else []
+    )
     if file_path is None or file_path.suffix.lower() not in CODE_EXTENSIONS or _looks_secret(file_path):
-        return HookResponse.noop()
+        return skipped(reason="bypass", trigger_files=trigger)
     if not file_path.exists():
-        return HookResponse.noop()
+        return skipped(reason="missing_file", trigger_files=trigger)
 
     try:
         info = extract_file(str(file_path), base_path=str(event.cwd))
@@ -118,11 +124,14 @@ def build_pre_edit_response(event: HookEvent, budget: int = 2000) -> HookRespons
         except Exception:
             pass
     except Exception:
-        return HookResponse.noop()
+        return skipped(reason="extract_failed", trigger_files=trigger)
 
     context = _format_structure(file_path, info, budget)
     symbol = _likely_symbol(event.tool_input)
     if symbol:
         context += f"\n\nLikely target symbol: {symbol}"
 
-    return HookResponse(message=context, additional_context=context, suppress_output=False)
+    return ok(
+        HookResponse(message=context, additional_context=context, suppress_output=False),
+        trigger_files=trigger,
+    )

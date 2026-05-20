@@ -1,0 +1,8 @@
+{"type":"user","message":{"role":"user","content":"fix app"},"timestamp":"2026-05-19T19:00:00+00:00","cwd":"/tmp/sample-repo","sessionId":"claude-fixture-1"}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","name":"Read","input":{"file_path":"app.py"}}]},"timestamp":"2026-05-19T19:00:05+00:00"}
+{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"1","content":"def main():"}]},"timestamp":"2026-05-19T19:00:06+00:00"}
+{"attachment":{"type":"hook_success","hook_name":"tldr-pre-read","event":"PreToolUse","output_location":"hookSpecificOutput","preview":"[TLDR nav map: app.py]"}}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","name":"Edit","input":{"file_path":"app.py","old_string":"pass","new_string":"return 1"}}]},"timestamp":"2026-05-19T19:00:10+00:00"}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","name":"Bash","input":{"command":"pytest -q"}}]},"timestamp":"2026-05-19T19:00:20+00:00"}
+{"timestamp":"2026-05-19T19:00:25+00:00","cwd":"/tmp/sample-repo","sessionId":"claude-fixture-1","note":"typeless metadata"}
+bad line {{{

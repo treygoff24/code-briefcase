@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Any
 
 from tldr.api import extract_file
+from tldr.hooks.outcome import HookExecutionResult, ok, skipped
 from tldr.hooks.runtime import HookEvent, HookResponse
 
 CODE_EXTENSIONS = {
@@ -152,30 +153,38 @@ def format_nav_map(file_path: Path, info: dict[str, Any], budget: int = 1200) ->
     return _truncate("\n".join(lines), budget)
 
 
-def build_read_response(event: HookEvent, budget: int = 1200) -> HookResponse:
+def build_read_response(event: HookEvent, budget: int = 1200) -> HookExecutionResult:
     if event.tool_name != "Read":
-        return HookResponse.noop()
+        return skipped(reason="wrong_tool")
 
     raw_path = event.tool_input.get("file_path") or event.tool_input.get("path")
     file_path = resolve_event_path(event, raw_path)
+    trigger = [str(file_path.relative_to(event.cwd))] if file_path is not None else []
     if file_path is None or should_bypass_read(file_path, event.tool_input):
-        return HookResponse.noop()
+        return skipped(reason="bypass", trigger_files=trigger)
 
     try:
         info = extract_file(str(file_path), base_path=str(event.cwd))
     except Exception:
-        return HookResponse.noop()
+        return skipped(reason="extract_failed", trigger_files=trigger)
+
 
     context = format_nav_map(file_path, info, budget=budget)
     if event.client == "claude":
         updated_input = dict(event.tool_input)
         updated_input["file_path"] = str(file_path)
         updated_input.setdefault("limit", 200)
-        return HookResponse(
-            permission_decision="allow",
-            updated_input=updated_input,
-            additional_context=context,
-            suppress_output=True,
+        return ok(
+            HookResponse(
+                permission_decision="allow",
+                updated_input=updated_input,
+                additional_context=context,
+                suppress_output=True,
+            ),
+            trigger_files=trigger,
         )
 
-    return HookResponse(message=context, additional_context=context, suppress_output=False)
+    return ok(
+        HookResponse(message=context, additional_context=context, suppress_output=False),
+        trigger_files=trigger,
+    )

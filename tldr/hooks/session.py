@@ -4,6 +4,7 @@ import subprocess
 import sys
 from pathlib import Path
 
+from tldr.hooks.outcome import HookExecutionResult, noop, ok, skipped
 from tldr.hooks.runtime import HookEvent, HookResponse
 from tldr.session_warm import count_source_files
 from tldr.tldrignore import ensure_tldrignore
@@ -42,10 +43,10 @@ def build_session_start_response(
     event: HookEvent,
     *,
     max_files: int = 500,
-) -> HookResponse:
+) -> HookExecutionResult:
     project = event.cwd
     if not project.exists() or not project.is_dir():
-        return HookResponse.noop()
+        return skipped(reason="project_missing")
 
     actions: list[str] = []
     try:
@@ -76,5 +77,8 @@ def build_session_start_response(
         pass
 
     if not actions:
-        return HookResponse.noop()
-    return HookResponse(message="TLDR session hook: " + "; ".join(actions), suppress_output=True)
+        return noop("no_actions")
+    return ok(
+        HookResponse(message="TLDR session hook: " + "; ".join(actions), suppress_output=True),
+        daemon_state="start_requested" if any("daemon" in action for action in actions) else None,
+    )

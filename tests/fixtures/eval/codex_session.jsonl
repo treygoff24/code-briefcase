@@ -1,0 +1,11 @@
+{"type":"session_meta","payload":{"id":"codex-fixture-1","cwd":"/tmp/sample-repo","model":"gpt-5","cli_version":"0.130.0"},"timestamp":"2026-05-19T18:00:00+00:00"}
+{"type":"event_msg","payload":{"type":"task_started"},"timestamp":"2026-05-19T18:00:05+00:00"}
+{"type":"event_msg","payload":{"type":"token_count","input_tokens":1200,"cached_input_tokens":400,"output_tokens":300,"reasoning_output_tokens":50,"total_tokens":1950},"timestamp":"2026-05-19T18:00:10+00:00"}
+{"type":"response_item","payload":{"type":"function_call","name":"shell","arguments":{"command":"rg -n \"main\" <repo>/app.py"}},"timestamp":"2026-05-19T18:00:15+00:00"}
+{"type":"response_item","payload":{"type":"function_call_output","output":"1:def main():"},"timestamp":"2026-05-19T18:00:16+00:00"}
+{"type":"response_item","payload":{"type":"function_call","name":"apply_patch","arguments":{"command":"*** Update File: app.py\n@@\n-def main():\n+def main():\n+    return 1\n"}},"timestamp":"2026-05-19T18:00:20+00:00"}
+{"type":"response_item","payload":{"type":"function_call","name":"shell","arguments":{"command":"pytest -q"}},"timestamp":"2026-05-19T18:00:25+00:00"}
+{"type":"response_item","payload":{"type":"function_call_output","output":"1 passed"},"timestamp":"2026-05-19T18:00:30+00:00"}
+{"type":"event_msg","payload":{"type":"token_count","input_tokens":500,"cached_input_tokens":100,"output_tokens":80,"total_tokens":680},"timestamp":"2026-05-19T18:00:35+00:00"}
+not valid json
+{"type":"unknown_shape","payload":{"foo":"bar"},"timestamp":"2026-05-19T18:00:40+00:00"}

@@ -6,6 +6,7 @@ from typing import Any
 from tldr.diagnostics import _detect_language, get_diagnostics
 from tldr.hooks.edit import EDIT_TOOLS, extract_apply_patch_paths
 from tldr.hooks.read import CODE_EXTENSIONS, resolve_event_path
+from tldr.hooks.outcome import HookExecutionResult, ok, skipped
 from tldr.hooks.runtime import HookEvent, HookResponse
 
 
@@ -44,40 +45,54 @@ def extract_edited_files(event: HookEvent) -> list[Path]:
     return paths
 
 
-def _diagnostic_message_for_file(event: HookEvent, file_path: Path) -> str | None:
+def _diagnostic_message_for_file(event: HookEvent, file_path: Path) -> tuple[str | None, int, int]:
     if file_path.suffix.lower() not in CODE_EXTENSIONS:
-        return None
+        return None, 0, 0
 
     notify_daemon(event.cwd, file_path)
     if not file_path.exists():
-        return None
+        return None, 0, 0
 
     language = _detect_language(str(file_path))
     if language == "unknown":
-        return None
+        return None, 0, 0
 
     try:
         result = get_diagnostics(str(file_path), language=language)
     except Exception:
-        return None
+        return None, 0, 0
 
-    return format_diagnostic_message(file_path, result)
+    error_count = int(result.get("error_count") or 0)
+    warning_count = int(result.get("warning_count") or 0)
+    message = format_diagnostic_message(file_path, result)
+    if message is None:
+        return None, 0, 0
+    return message, error_count, warning_count
 
 
-def build_post_edit_response(event: HookEvent) -> HookResponse:
+def build_post_edit_response(event: HookEvent) -> HookExecutionResult:
     if event.tool_name not in EDIT_TOOLS:
-        return HookResponse.noop()
+        return skipped(reason="wrong_tool")
 
-    messages = [
-        message
-        for file_path in extract_edited_files(event)
-        if (message := _diagnostic_message_for_file(event, file_path))
-    ]
+    edited_files = extract_edited_files(event)
+    trigger = [str(path.relative_to(event.cwd)) for path in edited_files]
+    messages: list[str] = []
+    diagnostics_count = 0
+    for file_path in edited_files:
+        message, error_count, warning_count = _diagnostic_message_for_file(event, file_path)
+        if message is None:
+            continue
+        messages.append(message)
+        diagnostics_count += error_count + warning_count
     if not messages:
-        return HookResponse.noop()
+        return skipped(reason="no_diagnostics", trigger_files=trigger)
 
     message = "\n\n".join(messages)
-    return HookResponse(message=message, additional_context=message, suppress_output=False)
+    return ok(
+        HookResponse(message=message, additional_context=message, suppress_output=False),
+        trigger_files=trigger,
+        diagnostics_count=diagnostics_count,
+    )
 
 
 def notify_daemon(project: Path, file_path: Path) -> None:

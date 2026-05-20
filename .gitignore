@@ -63,3 +63,9 @@ archive/
 
 # Local dogfood harness output
 dogfood-output/
+
+# Efficacy evaluation artifacts
+reports/*.md
+reports/*.json
+!reports/.gitkeep
+**/telemetry.jsonl
