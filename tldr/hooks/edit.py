@@ -5,8 +5,13 @@ from pathlib import Path
 from typing import Any
 
 from tldr.api import extract_file, get_imports
-from tldr.hooks.read import CODE_EXTENSIONS, _looks_secret, resolve_event_path
 from tldr.hooks.outcome import HookExecutionResult, event_relative_path, ok, skipped
+from tldr.hooks.path_policy import (
+    discover_related_candidates,
+    format_related_files_section,
+    resolve_event_path,
+    should_exclude_context_path,
+)
 from tldr.hooks.runtime import HookEvent, HookResponse
 
 EDIT_TOOLS = {"Edit", "Write", "MultiEdit", "Update", "apply_patch"}
@@ -23,13 +28,7 @@ def extract_target_file(event: HookEvent) -> Path | None:
 
 
 def extract_apply_patch_paths(event: HookEvent) -> list[Path]:
-    """Extract touched files from Codex apply_patch hook input.
-
-    Codex 0.130 reports file edits as tool_name="apply_patch" and puts the
-    patch text in tool_input.command. Keep this parser conservative: it only
-    recognizes file headers emitted by apply_patch/git-style patches and leaves
-    all path resolution to the normal hook cwd handling.
-    """
+    """Extract touched files from Codex apply_patch hook input."""
     if event.tool_name != "apply_patch":
         return []
 
@@ -107,15 +106,13 @@ def build_pre_edit_response(event: HookEvent, budget: int = 2000) -> HookExecuti
     file_path = extract_target_file(event)
     trigger_path = event_relative_path(event, file_path)
     trigger = [trigger_path] if trigger_path is not None else []
-    if file_path is None or file_path.suffix.lower() not in CODE_EXTENSIONS or _looks_secret(file_path):
+    if file_path is None or should_exclude_context_path(event.cwd, file_path):
         return skipped(reason="bypass", trigger_files=trigger)
     if not file_path.exists():
         return skipped(reason="missing_file", trigger_files=trigger)
 
     try:
         info = extract_file(str(file_path), base_path=str(event.cwd))
-        # Exercise the public import API as part of the edit context path. If it
-        # cannot parse a language, the extracted imports above are still enough.
         try:
             get_imports(str(file_path), language=info.get("language", "python"))
         except Exception:
@@ -123,7 +120,11 @@ def build_pre_edit_response(event: HookEvent, budget: int = 2000) -> HookExecuti
     except Exception:
         return skipped(reason="extract_failed", trigger_files=trigger)
 
+    candidate_files, recommended_files, surfaced_files = discover_related_candidates(
+        event, file_path, info, context_kind="edit_structure"
+    )
     context = _format_structure(file_path, info, budget)
+    context += format_related_files_section(surfaced_files)
     symbol = _likely_symbol(event.tool_input)
     if symbol:
         context += f"\n\nLikely target symbol: {symbol}"
@@ -131,4 +132,8 @@ def build_pre_edit_response(event: HookEvent, budget: int = 2000) -> HookExecuti
     return ok(
         HookResponse(message=context, additional_context=context, suppress_output=False),
         trigger_files=trigger,
+        recommended_files=recommended_files,
+        surfaced_files=surfaced_files,
+        candidate_files=candidate_files,
+        context_kind="edit_structure",
     )

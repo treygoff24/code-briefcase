@@ -1,0 +1,6 @@
+{"type":"session_meta","payload":{"id":"backfill-codex-1","cwd":"/tmp/backfill-repo","model":"gpt-5","cli_version":"0.130.0"},"timestamp":"2026-05-20T14:00:00+00:00"}
+{"type":"event_msg","payload":{"type":"task_started"},"timestamp":"2026-05-20T14:00:05+00:00"}
+{"type":"response_item","payload":{"type":"function_call","name":"shell","arguments":{"command":"SECRET_FIXTURE_COMMAND rg -n main app.py"}},"timestamp":"2026-05-20T14:00:10+00:00"}
+{"type":"response_item","payload":{"type":"function_call_output","output":"SECRET_FIXTURE_OUTPUT error: failed"},"timestamp":"2026-05-20T14:00:11+00:00"}
+{"type":"response_item","payload":{"type":"function_call","name":"apply_patch","arguments":{"command":"*** Update File: app.py\n@@\n-def main():\n+def main():\n+    return 1\n"}},"timestamp":"2026-05-20T14:00:15+00:00"}
+{"type":"response_item","payload":{"type":"function_call","name":"shell","arguments":{"command":"pytest -q"}},"timestamp":"2026-05-20T14:00:20+00:00"}

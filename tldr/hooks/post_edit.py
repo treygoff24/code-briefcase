@@ -5,7 +5,13 @@ from typing import Any
 
 from tldr.diagnostics import _detect_language, get_diagnostics
 from tldr.hooks.edit import EDIT_TOOLS, extract_apply_patch_paths
-from tldr.hooks.read import CODE_EXTENSIONS, resolve_event_path
+from tldr.hooks.path_policy import (
+    BYPASS_PARTS,
+    CODE_EXTENSIONS,
+    resolve_event_path,
+    should_exclude_context_path,
+    _looks_secret,
+)
 from tldr.hooks.outcome import HookExecutionResult, event_relative_path, ok, skipped
 from tldr.hooks.runtime import HookEvent, HookResponse
 
@@ -26,6 +32,11 @@ def extract_edited_files(event: HookEvent) -> list[Path]:
     def add(path: Path | None) -> None:
         if path is None or path in seen:
             return
+        if path.exists():
+            if should_exclude_context_path(event.cwd, path):
+                return
+        elif set(path.parts) & BYPASS_PARTS or _looks_secret(path):
+            return
         paths.append(path)
         seen.add(path)
 
@@ -37,8 +48,16 @@ def extract_edited_files(event: HookEvent) -> list[Path]:
         return paths
 
     patch_paths = [
-        path for path in extract_apply_patch_paths(event)
+        path
+        for path in extract_apply_patch_paths(event)
         if path.suffix.lower() in CODE_EXTENSIONS
+        and (
+            not path.exists()
+            or not should_exclude_context_path(event.cwd, path)
+        )
+        and not (
+            not path.exists() and (set(path.parts) & BYPASS_PARTS or _looks_secret(path))
+        )
     ]
     for path in patch_paths:
         add(path)

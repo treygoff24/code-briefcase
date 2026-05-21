@@ -20,6 +20,9 @@ class HookExecutionResult:
     surfaced_files: list[str] = field(default_factory=list)
     diagnostics_count: int = 0
     daemon_state: str | None = None
+    candidate_files: list[dict[str, object]] = field(default_factory=list)
+    context_kind: str | None = None
+    hook_run_id: str | None = None
 
     def is_noop(self) -> bool:
         return self.response.is_noop()
@@ -56,7 +59,7 @@ def event_relative_path(event: HookEvent, path) -> str | None:
         try:
             return str(resolved.relative_to(event.cwd))
         except ValueError:
-            return str(resolved)
+            return None
     except Exception:
         return str(path)
 
@@ -103,7 +106,10 @@ def ok(
     surfaced_files: list[str] | None = None,
     **kwargs,
 ) -> HookExecutionResult:
-    surfaced = list(surfaced_files or trigger_files or [])
+    if surfaced_files is not None:
+        surfaced = list(surfaced_files)
+    else:
+        surfaced = list(trigger_files or [])
     return HookExecutionResult(
         response=response,
         status="ok",
@@ -136,6 +142,7 @@ def classify_from_response(
     *,
     skip_reason: str | None = None,
     trigger_files: list[str] | None = None,
+    surfaced_files: list[str] | None = None,
 ) -> HookExecutionResult:
     if skip_reason:
         return skipped(response, reason=skip_reason, trigger_files=trigger_files)
@@ -144,5 +151,5 @@ def classify_from_response(
     return ok(
         response,
         trigger_files=trigger_files,
-        surfaced_files=trigger_files,
+        surfaced_files=[] if surfaced_files is None else list(surfaced_files),
     )

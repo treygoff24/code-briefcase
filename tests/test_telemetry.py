@@ -191,6 +191,184 @@ def test_statuses_are_distinguishable_in_telemetry(monkeypatch, tmp_path):
     assert {"skipped", "ok", "error"} <= statuses
 
 
+def test_telemetry_redacts_paths_by_default(monkeypatch, tmp_path):
+    monkeypatch.setenv("TLDR_TELEMETRY", "1")
+    monkeypatch.delenv("TLDR_TELEMETRY_REDACT_PATHS", raising=False)
+    project = tmp_path / "secret-repo-name"
+    project.mkdir()
+    telemetry_path = tmp_path / "telemetry.jsonl"
+    monkeypatch.setenv("TLDR_TELEMETRY_PATH", str(telemetry_path))
+
+    record_hook_execution(
+        client="codex",
+        hook_event="pre-read",
+        project=project,
+        duration_ms=1,
+        status="ok",
+        trigger_files=["src/app.py"],
+        recommended_files=["src/auth.py"],
+        surfaced_files=["src/auth.py"],
+    )
+
+    raw = telemetry_path.read_text(encoding="utf-8")
+    payload = json.loads(raw)
+    assert str(tmp_path) not in raw
+    assert "secret-repo-name" not in raw
+    assert "src/app.py" not in raw
+    assert payload["project"] == f"<redacted>/{payload['project_hash']}"
+    assert payload["trigger_files"][0].startswith(f"<redacted>/{payload['project_hash']}/")
+
+
+def test_hook_telemetry_records_candidate_lifecycle_without_content(monkeypatch, tmp_path):
+    monkeypatch.setenv("TLDR_TELEMETRY", "1")
+    telemetry_path = tmp_path / "telemetry.jsonl"
+    monkeypatch.setenv("TLDR_TELEMETRY_PATH", str(telemetry_path))
+
+    record_hook_execution(
+        client="codex",
+        hook_event="pre-edit",
+        project=tmp_path,
+        duration_ms=5,
+        status="ok",
+        trigger_files=["src/app.py"],
+        recommended_files=["src/auth.py"],
+        surfaced_files=["src/auth.py"],
+        candidate_files=[
+            {"path": "src/auth.py", "reason": "importer", "rank": 1, "score": 0.91, "surfaced": True},
+            {
+                "path": "tests/test_auth.py",
+                "reason": "test_neighbor",
+                "rank": 2,
+                "score": 0.74,
+                "surfaced": False,
+                "excluded_reason": "budget",
+            },
+        ],
+        context_kind="edit_structure",
+        hook_run_id="run-1",
+    )
+
+    raw = telemetry_path.read_text(encoding="utf-8")
+    payload = json.loads(raw.splitlines()[-1])
+    assert payload["schema_version"] == 2
+    assert payload["hook_run_id"] == "run-1"
+    assert payload["context_kind"] == "edit_structure"
+    assert payload["candidate_files"][0]["path"].startswith(f"<redacted>/{payload['project_hash']}/")
+    assert payload["candidate_files"][0]["surfaced"] is True
+    assert "def " not in raw
+    assert "content" not in raw.lower()
+
+
+def test_local_rich_mode_records_raw_local_evidence_with_secret_hygiene(monkeypatch, tmp_path):
+    monkeypatch.setenv("TLDR_TELEMETRY", "1")
+    monkeypatch.setenv("TLDR_TELEMETRY_MODE", "local-rich")
+    telemetry_path = tmp_path / "telemetry.jsonl"
+    monkeypatch.setenv("TLDR_TELEMETRY_PATH", str(telemetry_path))
+    project = tmp_path / "repo"
+    project.mkdir()
+
+    record_hook_execution(
+        client="codex",
+        hook_event="pre-read",
+        project=project,
+        duration_ms=5,
+        status="ok",
+        trigger_files=["src/app.py"],
+        recommended_files=["src/auth.py"],
+        surfaced_files=["src/auth.py"],
+        candidate_files=[
+            {"path": "src/auth.py", "reason": "import", "rank": 1, "surfaced": True}
+        ],
+        tool_name="shell",
+        tool_input={
+            "command": "OPENAI_API_KEY=sk-abcdefghijklmnopqrstuvwxyz rg -n login src/auth.py",
+            "file_path": "src/app.py",
+        },
+    )
+
+    raw = telemetry_path.read_text(encoding="utf-8")
+    payload = json.loads(raw)
+    assert payload["telemetry_mode"] == "local-rich"
+    assert payload["project"] == str(project.resolve())
+    assert payload["trigger_files"] == ["src/app.py"]
+    assert payload["candidate_files"][0]["path"] == "src/auth.py"
+    assert payload["local_evidence"]["tool_name"] == "shell"
+    assert "rg -n login src/auth.py" in payload["local_evidence"]["tool_input"]["command"]
+    assert "sk-abcdefghijklmnopqrstuvwxyz" not in raw
+    assert "OPENAI_API_KEY=[redacted]" in raw
+    assert payload["local_evidence"]["raw_candidate_files"][0]["path"] == "src/auth.py"
+    assert payload["local_evidence"]["raw_candidate_files"][0]["path_hash"]
+
+
+def test_local_rich_mode_redacts_secret_like_paths_everywhere(monkeypatch, tmp_path):
+    monkeypatch.setenv("TLDR_TELEMETRY", "1")
+    monkeypatch.setenv("TLDR_TELEMETRY_MODE", "local-rich")
+    telemetry_path = tmp_path / "telemetry.jsonl"
+    monkeypatch.setenv("TLDR_TELEMETRY_PATH", str(telemetry_path))
+
+    record_hook_execution(
+        client="codex",
+        hook_event="pre-read",
+        project=tmp_path,
+        duration_ms=1,
+        status="skipped",
+        trigger_files=[".env.py", "src/secret_config.py"],
+        recommended_files=["secrets/config.py", "src/api_credentials.py"],
+        surfaced_files=["credentials/client.py"],
+        candidate_files=[
+            {"path": "secrets/config.py", "reason": "import", "rank": 1, "surfaced": True},
+            {"path": "src/api_credentials.py", "reason": "import", "rank": 2, "surfaced": False},
+        ],
+        tool_name="Read",
+        tool_input={"file_path": "src/secret_config.py"},
+    )
+
+    raw = telemetry_path.read_text(encoding="utf-8")
+    payload = json.loads(raw)
+    assert ".env.py" not in raw
+    assert "src/secret_config.py" not in raw
+    assert "secrets/config.py" not in raw
+    assert "src/api_credentials.py" not in raw
+    assert "credentials/client.py" not in raw
+    assert payload["trigger_files"] == ["[redacted-secret-path]", "[redacted-secret-path]"]
+    assert payload["recommended_related_files"] == [
+        "[redacted-secret-path]",
+        "[redacted-secret-path]",
+    ]
+    assert payload["surfaced_files"] == ["[redacted-secret-path]"]
+    assert payload["candidate_files"][0]["path"] == "[redacted-secret-path]"
+    assert payload["local_evidence"]["tool_input"]["file_path"] == "[redacted-secret-path]"
+    assert payload["local_evidence"]["raw_trigger_files"] == [
+        "[redacted-secret-path]",
+        "[redacted-secret-path]",
+    ]
+    assert payload["local_evidence"]["raw_candidate_files"][0]["path"] == "[redacted-secret-path]"
+    assert payload["local_evidence"]["raw_candidate_files"][1]["path"] == "[redacted-secret-path]"
+
+
+def test_runner_passes_tool_input_to_local_rich_telemetry(monkeypatch, tmp_path):
+    monkeypatch.setenv("TLDR_TELEMETRY", "1")
+    monkeypatch.setenv("TLDR_TELEMETRY_MODE", "local-rich")
+    telemetry_path = tmp_path / "telemetry.jsonl"
+    monkeypatch.setenv("TLDR_TELEMETRY_PATH", str(telemetry_path))
+    (tmp_path / "README.md").write_text("# hello\n", encoding="utf-8")
+
+    run_hook(
+        "pre-read",
+        {
+            "hook_event_name": "PreToolUse",
+            "tool_name": "Read",
+            "tool_input": {"file_path": "README.md"},
+            "cwd": str(tmp_path),
+        },
+        client="claude",
+    )
+
+    payload = json.loads(telemetry_path.read_text(encoding="utf-8"))
+    assert payload["local_evidence"]["tool_name"] == "Read"
+    assert payload["local_evidence"]["tool_input"]["file_path"] == "README.md"
+
+
 def test_cli_hook_emits_telemetry(monkeypatch, tmp_path):
     monkeypatch.setenv("TLDR_TELEMETRY", "1")
     telemetry_path = tmp_path / "telemetry.jsonl"

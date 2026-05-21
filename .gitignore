@@ -67,5 +67,6 @@ dogfood-output/
 # Efficacy evaluation artifacts
 reports/*.md
 reports/*.json
+reports/*.html
 !reports/.gitkeep
 **/telemetry.jsonl

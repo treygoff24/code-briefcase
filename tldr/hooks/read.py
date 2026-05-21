@@ -5,88 +5,16 @@ from typing import Any
 
 from tldr.api import extract_file
 from tldr.hooks.outcome import HookExecutionResult, event_relative_path, ok, skipped
-from tldr.hooks.runtime import HookEvent, HookResponse
-
-CODE_EXTENSIONS = {
-    ".py",
-    ".ts",
-    ".tsx",
-    ".js",
-    ".jsx",
-    ".go",
-    ".rs",
-    ".java",
-    ".c",
-    ".h",
-    ".cpp",
-    ".cc",
-    ".cxx",
-    ".hpp",
-    ".rb",
-    ".php",
-    ".kt",
-    ".swift",
-    ".cs",
-    ".scala",
-    ".ex",
-    ".exs",
-    ".lua",
-    ".luau",
-}
-BYPASS_SUFFIXES = (
-    ".test.py",
-    "_test.py",
-    ".spec.ts",
-    ".test.ts",
-    ".spec.tsx",
-    ".test.tsx",
-    ".spec.js",
-    ".test.js",
-    ".spec.jsx",
-    ".test.jsx",
+from tldr.hooks.path_policy import (
+    discover_related_candidates,
+    format_related_files_section,
+    resolve_event_path,
+    should_exclude_context_path,
 )
-BYPASS_PARTS = {
-    ".git",
-    ".tldr",
-    ".venv",
-    "venv",
-    "node_modules",
-    "dist",
-    "build",
-    "coverage",
-    "__pycache__",
-}
-SECRET_PARTS = {".env", "secrets", "secret", "credentials", "id_rsa", "id_ed25519"}
-
-
-def resolve_event_path(event: HookEvent, value: str | None) -> Path | None:
-    if not value:
-        return None
-    path = Path(value).expanduser()
-    if not path.is_absolute():
-        path = event.cwd / path
-    return path.resolve()
-
-
-def _is_test_file(path: Path) -> bool:
-    name = path.name.lower()
-    return name.startswith("test_") or any(name.endswith(suffix) for suffix in BYPASS_SUFFIXES)
-
-
-def _looks_secret(path: Path) -> bool:
-    lowered = [part.lower() for part in path.parts]
-    return any(part in SECRET_PARTS for part in lowered) or any(
-        "secret" in part or "credential" in part for part in lowered
-    )
+from tldr.hooks.runtime import HookEvent, HookResponse
 
 
 def should_bypass_read(file_path: Path, tool_input: dict[str, Any]) -> bool:
-    if file_path.suffix.lower() not in CODE_EXTENSIONS:
-        return True
-    if set(file_path.parts) & BYPASS_PARTS:
-        return True
-    if _looks_secret(file_path) or _is_test_file(file_path):
-        return True
     if "offset" in tool_input:
         return True
     if "limit" in tool_input:
@@ -97,7 +25,7 @@ def should_bypass_read(file_path: Path, tool_input: dict[str, Any]) -> bool:
         if limit < 100:
             return True
     try:
-        if not file_path.exists() or file_path.stat().st_size < 1500:
+        if file_path.stat().st_size < 1500:
             return True
     except OSError:
         return True
@@ -161,7 +89,9 @@ def build_read_response(event: HookEvent, budget: int = 1200) -> HookExecutionRe
     file_path = resolve_event_path(event, raw_path)
     trigger_path = event_relative_path(event, file_path)
     trigger = [trigger_path] if trigger_path is not None else []
-    if file_path is None or should_bypass_read(file_path, event.tool_input):
+    if file_path is None or should_exclude_context_path(event.cwd, file_path) or should_bypass_read(
+        file_path, event.tool_input
+    ):
         return skipped(reason="bypass", trigger_files=trigger)
 
     try:
@@ -169,8 +99,11 @@ def build_read_response(event: HookEvent, budget: int = 1200) -> HookExecutionRe
     except Exception:
         return skipped(reason="extract_failed", trigger_files=trigger)
 
-
+    candidate_files, recommended_files, surfaced_files = discover_related_candidates(
+        event, file_path, info, context_kind="read_nav_map"
+    )
     context = format_nav_map(file_path, info, budget=budget)
+    context += format_related_files_section(surfaced_files)
     if event.client == "claude":
         updated_input = dict(event.tool_input)
         updated_input["file_path"] = str(file_path)
@@ -183,9 +116,17 @@ def build_read_response(event: HookEvent, budget: int = 1200) -> HookExecutionRe
                 suppress_output=True,
             ),
             trigger_files=trigger,
+            recommended_files=recommended_files,
+            surfaced_files=surfaced_files,
+            candidate_files=candidate_files,
+            context_kind="read_nav_map",
         )
 
     return ok(
         HookResponse(message=context, additional_context=context, suppress_output=False),
         trigger_files=trigger,
+        recommended_files=recommended_files,
+        surfaced_files=surfaced_files,
+        candidate_files=candidate_files,
+        context_kind="read_nav_map",
     )

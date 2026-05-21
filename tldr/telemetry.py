@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -21,6 +22,28 @@ MAX_TELEMETRY_BYTES = 50 * 1024 * 1024
 TELEMETRY_FILE_MODE = 0o600
 TRUE_VALUES = {"1", "true", "yes", "on"}
 FALSE_VALUES = {"0", "false", "no", "off", "disabled"}
+LOCAL_RICH_MODE = "local-rich"
+PRIVACY_SAFE_MODE = "privacy-safe"
+LOCAL_EVIDENCE_STRING_LIMIT = 8000
+
+SECRET_KEY_RE = re.compile(
+    r"(api[_-]?key|auth(?:orization)?|bearer|cookie|credential|password|passwd|private[_-]?key|secret|session|token)",
+    re.IGNORECASE,
+)
+SECRET_PATH_RE = re.compile(
+    r"(^|[/\\])(\.env(?:\.[^/\\]+)?|id_rsa|id_ed25519|secrets?|credentials?)([/\\]|$)",
+    re.IGNORECASE,
+)
+SECRET_PATH_PARTS = {".env", "secrets", "secret", "credentials", "id_rsa", "id_ed25519"}
+SECRET_VALUE_PATTERNS = (
+    re.compile(
+        r"(?i)\b([A-Za-z0-9_]*(?:api[_-]?key|authorization|bearer|password|secret|token))=([^ \n\t;&]+)"
+    ),
+    re.compile(r"\bsk-[A-Za-z0-9_-]{16,}\b"),
+    re.compile(r"\b(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9_]{16,}\b"),
+    re.compile(r"\bxox[baprs]-[A-Za-z0-9-]{16,}\b"),
+    re.compile(r"\b[A-Z0-9_]*(?:SECRET|TOKEN|PASSWORD|CREDENTIAL)[A-Z0-9_]*\b"),
+)
 
 
 def _truthy_env(name: str) -> bool | None:
@@ -50,6 +73,17 @@ def telemetry_enabled() -> bool:
     return _enabled_flag_file(TELEMETRY_ENABLE_FILE)
 
 
+def telemetry_mode() -> str:
+    raw = os.environ.get("TLDR_TELEMETRY_MODE", "").strip().lower()
+    if raw in {"rich", "local", "local-rich", "raw"}:
+        return LOCAL_RICH_MODE
+    return PRIVACY_SAFE_MODE
+
+
+def local_rich_enabled() -> bool:
+    return telemetry_mode() == LOCAL_RICH_MODE
+
+
 def telemetry_path() -> Path:
     raw = os.environ.get("TLDR_TELEMETRY_PATH", "").strip()
     if raw:
@@ -58,10 +92,14 @@ def telemetry_path() -> Path:
 
 
 def redact_paths_enabled() -> bool:
+    if local_rich_enabled():
+        return False
     enabled = _truthy_env("TLDR_TELEMETRY_REDACT_PATHS")
     if enabled is not None:
         return enabled
-    return _enabled_flag_file(TELEMETRY_REDACT_PATHS_FILE)
+    if _enabled_flag_file(TELEMETRY_REDACT_PATHS_FILE):
+        return True
+    return True
 
 
 def project_hash(project: Path) -> str:
@@ -86,16 +124,45 @@ def telemetry_path_hash(project: Path, value: str) -> str:
     return hashlib.sha256(_path_key(project, value).encode("utf-8")).hexdigest()[:12]
 
 
+def _looks_secret_path_value(value: str) -> bool:
+    text = value.strip("\"'`")
+    if SECRET_PATH_RE.search(text):
+        return True
+    for part in re.split(r"[/\\]+", text):
+        lowered = part.strip(".,:()[]{}\"'`").lower()
+        if lowered.startswith(".env") or lowered in SECRET_PATH_PARTS:
+            return True
+        if "secret" in lowered or "credential" in lowered:
+            return True
+    return False
+
+
+def _redact_secret_path(value: str) -> str:
+    if _looks_secret_path_value(value):
+        return "[redacted-secret-path]"
+    return value
+
+
 def _normalize_path(project: Path, value: str) -> str:
     if redact_paths_enabled():
         return f"<redacted>/{project_hash(project)}/{telemetry_path_hash(project, value)}"
     try:
-        rel = Path(_path_key(project, value))
+        local = _redact_secret_path(_path_key(project, value))
+        if local == "[redacted-secret-path]":
+            return local
+        rel = Path(local)
         if rel.is_absolute():
             return rel.name
         return str(rel)
     except Exception:
-        return Path(value).name
+        return _redact_secret_path(Path(value).name)
+
+
+def _local_path(project: Path, value: str) -> str:
+    try:
+        return _redact_secret_path(_path_key(project, value))
+    except Exception:
+        return _redact_secret_path(str(value))
 
 
 def _prepare_paths(project: Path, paths: list[str]) -> list[str]:
@@ -104,6 +171,90 @@ def _prepare_paths(project: Path, paths: list[str]) -> list[str]:
         if not item:
             continue
         prepared.append(_normalize_path(project, item))
+    return prepared
+
+
+def _redact_secret_string(value: str) -> str:
+    redacted = "".join(
+        _redact_secret_path(token) if token and not token.isspace() else token
+        for token in re.split(r"(\s+|[;&|])", value)
+    )
+    for pattern in SECRET_VALUE_PATTERNS:
+        def repl(match: re.Match[str]) -> str:
+            if match.lastindex and match.lastindex >= 1:
+                prefix = match.group(1)
+                if "=" in match.group(0):
+                    return f"{prefix}=[redacted]"
+            return "[redacted-secret]"
+
+        redacted = pattern.sub(repl, redacted)
+    try:
+        limit = int(
+            os.environ.get("TLDR_TELEMETRY_LOCAL_STRING_LIMIT", LOCAL_EVIDENCE_STRING_LIMIT)
+        )
+    except (TypeError, ValueError):
+        limit = LOCAL_EVIDENCE_STRING_LIMIT
+    if len(redacted) > limit:
+        return redacted[:limit].rstrip() + f"... [truncated {len(redacted) - limit} chars]"
+    return redacted
+
+
+def sanitize_local_evidence(value: Any, *, depth: int = 0) -> Any:
+    if depth > 8:
+        return "[truncated-depth]"
+    if isinstance(value, dict):
+        sanitized: dict[str, Any] = {}
+        for key, item in value.items():
+            text_key = str(key)
+            if SECRET_KEY_RE.search(text_key):
+                sanitized[text_key] = "[redacted-secret]"
+                continue
+            sanitized[text_key] = sanitize_local_evidence(item, depth=depth + 1)
+        return sanitized
+    if isinstance(value, list):
+        return [sanitize_local_evidence(item, depth=depth + 1) for item in value[:200]]
+    if isinstance(value, tuple):
+        return [sanitize_local_evidence(item, depth=depth + 1) for item in value[:200]]
+    if isinstance(value, str):
+        return _redact_secret_string(value)
+    if isinstance(value, (int, float, bool)) or value is None:
+        return value
+    return _redact_secret_string(str(value))
+
+
+def _prepare_candidate_files(
+    project: Path, candidates: list[dict[str, object]] | None
+) -> list[dict[str, object]]:
+    prepared: list[dict[str, object]] = []
+    for item in candidates or []:
+        path = str(item.get("path") or "")
+        if not path:
+            continue
+        entry: dict[str, object] = {
+            "path": _normalize_path(project, path),
+            "reason": item.get("reason"),
+            "rank": item.get("rank"),
+            "surfaced": bool(item.get("surfaced")),
+        }
+        if item.get("score") is not None:
+            entry["score"] = item.get("score")
+        if item.get("excluded_reason"):
+            entry["excluded_reason"] = item.get("excluded_reason")
+        prepared.append(entry)
+    return prepared
+
+
+def _prepare_local_candidate_files(
+    project: Path, candidates: list[dict[str, object]] | None
+) -> list[dict[str, object]]:
+    prepared: list[dict[str, object]] = []
+    for item in candidates or []:
+        path = str(item.get("path") or "")
+        entry = dict(item)
+        if path:
+            entry["path"] = _local_path(project, path)
+            entry["path_hash"] = telemetry_path_hash(project, path)
+        prepared.append(sanitize_local_evidence(entry))
     return prepared
 
 
@@ -172,9 +323,16 @@ def record_hook_execution(
     daemon_state: str | None = None,
     noop_reason: str | None = None,
     session_id: str | None = None,
+    candidate_files: list[dict[str, object]] | None = None,
+    context_kind: str | None = None,
+    hook_run_id: str | None = None,
+    tool_name: str | None = None,
+    tool_input: dict[str, Any] | None = None,
 ) -> None:
     project = project.expanduser().resolve()
     record: dict[str, Any] = {
+        "schema_version": 2,
+        "telemetry_mode": telemetry_mode(),
         "timestamp": datetime.now(timezone.utc).astimezone().isoformat(),
         "version": __version__,
         "client": client,
@@ -191,7 +349,24 @@ def record_hook_execution(
         "diagnostics_count": diagnostics_count,
         "daemon_state": daemon_state,
         "noop_reason": noop_reason,
+        "candidate_files": _prepare_candidate_files(project, candidate_files),
     }
     if session_id:
         record["session_id"] = session_id
+    if context_kind:
+        record["context_kind"] = context_kind
+    if hook_run_id:
+        record["hook_run_id"] = hook_run_id
+    if local_rich_enabled():
+        record["local_evidence"] = {
+            "warning": "local-rich evidence may contain private project details; do not commit or share",
+            "tool_name": sanitize_local_evidence(tool_name),
+            "tool_input": sanitize_local_evidence(tool_input or {}),
+            "raw_trigger_files": [_local_path(project, item) for item in list(trigger_files or [])],
+            "raw_recommended_related_files": [
+                _local_path(project, item) for item in list(recommended_files or [])
+            ],
+            "raw_surfaced_files": [_local_path(project, item) for item in list(surfaced_files or [])],
+            "raw_candidate_files": _prepare_local_candidate_files(project, candidate_files),
+        }
     write_telemetry_record(record)

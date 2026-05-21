@@ -9,6 +9,27 @@ def _event(tmp_path, payload):
     return parse_hook_event(payload, client="codex")
 
 
+def test_post_edit_skips_excluded_vendor_paths(tmp_path, monkeypatch):
+    vendor = tmp_path / "node_modules" / "pkg" / "index.js"
+    vendor.parent.mkdir(parents=True)
+    vendor.write_text("export const x = 1;\n", encoding="utf-8")
+    monkeypatch.setattr(
+        "tldr.hooks.post_edit.get_diagnostics",
+        lambda *a, **k: (_ for _ in ()).throw(AssertionError("should not run")),
+    )
+    monkeypatch.setattr("tldr.hooks.post_edit.notify_daemon", lambda *a, **k: None)
+
+    response = build_post_edit_response(
+        _event(
+            tmp_path,
+            {"toolInput": {"file_path": str(vendor.relative_to(tmp_path))}},
+        )
+    )
+
+    assert response.status == "skipped"
+    assert response.noop_reason == "no_diagnostics"
+
+
 def test_clean_diagnostics_noop(tmp_path, monkeypatch):
     source = tmp_path / "app.py"
     source.write_text("def main():\n    return 1\n")

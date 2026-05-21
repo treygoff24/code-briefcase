@@ -242,6 +242,120 @@ def test_verdict_insufficient_data_with_small_sample():
     assert verdict_for([codex], [], has_annotations=False) == "insufficient data"
 
 
+def test_build_report_filters_telemetry_outside_window(tmp_path, monkeypatch):
+    from scripts.evaluate_tldr_usage import TelemetryRecord, build_report
+    from argparse import Namespace
+
+    inside = TelemetryRecord(
+        timestamp=datetime(2026, 5, 20, 12, 0, tzinfo=timezone.utc),
+        client="codex",
+        event="pre-read",
+        project="<redacted>/abcd",
+        project_hash="abcd",
+        duration_ms=1,
+        status="ok",
+        error_kind=None,
+        injected_bytes=0,
+        trigger_files=[],
+        recommended_related_files=[],
+        surfaced_files=[],
+        diagnostics_count=0,
+        daemon_state=None,
+        noop_reason=None,
+        session_id="codex-fixture-1",
+    )
+    outside = TelemetryRecord(
+        timestamp=datetime(2026, 5, 19, 12, 0, tzinfo=timezone.utc),
+        client="codex",
+        event="pre-read",
+        project="<redacted>/abcd",
+        project_hash="abcd",
+        duration_ms=1,
+        status="ok",
+        error_kind=None,
+        injected_bytes=0,
+        trigger_files=[],
+        recommended_related_files=[],
+        surfaced_files=[],
+        diagnostics_count=0,
+        daemon_state=None,
+        noop_reason=None,
+        session_id="codex-fixture-1",
+    )
+    monkeypatch.setattr(
+        "scripts.evaluate_tldr_usage.parse_telemetry_file",
+        lambda _path: [inside, outside],
+    )
+    codex = parse_codex_file(FIXTURES / "codex_session.jsonl", cohort="treatment")
+    assert codex is not None
+    monkeypatch.setattr(
+        "scripts.evaluate_tldr_usage.discover_sessions",
+        lambda **kwargs: [codex],
+    )
+
+    args = Namespace(
+        baseline_start="2026-05-20T00:00:00Z",
+        treatment_start="2026-05-20T12:00:00Z",
+        baseline_end=None,
+        treatment_end="2026-05-21T00:00:00Z",
+        codex_root=str(tmp_path / "codex"),
+        claude_root=[],
+        tldr_telemetry=str(FIXTURES / "tldr_telemetry.jsonl"),
+        annotations=str(tmp_path / "missing-annotations.jsonl"),
+        rollups_json=None,
+    )
+    report = build_report(args)
+    matched = report["json"]["telemetry_matched"]
+    assert len(matched) == 1
+    assert matched[0]["session_id"] == "codex-fixture-1"
+
+
+def test_parse_telemetry_v2_candidate_metadata():
+    records = parse_telemetry_file(FIXTURES / "backfill_tldr_telemetry.jsonl")
+    v2 = [record for record in records if (record.schema_version or 1) >= 2]
+    assert v2
+    assert v2[0].candidate_files
+    assert v2[0].hook_run_id
+    assert v2[0].context_kind == "read_nav_map"
+
+
+def test_parse_telemetry_tolerates_malformed_schema_fields(tmp_path):
+    telemetry = tmp_path / "telemetry.jsonl"
+    telemetry.write_text(
+        json.dumps(
+            {
+                "timestamp": "2026-05-20T14:30:00+00:00",
+                "schema_version": "bad",
+                "duration_ms": "slow",
+                "injected_bytes": ["bad"],
+                "diagnostics_count": {"bad": "shape"},
+                "trigger_files": "src/app.py",
+                "recommended_related_files": None,
+                "surfaced_files": [],
+                "candidate_files": [{"path": "src/auth.py"}, "bad-candidate"],
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    records = parse_telemetry_file(telemetry)
+
+    assert len(records) == 1
+    assert records[0].schema_version is None
+    assert records[0].duration_ms == 0
+    assert records[0].injected_bytes == 0
+    assert records[0].diagnostics_count == 0
+    assert records[0].trigger_files == []
+    assert records[0].candidate_files == [{"path": "src/auth.py"}]
+
+
+def test_parse_telemetry_v1_fixture_without_schema_version():
+    records = parse_telemetry_file(FIXTURES / "tldr_telemetry.jsonl")
+    assert records
+    assert all(record.schema_version is None for record in records)
+
+
 def test_evaluate_script_writes_markdown_and_json(tmp_path):
     script = Path(__file__).resolve().parents[1] / "scripts" / "evaluate_tldr_usage.py"
     out_md = tmp_path / "report.md"

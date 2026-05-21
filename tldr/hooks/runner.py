@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import sys
 import time
+import uuid
 from typing import Any
 
 from tldr.hooks.outcome import HookExecutionResult, error, injected_bytes
@@ -82,6 +83,7 @@ def run_hook(event_name: str, payload: dict[str, Any] | None, client: str = "gen
         execution = error(type(exc).__name__)
     duration_ms = int((time.perf_counter() - started) * 1000)
 
+    hook_run_id = execution.hook_run_id or str(uuid.uuid4())
     try:
         record_hook_execution(
             client=client,
@@ -98,6 +100,11 @@ def run_hook(event_name: str, payload: dict[str, Any] | None, client: str = "gen
             daemon_state=execution.daemon_state,
             noop_reason=execution.noop_reason,
             session_id=event.session_id,
+            candidate_files=execution.candidate_files,
+            context_kind=execution.context_kind,
+            hook_run_id=hook_run_id,
+            tool_name=event.tool_name,
+            tool_input=event.tool_input,
         )
     except Exception:
         pass

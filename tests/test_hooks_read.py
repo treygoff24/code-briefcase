@@ -63,6 +63,34 @@ def test_test_file_noops(tmp_path):
     assert build_read_response(_event(tmp_path, "test_app.py")).is_noop()
 
 
+def test_pre_read_records_related_candidates(monkeypatch, tmp_path):
+    source = tmp_path / "src" / "app.py"
+    related = tmp_path / "src" / "auth.py"
+    source.parent.mkdir(parents=True)
+    source.write_text("from .auth import login\n" + "x = 1\n" * 400, encoding="utf-8")
+    related.write_text("def login():\n    return True\n", encoding="utf-8")
+
+    def fake_extract(path: str, base_path: str):
+        return {
+            "imports": [{"module": ".auth", "names": ["login"], "is_from": True}],
+            "functions": [{"name": "handler", "signature": "def handler()", "line_number": 1}],
+            "classes": [],
+        }
+
+    monkeypatch.setattr("tldr.hooks.read.extract_file", fake_extract)
+    event = _event(tmp_path, str(source.relative_to(tmp_path)))
+
+    result = build_read_response(event)
+
+    assert result.status == "ok"
+    assert "src/app.py" in result.trigger_files
+    assert "src/auth.py" in result.recommended_files
+    assert any(
+        candidate["path"] == "src/auth.py" and candidate["reason"] == "import"
+        for candidate in result.candidate_files
+    )
+
+
 def test_external_path_skips_without_crashing(tmp_path):
     external = tmp_path.parent / "external_read.py"
     external.write_text("def main():\n    return 1\n")
@@ -70,3 +98,15 @@ def test_external_path_skips_without_crashing(tmp_path):
     response = build_read_response(_event(tmp_path, str(external)))
 
     assert response.status == "skipped"
+    assert response.trigger_files == []
+
+
+def test_existing_large_external_path_skips_without_extracting(tmp_path):
+    external = tmp_path.parent / "external_large_read.py"
+    external.write_text("def main():\n    return 1\n" + "x = 1\n" * 400)
+
+    response = build_read_response(_event(tmp_path, str(external)))
+
+    assert response.status == "skipped"
+    assert response.additional_context is None
+    assert response.trigger_files == []

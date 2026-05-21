@@ -442,6 +442,26 @@ For monorepos, create `.claude/workspace.json` to scope indexing:
 
 ---
 
+## Outcome telemetry and reports
+
+Enable privacy-safe hook telemetry with `TLDR_TELEMETRY=1`, then backfill sanitized session rollups and render daily outcome reports. See [docs/dev-notes/outcome-telemetry.md](./docs/dev-notes/outcome-telemetry.md) for schema details, confidence labels, and interpretation.
+
+```bash
+# Fixture-safe smoke (no real agent logs required)
+python3 scripts/backfill_tldr_outcomes.py \
+  --start 2026-05-20T00:00:00Z --end 2026-05-21T00:00:00Z \
+  --codex-root tests/fixtures/eval/backfill_codex_root \
+  --claude-root tests/fixtures/eval/backfill_claude_root \
+  --tldr-telemetry tests/fixtures/eval/backfill_tldr_telemetry.jsonl \
+  --json-out /tmp/tldr-backfill-fixture.json
+```
+
+Generated `reports/*.json`, `reports/*.md`, and `reports/*.html` are local artifacts and are gitignored by default.
+
+For local-only dogfooding where you want richer raw evidence, opt into `TLDR_TELEMETRY_MODE=local-rich` and run backfill with `--include-local-evidence`. This keeps default secret hygiene but includes readable paths and sanitized tool-call evidence in local reports.
+
+---
+
 ## Deep Dive
 
 For the full architecture explanation, benchmarks, and advanced workflows:

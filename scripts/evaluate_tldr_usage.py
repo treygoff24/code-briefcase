@@ -142,6 +142,10 @@ class TelemetryRecord:
     daemon_state: str | None
     noop_reason: str | None
     session_id: str | None = None
+    schema_version: int | None = None
+    candidate_files: list[dict[str, Any]] = field(default_factory=list)
+    hook_run_id: str | None = None
+    context_kind: str | None = None
 
 
 def parse_timestamp(value: Any) -> datetime | None:
@@ -172,6 +176,34 @@ def load_jsonl(path: Path) -> tuple[list[dict[str, Any]], int]:
         except json.JSONDecodeError:
             errors += 1
     return records, errors
+
+
+def safe_int(value: Any, default: int = 0) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def safe_optional_int(value: Any) -> int | None:
+    if value in (None, ""):
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def str_list(value: Any) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return [str(item) for item in value if item not in (None, "")]
+
+
+def candidate_file_items(value: Any) -> list[dict[str, Any]]:
+    if not isinstance(value, list):
+        return []
+    return [item for item in value if isinstance(item, dict)]
 
 
 def iter_session_files(root: Path, patterns: Iterable[str]) -> Iterator[Path]:
@@ -252,7 +284,7 @@ def telemetry_path_hash(project: str | Path, value: str) -> str:
 
 
 def apply_token_count(tokens: TokenTotals, payload: dict[str, Any]) -> None:
-    incoming = {field: int(payload.get(field) or 0) for field in TOKEN_FIELDS}
+    incoming = {field: safe_int(payload.get(field)) for field in TOKEN_FIELDS}
     if tokens.total_tokens and incoming["total_tokens"] >= tokens.total_tokens:
         for field in TOKEN_FIELDS:
             setattr(tokens, field, incoming[field])
@@ -266,7 +298,7 @@ def apply_cumulative_token_count(tokens: TokenTotals, payload: dict[str, Any]) -
         setattr(
             tokens,
             token_field,
-            max(getattr(tokens, token_field), int(payload.get(token_field) or 0)),
+            max(getattr(tokens, token_field), safe_int(payload.get(token_field))),
         )
 
 
@@ -516,6 +548,7 @@ def parse_telemetry_file(path: Path) -> list[TelemetryRecord]:
         ts = parse_timestamp(record.get("timestamp"))
         if ts is None:
             continue
+        schema_version = safe_optional_int(record.get("schema_version"))
         parsed.append(
             TelemetryRecord(
                 timestamp=ts,
@@ -523,17 +556,21 @@ def parse_telemetry_file(path: Path) -> list[TelemetryRecord]:
                 event=str(record.get("event") or ""),
                 project=str(record.get("project") or ""),
                 project_hash=str(record.get("project_hash") or ""),
-                duration_ms=int(record.get("duration_ms") or 0),
+                duration_ms=safe_int(record.get("duration_ms")),
                 status=str(record.get("status") or "unknown"),
                 error_kind=record.get("error_kind"),
-                injected_bytes=int(record.get("injected_bytes") or 0),
-                trigger_files=list(record.get("trigger_files") or []),
-                recommended_related_files=list(record.get("recommended_related_files") or []),
-                surfaced_files=list(record.get("surfaced_files") or []),
-                diagnostics_count=int(record.get("diagnostics_count") or 0),
+                injected_bytes=safe_int(record.get("injected_bytes")),
+                trigger_files=str_list(record.get("trigger_files")),
+                recommended_related_files=str_list(record.get("recommended_related_files")),
+                surfaced_files=str_list(record.get("surfaced_files")),
+                diagnostics_count=safe_int(record.get("diagnostics_count")),
                 daemon_state=record.get("daemon_state"),
                 noop_reason=record.get("noop_reason"),
                 session_id=record.get("session_id"),
+                schema_version=schema_version,
+                candidate_files=candidate_file_items(record.get("candidate_files")),
+                hook_run_id=record.get("hook_run_id"),
+                context_kind=record.get("context_kind"),
             )
         )
     return parsed
@@ -896,7 +933,12 @@ def build_report(args: argparse.Namespace) -> dict[str, Any]:
         baseline_end=baseline_end,
         treatment_end=treatment_end,
     )
-    telemetry = parse_telemetry_file(Path(args.tldr_telemetry).expanduser())
+    telemetry_all = parse_telemetry_file(Path(args.tldr_telemetry).expanduser())
+    telemetry = [
+        record
+        for record in telemetry_all
+        if baseline_start <= record.timestamp < treatment_end
+    ]
     annotations_path = Path(args.annotations).expanduser()
     has_annotations = annotations_path.exists()
     matched, unmatched, hit_stats = match_telemetry(sessions, telemetry)
@@ -918,14 +960,79 @@ def build_report(args: argparse.Namespace) -> dict[str, Any]:
         data["rework"]["_file_read_counts"] = dict(session.rework._file_read_counts)
         return data
 
+    outcome_summary = _outcome_rollup_summary(sessions, matched)
     payload = {
         "sessions": [session_payload(session) for session in sessions],
         "telemetry_matched": [asdict(record) for record in matched],
         "telemetry_unmatched": [asdict(record) for record in unmatched],
         "hit_stats": hit_stats,
         "verdict": verdict_for(sessions, matched, has_annotations=has_annotations),
+        "outcome_summary": outcome_summary,
     }
-    return {"markdown": markdown, "json": payload}
+    result = {"markdown": markdown, "json": payload}
+    if getattr(args, "rollups_json", None):
+        rollups_path = Path(args.rollups_json).expanduser()
+        rollups_path.parent.mkdir(parents=True, exist_ok=True)
+        rollups_path.write_text(json.dumps(outcome_summary, indent=2), encoding="utf-8")
+    return result
+
+
+def _outcome_rollup_summary(
+    sessions: list[SessionSummary], telemetry: list[TelemetryRecord]
+) -> dict[str, Any]:
+    hit_stats = _rollup_hit_stats(sessions, telemetry)
+    harmful_sessions = sum(
+        1
+        for session in sessions
+        if session.rework.failed_commands >= 3 or session.parse_errors > 2
+    )
+    telemetry_session_ids = {record.session_id for record in telemetry if record.session_id}
+    proxy_only_sessions = sum(
+        1 for session in sessions if session.session_id not in telemetry_session_ids
+    )
+    return {
+        "recommendation_hit_rate": _safe_rate(
+            hit_stats["recommended_hits"], hit_stats["recommended_total"]
+        ),
+        "surfaced_hit_rate": _safe_rate(hit_stats["surfaced_hits"], hit_stats["surfaced_total"]),
+        "proxy_only_sessions": proxy_only_sessions,
+        "harmful_sessions": harmful_sessions,
+        "telemetry_records": len(telemetry),
+        "candidate_records": sum(1 for record in telemetry if record.candidate_files),
+        "v2_records": sum(1 for record in telemetry if (record.schema_version or 1) >= 2),
+    }
+
+
+def _rollup_hit_stats(
+    sessions: list[SessionSummary], telemetry: list[TelemetryRecord]
+) -> dict[str, int]:
+    by_session = {session.session_id: session for session in sessions}
+    stats = {
+        "recommended_hits": 0,
+        "recommended_total": 0,
+        "surfaced_hits": 0,
+        "surfaced_total": 0,
+    }
+    for record in telemetry:
+        session = by_session.get(record.session_id or "")
+        if session is None:
+            continue
+        later_reads = session.tools.unique_files_read | session.tools.unique_files_edited
+        for path in record.recommended_related_files:
+            stats["recommended_total"] += 1
+            if telemetry_context_hit(path, session=session, record=record, later_reads=later_reads):
+                stats["recommended_hits"] += 1
+        for path in record.surfaced_files:
+            stats["surfaced_total"] += 1
+            if telemetry_context_hit(path, session=session, record=record, later_reads=later_reads):
+                stats["surfaced_hits"] += 1
+    return stats
+
+
+def _safe_rate(hits: int, total: int) -> float | None:
+    if total == 0:
+        return None
+    return hits / total
 
 
 def main() -> int:
@@ -947,6 +1054,7 @@ def main() -> int:
     parser.add_argument("--annotations", default="reports/tldr-efficacy-annotations.jsonl")
     parser.add_argument("--out", required=True)
     parser.add_argument("--json-out")
+    parser.add_argument("--rollups-json")
     args = parser.parse_args()
 
     report = build_report(args)

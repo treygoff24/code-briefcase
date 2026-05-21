@@ -73,3 +73,15 @@ def test_external_path_skips_without_crashing(tmp_path):
     response = build_pre_edit_response(_event(tmp_path, "Write", str(external)))
 
     assert response.status == "skipped"
+    assert response.trigger_files == []
+
+
+def test_existing_external_path_skips_without_context(tmp_path):
+    external = tmp_path.parent / "external_existing_edit.py"
+    external.write_text("def main():\n    return 1\n", encoding="utf-8")
+
+    response = build_pre_edit_response(_event(tmp_path, "Edit", str(external)))
+
+    assert response.status == "skipped"
+    assert response.additional_context is None
+    assert response.trigger_files == []

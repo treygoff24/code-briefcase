@@ -1,0 +1,4 @@
+{"type":"user","sessionId":"backfill-claude-1","cwd":"/tmp/backfill-repo","timestamp":"2026-05-20T15:00:00+00:00","message":{"role":"user","content":[{"type":"text","text":"SECRET_FIXTURE_USER_TEXT you missed the requirement"}]}}
+{"type":"assistant","sessionId":"backfill-claude-1","cwd":"/tmp/backfill-repo","timestamp":"2026-05-20T15:00:05+00:00","message":{"role":"assistant","content":[{"type":"tool_use","id":"tu1","name":"Read","input":{"file_path":"src/app.py"}}]}}
+{"type":"assistant","sessionId":"backfill-claude-1","cwd":"/tmp/backfill-repo","timestamp":"2026-05-20T15:00:10+00:00","message":{"role":"assistant","content":[{"type":"tool_use","id":"tu2","name":"Edit","input":{"file_path":"src/app.py","old_string":"a","new_string":"b"}}]}}
+{"attachment":{"type":"hook_success"},"sessionId":"backfill-claude-1","cwd":"/tmp/backfill-repo","timestamp":"2026-05-20T15:00:12+00:00"}
