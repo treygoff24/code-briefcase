@@ -109,13 +109,20 @@ def test_phase0_cache_key_changes_with_tsc_version(
 
     source, _tsconfig = _single_file_project(tmp_path)
     args_file = tmp_path / "tsc-args.txt"
-    _fake_tsc(tmp_path / "node_modules" / ".bin" / "tsc", args_file, make_executable)
+    tsc_path = _fake_tsc(
+        tmp_path / "node_modules" / ".bin" / "tsc", args_file, make_executable
+    )
 
     monkeypatch.setenv("FAKE_TSC_VERSION", "Version 5.8.0")
     diag.get_diagnostics(str(source), language="typescript", include_lint=False)
     first_config = _project_arg(args_file)
 
+    # Simulate an npm install replacing the binary: bump mtime so the version
+    # probe re-runs (the probe is memoized on (path, mtime) to keep the hot
+    # path cheap; env-only version changes don't model reality).
     monkeypatch.setenv("FAKE_TSC_VERSION", "Version 5.9.0")
+    new_mtime_ns = tsc_path.stat().st_mtime_ns + 1_000_000_000
+    os.utime(tsc_path, ns=(new_mtime_ns, new_mtime_ns))
     diag.get_diagnostics(str(source), language="typescript", include_lint=False)
     second_config = _project_arg(args_file)
 
@@ -318,3 +325,124 @@ def test_cache_clean_cli_prunes_tsc_cache(tmp_path):
     payload = json.loads(result.stdout)
     assert payload["removed"] == 1
     assert not entry.exists()
+
+
+def test_tsc_version_is_memoized_until_binary_mtime_changes(
+    tmp_path, monkeypatch, make_executable
+):
+    tsc_cache._TSC_VERSION_CACHE.clear()
+    calls = tmp_path / "call-count"
+    calls.write_text("0")
+    tsc = make_executable(
+        tmp_path / "node_modules" / ".bin" / "tsc",
+        f"""#!/bin/sh
+n=$(cat {calls})
+echo $((n + 1)) > {calls}
+echo "Version 5.9.$n"
+""",
+    )
+
+    first = tsc_cache.tsc_version(str(tsc))
+    second = tsc_cache.tsc_version(str(tsc))
+    assert first == second == "Version 5.9.0"
+    assert calls.read_text().strip() == "1"
+
+    new_mtime_ns = tsc.stat().st_mtime_ns + 1_000_000_000
+    os.utime(tsc, ns=(new_mtime_ns, new_mtime_ns))
+
+    third = tsc_cache.tsc_version(str(tsc))
+    assert third == "Version 5.9.1"
+    assert calls.read_text().strip() == "2"
+
+
+def test_unknown_tsc_version_returns_none_and_skips_cache(
+    tmp_path, monkeypatch, make_executable
+):
+    tsc_cache._TSC_VERSION_CACHE.clear()
+    cache_root = tmp_path / "cache"
+    monkeypatch.setenv("TLDR_TSC_CACHE_ROOT", str(cache_root))
+
+    source, tsconfig = _single_file_project(tmp_path)
+    # tsc that prints nothing → version probe returns None → callers fall back
+    # to the legacy tempdir path rather than write "unknown" into the cache key.
+    tsc = make_executable(
+        tmp_path / "node_modules" / ".bin" / "tsc",
+        "#!/bin/sh\nexit 0\n",
+    )
+
+    assert tsc_cache.tsc_version(str(tsc)) is None
+    cached = tsc_cache.prepare_phase0_single_file_tsconfig(
+        tsconfig, source, tsc_path=str(tsc), allow_js=False
+    )
+    assert cached is None
+    assert not cache_root.exists()
+
+
+def test_prune_uses_size_bytes_from_meta_without_rescanning(tmp_path, monkeypatch):
+    cache_root = tmp_path / "cache"
+    monkeypatch.setenv("TLDR_TSC_CACHE_ROOT", str(cache_root))
+    entry = cache_root / "proj" / "entry"
+    entry.mkdir(parents=True)
+    # Real bytes on disk are 1; the cached size_bytes says 100 — prune should
+    # trust the meta and act as if the entry costs 100 bytes.
+    (entry / "buildinfo").write_text("x")
+    (entry / "lockfile").touch()
+    (entry / "meta.json").write_text(
+        json.dumps(
+            {
+                "tsc_version": "Version 5.9.0",
+                "tsconfig_mtime": 1,
+                "last_use_ns": 1,
+                "owner": "phase0",
+                "size_bytes": 100,
+            }
+        )
+        + "\n"
+    )
+
+    entries = tsc_cache._cache_entries(cache_root)
+    assert len(entries) == 1
+    assert entries[0]["size"] == 100
+
+    # Force prune to act: budget below the cached size triggers eviction.
+    result = tsc_cache.prune_tsc_cache(max_bytes=50)
+    assert result["removed"] == 1
+    assert not entry.exists()
+
+
+def test_phase0_cache_hit_skips_prune_side_effect(
+    tmp_path, monkeypatch, make_executable
+):
+    tsc_cache._TSC_VERSION_CACHE.clear()
+    cache_root = tmp_path / "cache"
+    monkeypatch.setenv("TLDR_TSC_CACHE_ROOT", str(cache_root))
+
+    source, tsconfig = _single_file_project(tmp_path)
+    args_file = tmp_path / "tsc-args.txt"
+    tsc = _fake_tsc(
+        tmp_path / "node_modules" / ".bin" / "tsc",
+        args_file,
+        make_executable,
+        version="Version 5.9.0",
+    )
+
+    # Prime the cache.
+    first = tsc_cache.prepare_phase0_single_file_tsconfig(
+        tsconfig, source, tsc_path=str(tsc), allow_js=False
+    )
+    assert first is not None
+    first.cleanup()
+
+    # Second call hits the existing entry; should NOT trigger prune.
+    prune_calls = []
+    monkeypatch.setattr(
+        tsc_cache,
+        "prune_tsc_cache",
+        lambda *a, **kw: prune_calls.append((a, kw)) or {},
+    )
+    second = tsc_cache.prepare_phase0_single_file_tsconfig(
+        tsconfig, source, tsc_path=str(tsc), allow_js=False
+    )
+    assert second is not None
+    second.cleanup()
+    assert prune_calls == []

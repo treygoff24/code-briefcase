@@ -181,7 +181,30 @@ def configured_tsc_cache_max_bytes() -> int:
         return DEFAULT_TSC_CACHE_MAX_BYTES
 
 
-def tsc_version(tsc_path: str) -> str:
+# Keyed on (resolved_path, mtime_ns) so a node_modules rebuild that swaps the
+# binary invalidates the cached version automatically. Forking tsc --version
+# costs ~10 ms; this lives on the post-edit hot path so memoization matters.
+_TSC_VERSION_CACHE: dict[tuple[str, int], str] = {}
+
+
+def tsc_version(tsc_path: str) -> str | None:
+    """Return tsc's --version string, or None if probing failed.
+
+    None signals callers to skip the persistent cache rather than write a
+    placeholder string into the cache key — a placeholder would orphan the
+    entry forever once the real version starts resolving.
+    """
+    try:
+        resolved = str(Path(tsc_path).resolve())
+        mtime = Path(resolved).stat().st_mtime_ns
+    except OSError:
+        return None
+
+    cache_key = (resolved, mtime)
+    cached = _TSC_VERSION_CACHE.get(cache_key)
+    if cached is not None:
+        return cached
+
     try:
         result = subprocess.run(
             expand_shebang_command([tsc_path, "--version"]),
@@ -190,13 +213,15 @@ def tsc_version(tsc_path: str) -> str:
             timeout=2,
         )
     except (OSError, subprocess.TimeoutExpired):
-        return "unknown"
+        return None
 
     output = "\n".join(part for part in (result.stdout, result.stderr) if part)
     first_line = output.strip().splitlines()[0] if output.strip() else ""
-    if first_line:
-        return first_line
-    return f"unknown:{result.returncode}"
+    if not first_line:
+        return None
+
+    _TSC_VERSION_CACHE[cache_key] = first_line
+    return first_line
 
 
 def phase0_cache_paths(
@@ -234,6 +259,10 @@ def prepare_phase0_single_file_tsconfig(
     lock_timeout_seconds: float = DEFAULT_LOCK_TIMEOUT_SECONDS,
 ) -> CachedTsconfig | None:
     version = tsc_version(tsc_path)
+    if version is None:
+        # Version probe failed; fall back to ephemeral tempdir rather than
+        # write a sentinel ("unknown") into the cache key and orphan the dir.
+        return None
     paths = phase0_cache_paths(project_config, tsc_path, version)
     paths.config_dir.mkdir(parents=True, exist_ok=True)
 
@@ -243,6 +272,9 @@ def prepare_phase0_single_file_tsconfig(
 
     tsconfig_mtime = project_config.stat().st_mtime_ns
     try:
+        # Fresh entry = no meta.json yet. Prune is worth running on cache
+        # misses (cache just grew); skip it on hits to keep the hot path cheap.
+        is_new_entry = not paths.meta_path.exists()
         meta = read_meta(paths.meta_path)
         if _cache_invalid(meta, tsc_version=version, tsconfig_mtime=tsconfig_mtime):
             _remove_buildinfo(paths)
@@ -263,6 +295,7 @@ def prepare_phase0_single_file_tsconfig(
             lock,
             tsc_version=version,
             tsconfig_mtime=tsconfig_mtime,
+            prune_after_cleanup=is_new_entry,
         )
     except Exception:
         lock.release()
@@ -291,6 +324,10 @@ def write_phase0_meta(
         "tsconfig_mtime": tsconfig_mtime,
         "last_use_ns": last_use_ns or time.time_ns(),
         "owner": "phase0",
+        # Capture size at write time so prune doesn't have to rglob every
+        # cache dir to enforce the LRU budget. Falls back to a real scan in
+        # _cache_entries if the field is missing (older entry or write race).
+        "size_bytes": _dir_size(paths.config_dir),
     }
     _atomic_write_json_line(paths.meta_path, payload)
 
@@ -417,12 +454,14 @@ def _cache_entries(root: Path) -> list[CacheEntry]:
     for meta_path in root.glob("*/*/meta.json"):
         config_dir = meta_path.parent
         meta = read_meta(meta_path)
+        cached_size = meta.get("size_bytes")
+        size = int(cached_size) if isinstance(cached_size, int) else _dir_size(config_dir)
         entries.append(
             {
                 "path": config_dir,
                 "meta": meta,
                 "last_use_ns": int(meta.get("last_use_ns") or 0),
-                "size": _dir_size(config_dir),
+                "size": size,
             }
         )
     return entries
