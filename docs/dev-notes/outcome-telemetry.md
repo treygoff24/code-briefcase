@@ -10,6 +10,9 @@ With `TLDR_TELEMETRY=1`, each hook execution appends one JSONL record (`schema_v
 - Optional `session_id` and `hook_run_id` for offline joins
 
 `surfaced=True` means the hook response actually mentioned or injected that path. Ranked but not injected candidates stay `surfaced=False`.
+`candidate_files_later_used`, `recommended_files_used`, and `surfaced_files_used`
+only count session file activity timestamped strictly after the hook execution;
+prior reads/edits are not credited as TLDR-attributed use.
 
 ## Privacy guarantees
 

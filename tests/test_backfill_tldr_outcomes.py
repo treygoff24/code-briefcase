@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 FIXTURES = Path(__file__).parent / "fixtures" / "eval"
@@ -233,7 +233,7 @@ def test_match_telemetry_uses_visible_files_as_legacy_candidates():
     rollup = SessionRollup(session_id="s1", client="codex", project_hash="abc")
     rollup.record_tool(
         ToolEvent(
-            timestamp=ts,
+            timestamp=ts + timedelta(seconds=1),
             category="explore",
             command_hash="read",
             files_read=["hash-related"],
@@ -245,7 +245,7 @@ def test_match_telemetry_uses_visible_files_as_legacy_candidates():
         project_hash="abc",
         cwd="/repo",
         start=ts,
-        end=ts,
+        end=ts + timedelta(seconds=1),
         rollup=rollup,
     )
     record = ParsedTelemetry(

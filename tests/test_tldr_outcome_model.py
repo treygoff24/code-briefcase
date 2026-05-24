@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
@@ -92,7 +92,7 @@ def test_candidate_files_later_used_counts_all_candidates_not_only_surfaced():
     t0 = datetime(2026, 5, 20, 12, 0, tzinfo=timezone.utc)
     rollup.record_tool(
         ToolEvent(
-            timestamp=t0,
+            timestamp=t0 + timedelta(seconds=1),
             category="edit",
             command_hash="edit",
             files_edited=["candidate-b"],
@@ -115,6 +115,39 @@ def test_candidate_files_later_used_counts_all_candidates_not_only_surfaced():
     assert summary["candidate_files_total"] == 2
     assert summary["candidate_files_surfaced"] == 0
     assert summary["candidate_files_later_used"] == 1
+
+
+def test_candidate_files_later_used_ignores_prior_file_activity():
+    rollup = SessionRollup(session_id="s8", client="codex", project_hash="abc")
+    t0 = datetime(2026, 5, 20, 12, 0, tzinfo=timezone.utc)
+    rollup.record_tool(
+        ToolEvent(
+            timestamp=t0,
+            category="explore",
+            command_hash="read",
+            files_read=["candidate-b"],
+        )
+    )
+
+    rollup.record_hook(
+        TldrHookEvent(
+            timestamp=t0 + timedelta(seconds=1),
+            event="pre-read",
+            status="ok",
+            trigger_files=["candidate-b"],
+            recommended_files=["candidate-b"],
+            surfaced_files=["candidate-b"],
+            candidate_files=["candidate-b"],
+            candidate_files_total=1,
+            candidate_files_surfaced=1,
+        )
+    )
+
+    summary = rollup.to_dict()
+    assert summary["trigger_files_used"] == 0
+    assert summary["recommended_files_used"] == 0
+    assert summary["surfaced_files_used"] == 0
+    assert summary["candidate_files_later_used"] == 0
 
 
 def test_session_rollup_exports_hook_duration_summary():

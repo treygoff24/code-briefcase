@@ -101,10 +101,27 @@ class SessionRollup:
     _trigger_total: int = 0
     _recommended_total: int = 0
     _surfaced_total: int = 0
+    _file_use_times: dict[str, list[datetime]] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         if self.causal_confidence not in ALLOWED_CAUSAL_CONFIDENCE:
             raise ValueError(f"invalid causal_confidence: {self.causal_confidence}")
+
+    def _record_file_use_time(self, path: str, timestamp: datetime) -> None:
+        self._file_use_times.setdefault(path, []).append(timestamp)
+
+    def _file_used_after(self, path: str, timestamp: datetime) -> bool:
+        for used_at in self._file_use_times.get(path, []):
+            try:
+                if used_at > timestamp:
+                    return True
+            except TypeError:
+                # Be conservative when historical logs mix naive and aware
+                # datetimes: compare wall-clock values but still require a
+                # strictly later tool event.
+                if used_at.replace(tzinfo=None) > timestamp.replace(tzinfo=None):
+                    return True
+        return False
 
     def record_tool(self, event: ToolEvent) -> None:
         self.tool_counts_by_category[event.category] = (
@@ -118,9 +135,12 @@ class SessionRollup:
         if event.files_edited:
             self._explore_before_edit_pending = False
             self.files_edited.update(event.files_edited)
+        for path in event.files_edited:
+            self._record_file_use_time(path, event.timestamp)
         for path in event.files_read:
             self._file_read_counts[path] = self._file_read_counts.get(path, 0) + 1
             self.files_read.add(path)
+            self._record_file_use_time(path, event.timestamp)
             if self._file_read_counts[path] > 1:
                 self.repeated_file_reads += 1
         if event.failed:
@@ -158,21 +178,20 @@ class SessionRollup:
         self.hook_duration_samples.append(event.duration_ms)
         self.candidate_files_total += event.candidate_files_total
         self.candidate_files_surfaced += event.candidate_files_surfaced
-        later = self.files_read | self.files_edited
         for path in event.trigger_files:
             self._trigger_total += 1
-            if path in later:
+            if self._file_used_after(path, event.timestamp):
                 self.trigger_files_used += 1
         for path in event.recommended_files:
             self._recommended_total += 1
-            if path in later:
+            if self._file_used_after(path, event.timestamp):
                 self.recommended_files_used += 1
         for path in event.surfaced_files:
             self._surfaced_total += 1
-            if path in later:
+            if self._file_used_after(path, event.timestamp):
                 self.surfaced_files_used += 1
         for path in event.candidate_files:
-            if path in later:
+            if self._file_used_after(path, event.timestamp):
                 self.candidate_files_later_used += 1
 
     def record_verification(self, event: VerificationEvent) -> None:
