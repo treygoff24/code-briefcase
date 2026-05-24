@@ -414,6 +414,19 @@ Semantic Search:
         help="Embedding model (uses index model if not specified)",
     )
 
+    # tldr cache clean
+    cache_p = subparsers.add_parser("cache", help="Manage TLDR caches")
+    cache_sub = cache_p.add_subparsers(dest="cache_action", required=True)
+    cache_clean_p = cache_sub.add_parser(
+        "clean", help="Prune TypeScript buildinfo cache and watcher logs"
+    )
+    cache_clean_p.add_argument(
+        "--force",
+        action="store_true",
+        help="Clear cache without lock/recent-watcher skip rules",
+    )
+    cache_clean_p.add_argument("--json", action="store_true", help="Output JSON")
+
     # tldr daemon start/stop/status/query
     daemon_p = subparsers.add_parser(
         "daemon", help="Daemon management subcommands"
@@ -562,6 +575,22 @@ Semantic Search:
             print(json.dumps(pack.to_dict(), indent=2))
         else:
             print(pack.to_markdown(), end="")
+        return
+
+    if args.command == "cache":
+        from .tsc_cache import clean_tsc_cache
+
+        result = clean_tsc_cache(force=args.force)
+        if args.json:
+            print(json.dumps(result, indent=2))
+        else:
+            print(
+                "TypeScript cache cleaned: "
+                f"removed={result['removed']} "
+                f"skipped={result['skipped']} "
+                f"bytes_removed={result['bytes_removed']} "
+                f"root={result['root']}"
+            )
         return
 
     # Import here to avoid slow startup for --help

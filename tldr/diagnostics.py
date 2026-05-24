@@ -32,6 +32,7 @@ from typing import Callable, TypedDict
 from xml.etree import ElementTree
 
 from tldr.command_exec import expand_shebang_command
+from tldr.tsc_cache import CachedTsconfig, prepare_phase0_single_file_tsconfig
 
 # Cap _resolve_tool's ancestor walk so deeply-nested paths don't trigger
 # a stat-storm for tools that aren't installed locally anywhere.
@@ -386,15 +387,31 @@ def _write_single_file_tsconfig(
     target_file: Path,
     *,
     allow_js: bool,
-) -> tempfile.TemporaryDirectory:
-    """Create an ephemeral tsconfig that checks one file through project config.
+    tsc_path: str | None = None,
+) -> CachedTsconfig | tempfile.TemporaryDirectory:
+    """Create a stable single-file tsconfig that checks through project config.
 
     Passing a file directly to tsc ignores tsconfig settings in TypeScript 5 and
     errors in TypeScript 6. Running the whole project respects aliases but leaks
     unrelated diagnostics. A tiny config that extends the real config and
     overrides the root set with a single absolute file gives single-file hooks
     project-correct behavior without project-wide noise.
+
+    When a tsc path is available, the config lives under the canonical Phase 0
+    cache tree so TypeScript can reuse a stable tsBuildInfoFile across edits.
+    If the cache lock is busy for too long, fall back to the old temp-dir path
+    to preserve hook behavior.
     """
+    if tsc_path is not None:
+        cached = prepare_phase0_single_file_tsconfig(
+            project_config,
+            target_file,
+            tsc_path=tsc_path,
+            allow_js=allow_js,
+        )
+        if cached is not None:
+            return cached
+
     temp_dir = tempfile.TemporaryDirectory(prefix="tldr-tsc-")
     config_path = Path(temp_dir.name) / "tsconfig.json"
     compiler_options: dict[str, object] = {"noEmit": True}
@@ -1118,7 +1135,7 @@ def _run_js_ts_diagnostics(
     tasks: list[tuple[str, list[str], int]] = []
     tsc_cwd = None
     tsc_filter_path = None
-    tsc_temp_config: tempfile.TemporaryDirectory | None = None
+    tsc_temp_config: CachedTsconfig | tempfile.TemporaryDirectory | None = None
     if tsc:
         cmd = [tsc, "--noEmit"]
         project_config = _find_js_ts_project_config(path)
@@ -1127,6 +1144,7 @@ def _run_js_ts_diagnostics(
                 project_config,
                 path,
                 allow_js=allow_js,
+                tsc_path=tsc,
             )
             cmd.extend(
                 [
