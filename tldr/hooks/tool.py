@@ -4,12 +4,10 @@ import re
 import shlex
 from pathlib import Path
 
-from tldr.hooks.file_context import build_file_context_for_path
-from tldr.hooks.outcome import HookExecutionResult, event_relative_path, noop, ok, skipped
+from tldr.hooks.outcome import HookExecutionResult, noop, ok
 from tldr.hooks.path_policy import (
     CONFIG_FILENAMES,
     STRUCTURED_EXTENSIONS,
-    classify_context_path,
     resolve_event_path,
 )
 from tldr.hooks.permission import check_destructive_command
@@ -199,7 +197,17 @@ def _command_looks_write_like(command: str) -> bool:
 
 
 def build_pre_tool_response(event: HookEvent, budget: int = 1200) -> HookExecutionResult:
-    """Destructive command guard and compact shell file-intent context."""
+    """Destructive command guard for shell tool calls.
+
+    The shell file-context fan-out was disabled 2026-05-24 — it emitted
+    full edit-style symbol skeletons per matched path, used the full
+    budget per candidate (so 3 files = 3x the cap), and framed itself as
+    "pre-edit" copy on plain Bash reads. See
+    docs/plans/2026-05-24-pre-tool-shell-context-redesign.md for the
+    redesign. The destructive command guard is preserved here because it
+    is an independent safety net unrelated to that bug.
+    """
+    del budget  # file-context fan-out is disabled; budget unused here
     if (event.tool_name or "").lower() not in GUARDED_TOOLS:
         return noop("wrong_tool")
 
@@ -221,55 +229,4 @@ def build_pre_tool_response(event: HookEvent, budget: int = 1200) -> HookExecuti
             ),
         )
 
-    candidates = extract_shell_file_candidates(event, command)
-    if not candidates:
-        return noop("clean")
-
-    contexts: list[str] = []
-    trigger_files: list[str] = []
-    skipped_reasons: list[str] = []
-
-    for path in candidates:
-        rel = event_relative_path(event, path)
-        if rel:
-            trigger_files.append(rel)
-        decision = classify_context_path(event.cwd, path)
-        if not decision.allowed:
-            skipped_reasons.append(decision.reason)
-        if decision.reason == "markdown_unsupported":
-            continue
-        if not path.exists():
-            if decision.reason == "missing_file" and rel:
-                contexts.append(
-                    f"[TLDR shell target: {rel}]\n- file does not exist yet; verify path before writing"
-                )
-            continue
-        if not decision.allowed:
-            continue
-        file_result = build_file_context_for_path(
-            event,
-            path,
-            mode="read" if not _command_looks_write_like(command) else "edit",
-            budget=budget,
-        )
-        if file_result.status == "ok" and file_result.context:
-            contexts.append(file_result.context)
-
-    if (
-        trigger_files
-        and skipped_reasons
-        and len(skipped_reasons) == len(candidates)
-        and all(reason == "markdown_unsupported" for reason in skipped_reasons)
-    ):
-        return skipped(reason="markdown_unsupported", trigger_files=trigger_files)
-
-    if not contexts:
-        return noop("clean")
-
-    combined = "\n\n".join(contexts)
-    message = f"TLDR shell file context:\n{combined}"
-    return ok(
-        HookResponse(message=message, additional_context=message, suppress_output=False),
-        trigger_files=trigger_files,
-        context_kind="shell_file_context",
-    )
+    return noop("shell_file_context_disabled")
