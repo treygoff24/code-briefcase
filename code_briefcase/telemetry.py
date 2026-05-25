@@ -328,10 +328,22 @@ def record_hook_execution(
     hook_run_id: str | None = None,
     tool_name: str | None = None,
     tool_input: dict[str, Any] | None = None,
+    watch_diagnostics_enabled: bool | None = None,
+    watch_diagnostics_attempted: bool = False,
+    watch_diagnostics_used: bool = False,
+    watch_diagnostics_status: str | None = None,
+    watch_diagnostics_statuses: list[str] | None = None,
+    watch_diagnostics_age_ms: int | None = None,
+    watch_diagnostics_wait_ms: int | None = None,
+    watch_diagnostics_query_budget_ms: int | None = None,
+    watch_diagnostics_batch_seq: int | None = None,
+    watch_diagnostics_fallback_reason: str | None = None,
+    diagnostics_backend: str | None = None,
 ) -> None:
     project = project.expanduser().resolve()
+    schema_version = 3 if watch_diagnostics_enabled is not None else 2
     record: dict[str, Any] = {
-        "schema_version": 2,
+        "schema_version": schema_version,
         "telemetry_mode": telemetry_mode(),
         "timestamp": datetime.now(timezone.utc).astimezone().isoformat(),
         "version": __version__,
@@ -351,6 +363,22 @@ def record_hook_execution(
         "noop_reason": noop_reason,
         "candidate_files": _prepare_candidate_files(project, candidate_files),
     }
+    if watch_diagnostics_enabled is not None:
+        record.update(
+            {
+                "watch_diagnostics_enabled": bool(watch_diagnostics_enabled),
+                "watch_diagnostics_attempted": bool(watch_diagnostics_attempted),
+                "watch_diagnostics_used": bool(watch_diagnostics_used),
+                "watch_diagnostics_status": watch_diagnostics_status,
+                "watch_diagnostics_statuses": list(watch_diagnostics_statuses or []),
+                "watch_diagnostics_age_ms": watch_diagnostics_age_ms,
+                "watch_diagnostics_wait_ms": watch_diagnostics_wait_ms,
+                "watch_diagnostics_query_budget_ms": watch_diagnostics_query_budget_ms,
+                "watch_diagnostics_batch_seq": watch_diagnostics_batch_seq,
+                "watch_diagnostics_fallback_reason": watch_diagnostics_fallback_reason,
+                "diagnostics_backend": diagnostics_backend,
+            }
+        )
     if session_id:
         record["session_id"] = session_id
     if context_kind:
@@ -368,5 +396,48 @@ def record_hook_execution(
             ],
             "raw_surfaced_files": [_local_path(project, item) for item in list(surfaced_files or [])],
             "raw_candidate_files": _prepare_local_candidate_files(project, candidate_files),
+        }
+    write_telemetry_record(record)
+
+
+def record_watch_diagnostics_event(
+    *,
+    project: Path,
+    action: str,
+    adapter_key: str,
+    duration_ms: int | None = None,
+    status: str | None = None,
+    batch_seq: int | None = None,
+    queue_depth: int | None = None,
+    restart_count: int | None = None,
+    exit_code: int | None = None,
+    error_kind: str | None = None,
+    details: dict[str, Any] | None = None,
+) -> None:
+    project = project.expanduser().resolve()
+    adapter_key_hash = hashlib.sha256(adapter_key.encode("utf-8")).hexdigest()[:12]
+    record: dict[str, Any] = {
+        "schema_version": 3,
+        "telemetry_mode": telemetry_mode(),
+        "timestamp": datetime.now(timezone.utc).astimezone().isoformat(),
+        "version": __version__,
+        "event": "watch-diagnostics-event",
+        "project": str(project) if not redact_paths_enabled() else f"<redacted>/{project_hash(project)}",
+        "project_hash": project_hash(project),
+        "action": action,
+        "adapter_key_hash": adapter_key_hash,
+        "duration_ms": duration_ms,
+        "status": status,
+        "batch_seq": batch_seq,
+        "queue_depth": queue_depth,
+        "restart_count": restart_count,
+        "exit_code": exit_code,
+        "error_kind": error_kind,
+    }
+    if local_rich_enabled():
+        record["local_evidence"] = {
+            "warning": "local-rich evidence may contain private project details; do not commit or share",
+            "adapter_key": sanitize_local_evidence(adapter_key),
+            "details": sanitize_local_evidence(details or {}),
         }
     write_telemetry_record(record)

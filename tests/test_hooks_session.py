@@ -40,3 +40,16 @@ def test_small_repo_schedules_warm(tmp_path, monkeypatch):
     build_session_start_response(parse_hook_event({"cwd": str(tmp_path)}))
 
     assert any("warm" in command for command in commands)
+
+
+def test_background_work_can_be_disabled(tmp_path, monkeypatch):
+    commands = []
+    monkeypatch.setenv("CODE_BRIEFCASE_SESSION_START_NO_BACKGROUND", "1")
+    monkeypatch.setattr("code_briefcase.hooks.session._spawn", lambda command, *args, **kwargs: commands.append(command))
+
+    response = build_session_start_response(parse_hook_event({"cwd": str(tmp_path)}))
+
+    assert not commands
+    assert "created .code-briefcaseignore" in response.message
+    assert "background startup disabled" in response.message
+    assert response.daemon_state is None

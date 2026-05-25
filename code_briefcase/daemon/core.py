@@ -42,6 +42,13 @@ from .cached_queries import (
     cached_structure,
     cached_tree,
 )
+from code_briefcase.daemon.protocol import (
+    PROTOCOL_VERSION,
+    DaemonProtocolError,
+    recv_json_line,
+    send_framed_json,
+    send_json_line,
+)
 
 # Idle timeout: 30 minutes
 IDLE_TIMEOUT = 30 * 60
@@ -97,6 +104,7 @@ class TLDRDaemon:
         self._hook_stats_baseline: dict[str, HookStats] = self._snapshot_hook_stats()
         self._hook_invocation_count: int = 0
         self._hook_flush_threshold: int = 5  # Flush every N invocations
+        self._watch_supervisor: Any | None = None
 
         # Cross-platform graceful shutdown: register atexit handler
         # This ensures stats persist even if daemon is killed (works on all platforms)
@@ -208,6 +216,7 @@ class TLDRDaemon:
             "importers": self._handle_importers,
             "notify": self._handle_notify,
             "diagnostics": self._handle_diagnostics,
+            "watchers": self._handle_watchers,
             "change_impact": self._handle_change_impact,
             "track": self._handle_track,
         }
@@ -346,8 +355,31 @@ class TLDRDaemon:
         """Handle shutdown command with stats persistence."""
         # Persist all session stats before shutdown
         self._persist_all_stats()
+        self._stop_watch_supervisor()
         self._shutdown_requested = True
         return {"status": "shutting_down"}
+
+    def _handle_watchers(self, command: dict) -> dict:
+        """Handle watch-diagnostics lifecycle and query commands."""
+        try:
+            from code_briefcase.daemon.watchers import WatchSupervisor
+
+            if self._watch_supervisor is None:
+                self._watch_supervisor = WatchSupervisor(self.project)
+            return self._watch_supervisor.handle(command)
+        except Exception as e:
+            logger.exception("Watcher command failed")
+            return {"status": "error", "message": str(e)}
+
+    def _stop_watch_supervisor(self) -> None:
+        supervisor = self._watch_supervisor
+        self._watch_supervisor = None
+        if supervisor is None:
+            return
+        try:
+            supervisor.stop()
+        except Exception:
+            logger.exception("Failed to stop watch supervisor")
 
     def _persist_all_stats(self) -> None:
         """Persist all session and hook stats to JSONL stores.
@@ -1214,30 +1246,57 @@ class TLDRDaemon:
 
         try:
             conn.settimeout(5.0)
-            data = b""
+            use_framed_responses = False
             while True:
-                chunk = conn.recv(4096)
-                if not chunk:
-                    break
-                data += chunk
-                if b"\n" in data:
+                data = recv_json_line(conn)
+                if data is None:
                     break
 
-            if data:
                 try:
-                    command = json.loads(data.decode().strip())
-                    response = self.handle_command(command)
+                    command = json.loads(data.decode())
                 except json.JSONDecodeError as e:
                     response = {"status": "error", "message": f"Invalid JSON: {e}"}
+                    self._send_response(conn, response, framed=use_framed_responses)
+                    break
 
-                conn.sendall(json.dumps(response).encode() + b"\n")
+                if command.get("cmd") == "hello":
+                    if command.get("protocol_version") == PROTOCOL_VERSION:
+                        use_framed_responses = True
+                        self._send_response(
+                            conn,
+                            {"status": "ok", "protocol_version": PROTOCOL_VERSION},
+                            framed=True,
+                        )
+                    else:
+                        send_json_line(
+                            conn,
+                            {
+                                "status": "error",
+                                "message": "Unsupported daemon protocol version",
+                                "protocol_version": PROTOCOL_VERSION,
+                            },
+                        )
+                        break
+                    continue
+
+                response = self.handle_command(command)
+                self._send_response(conn, response, framed=use_framed_responses)
+                break
         except BrokenPipeError:
             # Client disconnected before receiving response - normal occurrence
             logger.debug("Client disconnected before receiving response")
+        except (socket.timeout, DaemonProtocolError):
+            logger.debug("Client connection timed out or sent invalid protocol")
         except Exception:
             logger.exception("Error handling connection")
         finally:
             conn.close()
+
+    def _send_response(self, conn: socket.socket, response: dict[str, Any], *, framed: bool) -> None:
+        if framed:
+            send_framed_json(conn, response)
+        else:
+            send_json_line(conn, response)
 
     def run(self):
         """Run the daemon main loop."""
@@ -1284,6 +1343,7 @@ class TLDRDaemon:
             except Exception as e:
                 logger.error(f"Failed to persist stats on shutdown: {e}")
 
+            self._stop_watch_supervisor()
             self._cleanup_socket()
             self.remove_pid_file()
             self.write_status("stopped")

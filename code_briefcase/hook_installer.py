@@ -33,6 +33,12 @@ DEFAULT_DOCTOR_CLIENTS = [
 ]
 SHELL_HOOK_CLIENTS = {"claude", "codex", "droid", "factory"}
 TELEMETRY_ENV_PREFIX = "CODE_BRIEFCASE_TELEMETRY=1 CODE_BRIEFCASE_TELEMETRY_REDACT_PATHS=1"
+LEGACY_TELEMETRY_ENV_RENAMES = {
+    "TLDR_TELEMETRY": "CODE_BRIEFCASE_TELEMETRY",
+    "TLDR_TELEMETRY_MODE": "CODE_BRIEFCASE_TELEMETRY_MODE",
+    "TLDR_TELEMETRY_REDACT_PATHS": "CODE_BRIEFCASE_TELEMETRY_REDACT_PATHS",
+    "TLDR_TELEMETRY_LOCAL_STRING_LIMIT": "CODE_BRIEFCASE_TELEMETRY_LOCAL_STRING_LIMIT",
+}
 TldrCommand = list[str]
 
 
@@ -359,6 +365,33 @@ def merge_hook_group(
     return merged, actions
 
 
+def _migrate_legacy_tldr_env(config: dict[str, Any]) -> tuple[dict[str, Any], list[str]]:
+    env = config.get("env")
+    if not isinstance(env, dict):
+        return config, []
+
+    changed = False
+    actions: list[str] = []
+    merged = dict(config)
+    new_env = dict(env)
+    for legacy_key, current_key in LEGACY_TELEMETRY_ENV_RENAMES.items():
+        if legacy_key not in new_env:
+            continue
+        legacy_value = new_env.pop(legacy_key)
+        if current_key not in new_env:
+            new_env[current_key] = legacy_value
+            actions.append(f"migrate env {legacy_key} to {current_key}")
+        else:
+            actions.append(f"remove stale env {legacy_key}")
+        changed = True
+
+    if not changed:
+        return config, []
+
+    merged["env"] = new_env
+    return merged, actions
+
+
 def _resolved_config_path(client: str, config_path: str | None) -> Path:
     path = Path(config_path).expanduser() if config_path else default_config_path(client)
     return path.resolve() if path.exists() else path
@@ -456,6 +489,8 @@ def install_hooks(
         enable_compact_context=enable_compact_context,
     )
     merged, actions = merge_hook_group(existing, desired, managed_events=_managed_events(client))
+    merged, env_actions = _migrate_legacy_tldr_env(merged)
+    actions.extend(env_actions)
     changed = merged != existing
     if not changed:
         actions = []
@@ -494,6 +529,29 @@ def _hooks_present(config: dict[str, Any]) -> bool:
                 if _is_tldr_owned(str(hook.get("command", ""))):
                     return True
     return False
+
+
+def _hook_commands(config: dict[str, Any]) -> list[str]:
+    commands: list[str] = []
+    for groups in (config.get("hooks") or {}).values():
+        for group in groups:
+            for hook in _group_hooks(group):
+                command = str(hook.get("command", ""))
+                if _is_tldr_owned(command):
+                    commands.append(command)
+    return commands
+
+
+def _uses_stale_tldr_command(command: str) -> bool:
+    if "llm-tldr" in command or "TLDR_TELEMETRY" in command:
+        return True
+    if re.search(r"(^|\s)tldr\s+hooks\s+run\s+", command) and "code-briefcase" not in command:
+        return True
+    return False
+
+
+def _stale_tldr_hooks_present(config: dict[str, Any]) -> bool:
+    return any(_uses_stale_tldr_command(command) for command in _hook_commands(config))
 
 
 def doctor_report(
@@ -561,6 +619,8 @@ def doctor_report(
             "config_path": str(path.resolve() if path.exists() else path),
             "exists": path.exists(),
             "code_briefcase_hooks_present": _hooks_present(config),
+            "stale_tldr_hooks_present": _stale_tldr_hooks_present(config),
+            "hook_command_targets": _hook_commands(config),
             "error": error,
             "status": None,
         }
@@ -590,6 +650,7 @@ def format_doctor_report(report: dict[str, Any]) -> str:
         lines.append(
             f"- {client}: exists={str(info.get('exists')).lower()} "
             f"code_briefcase_hooks_present={str(info.get('code_briefcase_hooks_present')).lower()} "
+            f"stale_tldr_hooks_present={str(info.get('stale_tldr_hooks_present', False)).lower()} "
             f"path={info.get('config_path')}"
         )
         if info.get("error"):

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -39,6 +40,11 @@ def _spawn(command: list[str], project: Path, log_file: Path | None = None) -> N
             handle.close()
 
 
+def _background_work_enabled() -> bool:
+    value = os.environ.get("CODE_BRIEFCASE_SESSION_START_NO_BACKGROUND", "").strip().lower()
+    return value not in {"1", "true", "yes", "on"}
+
+
 def build_session_start_response(
     event: HookEvent,
     *,
@@ -56,25 +62,39 @@ def build_session_start_response(
     except Exception:
         pass
 
-    try:
-        _spawn([sys.executable, "-m", "code_briefcase.cli", "daemon", "start", "--project", str(project)], project)
-        actions.append("daemon start requested")
-    except Exception:
-        pass
-
-    try:
-        source_count = count_source_files(project, max_count=max_files + 1)
-        if source_count <= max_files:
+    if _background_work_enabled():
+        try:
             _spawn(
-                [sys.executable, "-m", "code_briefcase.cli", "warm", str(project), "--lang", "all"],
+                [
+                    sys.executable,
+                    "-m",
+                    "code_briefcase.cli",
+                    "daemon",
+                    "start",
+                    "--project",
+                    str(project),
+                ],
                 project,
-                _log_path(project),
             )
-            actions.append("background warm requested")
-        else:
-            actions.append(f"skipped warm for large repo ({source_count}+ files)")
-    except Exception:
-        pass
+            actions.append("daemon start requested")
+        except Exception:
+            pass
+
+        try:
+            source_count = count_source_files(project, max_count=max_files + 1)
+            if source_count <= max_files:
+                _spawn(
+                    [sys.executable, "-m", "code_briefcase.cli", "warm", str(project), "--lang", "all"],
+                    project,
+                    _log_path(project),
+                )
+                actions.append("background warm requested")
+            else:
+                actions.append(f"skipped warm for large repo ({source_count}+ files)")
+        except Exception:
+            pass
+    else:
+        actions.append("background startup disabled")
 
     if not actions:
         return noop("no_actions")

@@ -20,8 +20,11 @@ from .cached_queries import (
 )
 from .core import IDLE_TIMEOUT, TLDRDaemon
 from .startup import (
+    DaemonResponse,
     main,
     query_daemon,
+    query_daemon_response,
+    query_or_start_daemon,
     start_daemon,
     stop_daemon,
 )
@@ -34,6 +37,9 @@ __all__ = [
     "start_daemon",
     "stop_daemon",
     "query_daemon",
+    "query_daemon_response",
+    "query_or_start_daemon",
+    "DaemonResponse",
     "main",
     # Cached queries
     "cached_search",

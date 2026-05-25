@@ -15,8 +15,18 @@ import sys
 import tempfile
 import time
 
+from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Optional, IO
+
+from .protocol import (
+    PROTOCOL_VERSION,
+    DaemonProtocolError,
+    DaemonResponseKind,
+    recv_framed_json,
+    recv_legacy_json,
+    send_json_line,
+)
 
 # Platform-specific imports for file locking
 if sys.platform == "win32":
@@ -28,6 +38,17 @@ if TYPE_CHECKING:
     from .core import TLDRDaemon
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class DaemonResponse:
+    kind: DaemonResponseKind
+    payload: dict | None = None
+    message: str | None = None
+
+    @property
+    def ok(self) -> bool:
+        return self.kind == DaemonResponseKind.OK and self.payload is not None
 
 
 def _get_lock_path(project: Path) -> Path:
@@ -137,6 +158,20 @@ def _release_pidfile_lock(pidfile: IO) -> None:
     pidfile.close()
 
 
+def _redirect_standard_streams_to_devnull() -> None:
+    """Detach daemon child stdio from the launching hook/CLI process."""
+    devnull_fd = os.open(os.devnull, os.O_RDWR)
+    try:
+        for fd in (0, 1, 2):
+            try:
+                os.dup2(devnull_fd, fd)
+            except OSError:
+                pass
+    finally:
+        if devnull_fd > 2:
+            os.close(devnull_fd)
+
+
 def _is_socket_connectable(project: Path, timeout: float = 1.0) -> bool:
     """Check if daemon socket exists and accepts connections.
 
@@ -220,7 +255,7 @@ def _is_daemon_alive(project: Path, retries: int = 3, delay: float = 0.1) -> boo
     return False
 
 
-def _create_client_socket(daemon: "TLDRDaemon") -> socket.socket:
+def _create_client_socket(daemon: "TLDRDaemon", *, connect_timeout_ms: int | None = None) -> socket.socket:
     """Create appropriate client socket for platform.
 
     Args:
@@ -234,16 +269,25 @@ def _create_client_socket(daemon: "TLDRDaemon") -> socket.socket:
     if port is not None:
         # TCP socket for Windows
         client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        if connect_timeout_ms is not None:
+            client.settimeout(connect_timeout_ms / 1000)
         client.connect((addr, port))
     else:
         # Unix socket for Linux/macOS
         client = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        if connect_timeout_ms is not None:
+            client.settimeout(connect_timeout_ms / 1000)
         client.connect(addr)
 
     return client
 
 
-def start_daemon(project_path: str | Path, foreground: bool = False):
+def start_daemon(
+    project_path: str | Path,
+    foreground: bool = False,
+    *,
+    quiet: bool = False,
+) -> None:
     """
     Start the Code Briefcase daemon for a project.
 
@@ -253,9 +297,15 @@ def start_daemon(project_path: str | Path, foreground: bool = False):
     Args:
         project_path: Path to the project root
         foreground: If True, run in foreground; otherwise daemonize
+        quiet: If True, suppress parent-process status messages. Use this for
+            hook/JSON paths where stdout is a protocol channel.
     """
     from .core import TLDRDaemon
     from ..tldrignore import ensure_tldrignore
+
+    def announce(*args, **kwargs) -> None:
+        if not quiet:
+            print(*args, **kwargs)
 
     project = Path(project_path).resolve()
     pid_path = _get_pid_path(project)
@@ -264,7 +314,7 @@ def start_daemon(project_path: str | Path, foreground: bool = False):
     # If we can't, another daemon is running
     pidfile = _try_acquire_pidfile_lock(pid_path)
     if pidfile is None:
-        print("Daemon already running")
+        announce("Daemon already running")
         return
 
     # A previous daemon version may not hold the PID-file lock reliably. Treat
@@ -273,14 +323,14 @@ def start_daemon(project_path: str | Path, foreground: bool = False):
     # on the socket.
     if _is_socket_connectable(project, timeout=0.2):
         _release_pidfile_lock(pidfile)
-        print("Daemon already running")
+        announce("Daemon already running")
         return
 
     # We have the lock - we're the only one starting a daemon
     # Ensure .code-briefcaseignore exists (create with defaults if not)
     created, message = ensure_tldrignore(project)
     if created:
-        print(f"\n\033[33m{message}\033[0m\n")  # Yellow warning
+        announce(f"\n\033[33m{message}\033[0m\n")  # Yellow warning
 
     daemon = TLDRDaemon(project)
 
@@ -319,14 +369,14 @@ def start_daemon(project_path: str | Path, foreground: bool = False):
                             break
                         except OSError:
                             if time.time() - start_lock > 10.0:
-                                print("Timeout waiting for daemon lock")
+                                announce("Timeout waiting for daemon lock")
                                 return
                             time.sleep(0.1)
                     
                     try:
                         # Re-check if daemon is alive (race condition handling)
                         if _is_daemon_alive(project):
-                            print("Daemon already running")
+                            announce("Daemon already running")
                             return
 
                         # Get the connection info for display
@@ -344,7 +394,7 @@ def start_daemon(project_path: str | Path, foreground: bool = False):
                             stdout=subprocess.DEVNULL,
                             stderr=subprocess.DEVNULL,
                         )
-                        print(f"Daemon started with PID {proc.pid}")
+                        announce(f"Daemon started with PID {proc.pid}")
 
                         # Verify daemon is listening
                         start_wait = time.time()
@@ -358,7 +408,7 @@ def start_daemon(project_path: str | Path, foreground: bool = False):
                                 time.sleep(0.1)
 
                         if connected:
-                            print(f"Listening on {addr}:{port}")
+                            announce(f"Listening on {addr}:{port}")
                         else:
                             logger.error("Daemon started but failed to accept connections")
                             # Should we kill it? Maybe not strictly required but logging is good.
@@ -381,6 +431,7 @@ def start_daemon(project_path: str | Path, foreground: bool = False):
             if pid == 0:
                 # Child process - we inherit the lock
                 os.setsid()
+                _redirect_standard_streams_to_devnull()
                 # Write our PID to the locked file
                 _write_pid_to_locked_file(pidfile, os.getpid())
                 daemon._pidfile = pidfile  # Keep reference to hold lock
@@ -400,14 +451,14 @@ def start_daemon(project_path: str | Path, foreground: bool = False):
                 socket_path = _get_socket_path(project)
                 while time.time() - start_time < timeout:
                     if socket_path.exists() and _is_socket_connectable(project, timeout=0.5):
-                        print(f"Daemon started with PID {pid}")
-                        print(f"Socket: {daemon.socket_path}")
+                        announce(f"Daemon started with PID {pid}")
+                        announce(f"Socket: {daemon.socket_path}")
                         return
                     time.sleep(0.1)
 
                 # Daemon started but socket not ready - warn but don't fail
-                print(f"Warning: Daemon (PID {pid}) socket not ready within {timeout}s")
-                print(f"Socket: {daemon.socket_path}")
+                announce(f"Warning: Daemon (PID {pid}) socket not ready within {timeout}s")
+                announce(f"Socket: {daemon.socket_path}")
 
 
 def stop_daemon(project_path: str | Path) -> bool:
@@ -426,8 +477,8 @@ def stop_daemon(project_path: str | Path) -> bool:
     daemon = TLDRDaemon(project)
 
     try:
-        client = _create_client_socket(daemon)
-        client.sendall(json.dumps({"cmd": "shutdown"}).encode() + b"\n")
+        client = _create_client_socket(daemon, connect_timeout_ms=1000)
+        send_json_line(client, {"cmd": "shutdown"})
         client.recv(4096)
         client.close()
         return True
@@ -435,7 +486,132 @@ def stop_daemon(project_path: str | Path) -> bool:
         return False
 
 
-def query_daemon(project_path: str | Path, command: dict) -> dict:
+def _query_daemon_v2(
+    daemon: "TLDRDaemon",
+    command: dict,
+    *,
+    connect_timeout_ms: int,
+    response_timeout_ms: int,
+) -> dict:
+    client = _create_client_socket(daemon, connect_timeout_ms=connect_timeout_ms)
+    try:
+        client.settimeout(response_timeout_ms / 1000)
+        send_json_line(client, {"cmd": "hello", "protocol_version": PROTOCOL_VERSION})
+        hello = recv_framed_json(client)
+        if hello.get("status") != "ok" or hello.get("protocol_version") != PROTOCOL_VERSION:
+            raise DaemonProtocolError("daemon did not acknowledge protocol v2")
+
+        command_v2 = {**command, "protocol_version": PROTOCOL_VERSION}
+        send_json_line(client, command_v2)
+        return recv_framed_json(client)
+    finally:
+        client.close()
+
+
+def _query_daemon_legacy(
+    daemon: "TLDRDaemon",
+    command: dict,
+    *,
+    connect_timeout_ms: int,
+    response_timeout_ms: int,
+) -> dict:
+    client = _create_client_socket(daemon, connect_timeout_ms=connect_timeout_ms)
+    try:
+        client.settimeout(response_timeout_ms / 1000)
+        send_json_line(client, command)
+        return recv_legacy_json(client)
+    finally:
+        client.close()
+
+
+def query_daemon_response(
+    project_path: str | Path,
+    command: dict,
+    *,
+    connect_timeout_ms: int = 200,
+    response_timeout_ms: int = 1000,
+    use_v2: bool = True,
+) -> DaemonResponse:
+    """Send a command and return a typed daemon transport result."""
+    from .core import TLDRDaemon
+
+    project = Path(project_path).resolve()
+    daemon = TLDRDaemon(project)
+
+    try:
+        if use_v2:
+            try:
+                payload = _query_daemon_v2(
+                    daemon,
+                    command,
+                    connect_timeout_ms=connect_timeout_ms,
+                    response_timeout_ms=response_timeout_ms,
+                )
+            except (DaemonProtocolError, json.JSONDecodeError):
+                payload = _query_daemon_legacy(
+                    daemon,
+                    command,
+                    connect_timeout_ms=connect_timeout_ms,
+                    response_timeout_ms=response_timeout_ms,
+                )
+        else:
+            payload = _query_daemon_legacy(
+                daemon,
+                command,
+                connect_timeout_ms=connect_timeout_ms,
+                response_timeout_ms=response_timeout_ms,
+            )
+        return DaemonResponse(DaemonResponseKind.OK, payload=payload)
+    except socket.timeout as exc:
+        return DaemonResponse(DaemonResponseKind.TIMEOUT, message=str(exc))
+    except (ConnectionRefusedError, FileNotFoundError, OSError) as exc:
+        return DaemonResponse(DaemonResponseKind.UNREACHABLE, message=str(exc))
+    except (DaemonProtocolError, json.JSONDecodeError) as exc:
+        return DaemonResponse(DaemonResponseKind.PROTOCOL_MISMATCH, message=str(exc))
+
+
+def query_or_start_daemon(
+    project_path: str | Path,
+    command: dict,
+    *,
+    connect_timeout_ms: int = 200,
+    response_timeout_ms: int = 1000,
+    startup_budget_ms: int = 2000,
+    auto_start: bool = True,
+    quiet_start: bool = True,
+) -> DaemonResponse:
+    """Query a daemon, optionally starting it first when unreachable."""
+    response = query_daemon_response(
+        project_path,
+        command,
+        connect_timeout_ms=connect_timeout_ms,
+        response_timeout_ms=response_timeout_ms,
+    )
+    if response.kind != DaemonResponseKind.UNREACHABLE or not auto_start:
+        return response
+
+    start_daemon(project_path, quiet=quiet_start)
+    deadline = time.time() + (startup_budget_ms / 1000)
+    while time.time() < deadline:
+        response = query_daemon_response(
+            project_path,
+            command,
+            connect_timeout_ms=connect_timeout_ms,
+            response_timeout_ms=response_timeout_ms,
+        )
+        if response.kind != DaemonResponseKind.UNREACHABLE:
+            return response
+        time.sleep(0.05)
+    return DaemonResponse(DaemonResponseKind.UNREACHABLE, message="daemon startup budget exceeded")
+
+
+def query_daemon(
+    project_path: str | Path,
+    command: dict,
+    *,
+    connect_timeout_ms: int = 200,
+    response_timeout_ms: int = 1000,
+) -> dict:
     """
     Send a command to the daemon and get the response.
 
@@ -446,18 +622,15 @@ def query_daemon(project_path: str | Path, command: dict) -> dict:
     Returns:
         Response dict from daemon
     """
-    from .core import TLDRDaemon
-
-    project = Path(project_path).resolve()
-    daemon = TLDRDaemon(project)
-
-    client = _create_client_socket(daemon)
-    try:
-        client.sendall(json.dumps(command).encode() + b"\n")
-        response = client.recv(65536)
-        return json.loads(response.decode())
-    finally:
-        client.close()
+    response = query_daemon_response(
+        project_path,
+        command,
+        connect_timeout_ms=connect_timeout_ms,
+        response_timeout_ms=response_timeout_ms,
+    )
+    if response.ok:
+        return response.payload or {}
+    raise RuntimeError(response.message or response.kind.value)
 
 
 def main():

@@ -9,8 +9,6 @@ Usage:
 """
 
 import hashlib
-import json
-import socket
 import subprocess
 import sys
 import tempfile
@@ -26,6 +24,9 @@ else:
     import fcntl
 
 from mcp.server.fastmcp import FastMCP
+
+from code_briefcase.daemon.protocol import decode_response_bytes
+from code_briefcase.daemon.startup import query_daemon_response
 
 mcp = FastMCP("code-briefcase")
 
@@ -189,40 +190,14 @@ def _ensure_daemon(project: str, timeout: float = 10.0) -> None:
 
 def _send_raw(project: str, command: dict) -> dict:
     """Send command to daemon socket."""
-    addr, port = _get_connection_info(project)
-    
-    sock = None
-    try:
-        if port is not None:
-            # TCP socket for Windows
-            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            sock.connect((addr, port))
-        else:
-            # Unix socket for Linux/macOS
-            sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-            sock.connect(addr)
-    
-        sock.sendall(json.dumps(command).encode() + b"\n")
-
-        chunks = []
-        while True:
-            chunk = sock.recv(65536)
-            if not chunk:
-                break
-            chunks.append(chunk)
-            try:
-                return _decode_socket_response(chunks)
-            except json.JSONDecodeError:
-                continue
-
-        return _decode_socket_response(chunks)
-    finally:
-        if sock:
-            sock.close()
+    response = query_daemon_response(project, command)
+    if response.ok:
+        return response.payload or {}
+    raise ConnectionError(response.message or response.kind.value)
 
 
 def _decode_socket_response(chunks: list[bytes]) -> dict:
-    return json.loads(b"".join(chunks))
+    return decode_response_bytes(chunks)
 
 
 def _send_command(project: str, command: dict) -> dict:

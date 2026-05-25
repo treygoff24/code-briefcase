@@ -1125,13 +1125,6 @@ def _run_js_ts_diagnostics(
     allow_js: bool,
 ) -> tuple[list[dict], list[str]]:
     tsc = _resolve_tool("tsc", path)
-    oxlint = _resolve_tool("oxlint", path) if include_lint else None
-    oxfmt = (
-        _resolve_tool("oxfmt", path)
-        if include_lint and not path.name.endswith(".d.ts")
-        else None
-    )
-
     tasks: list[tuple[str, list[str], int]] = []
     tsc_cwd = None
     tsc_filter_path = None
@@ -1161,10 +1154,7 @@ def _run_js_ts_diagnostics(
                 cmd.append("--allowJs")
             cmd.extend(["--pretty", "false", str(path)])
         tasks.append(("tsc", cmd, 30))
-    if oxlint:
-        tasks.append(("oxlint", [oxlint, "--format=json", str(path)], 10))
-    if oxfmt:
-        tasks.append(("oxfmt", [oxfmt, "--check", str(path)], 15))
+    tasks.extend(_js_ts_lint_format_tasks(path, include_lint=include_lint))
 
     try:
         return _collect_js_ts_results(
@@ -1176,6 +1166,33 @@ def _run_js_ts_diagnostics(
     finally:
         if tsc_temp_config is not None:
             tsc_temp_config.cleanup()
+
+
+def _js_ts_lint_format_tasks(
+    path: Path,
+    *,
+    include_lint: bool,
+) -> list[tuple[str, list[str], int]]:
+    if not include_lint:
+        return []
+    tasks: list[tuple[str, list[str], int]] = []
+    oxlint = _resolve_tool("oxlint", path)
+    oxfmt = _resolve_tool("oxfmt", path) if not path.name.endswith(".d.ts") else None
+    if oxlint:
+        tasks.append(("oxlint", [oxlint, "--format=json", str(path)], 10))
+    if oxfmt:
+        tasks.append(("oxfmt", [oxfmt, "--check", str(path)], 15))
+    return tasks
+
+
+def _run_js_ts_lint_format_diagnostics(
+    path: Path,
+    include_lint: bool,
+) -> tuple[list[dict], list[str]]:
+    return _collect_js_ts_results(
+        path,
+        _js_ts_lint_format_tasks(path, include_lint=include_lint),
+    )
 
 
 def _collect_js_ts_results(
@@ -1795,6 +1812,42 @@ def get_diagnostics(
 
     all_diagnostics.sort(key=lambda d: (d.get("file", ""), d.get("line", 0)))
 
+    return {
+        "file": str(path),
+        "language": lang,
+        "tools": tools_used,
+        "diagnostics": all_diagnostics,
+        "error_count": sum(1 for d in all_diagnostics if d.get("severity") == "error"),
+        "warning_count": sum(
+            1 for d in all_diagnostics if d.get("severity") == "warning"
+        ),
+    }
+
+
+def get_lint_format_diagnostics(
+    file_path: str,
+    language: str | None = None,
+    include_lint: bool = True,
+) -> dict:
+    """Get the lint/format-only leg for a file.
+
+    Used by watch diagnostics so a warm TypeScript watcher can replace the
+    expensive tsc leg without dropping oxlint/oxfmt feedback.
+    """
+    path = Path(file_path).resolve()
+    if not path.exists():
+        return {"error": f"File not found: {file_path}", "diagnostics": []}
+
+    lang = language or _detect_language(str(path))
+    if lang in {"typescript", "javascript"}:
+        all_diagnostics, tools_used = _run_js_ts_lint_format_diagnostics(
+            path,
+            include_lint,
+        )
+    else:
+        all_diagnostics, tools_used = [], []
+
+    all_diagnostics.sort(key=lambda d: (d.get("file", ""), d.get("line", 0)))
     return {
         "file": str(path),
         "language": lang,

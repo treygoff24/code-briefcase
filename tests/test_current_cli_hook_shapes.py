@@ -1,13 +1,22 @@
 import json
+import os
 import subprocess
 import sys
 
 def run_cli(args, payload=None):
+    env = {
+        **os.environ,
+        # Session-start hooks normally request daemon/warm background work. CLI
+        # shape tests only validate rendered hook JSON, so suppress background
+        # side effects to keep pytest runs hermetic.
+        "CODE_BRIEFCASE_SESSION_START_NO_BACKGROUND": "1",
+    }
     return subprocess.run(
         [sys.executable, "-m", "code_briefcase.cli", *args],
         input=json.dumps(payload) if payload is not None else None,
         capture_output=True,
         text=True,
+        env=env,
         check=True,
     )
 
@@ -75,10 +84,7 @@ def test_droid_client_accepted_in_hooks_run(tmp_path):
     }
     result = run_cli(["hooks", "run", "session-start", "--client", "droid"], payload)
     rendered = json.loads(result.stdout)
-    # Droid SessionStart may produce context output; verify it uses Droid shape
-    if rendered:
-        assert "hookSpecificOutput" in rendered
-        assert rendered["hookSpecificOutput"].get("hookEventName") == "SessionStart"
+    assert rendered["hookSpecificOutput"]["hookEventName"] == "SessionStart"
 
 
 def test_factory_client_accepted_in_hooks_run(tmp_path):
@@ -88,10 +94,7 @@ def test_factory_client_accepted_in_hooks_run(tmp_path):
     }
     result = run_cli(["hooks", "run", "session-start", "--client", "factory"], payload)
     rendered = json.loads(result.stdout)
-    # Factory SessionStart may produce context output; verify it uses Factory/Droid shape
-    if rendered:
-        assert "hookSpecificOutput" in rendered
-        assert rendered["hookSpecificOutput"].get("hookEventName") == "SessionStart"
+    assert rendered["hookSpecificOutput"]["hookEventName"] == "SessionStart"
 
 
 def test_opencode_client_accepted_in_hooks_run(tmp_path):

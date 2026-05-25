@@ -320,6 +320,7 @@ The bug is obvious. Line 28 uses `user` without going through the null check pat
 | `code-briefcase daemon start` | Start background daemon |
 | `code-briefcase daemon stop` | Stop daemon |
 | `code-briefcase daemon status` | Check status |
+| `code-briefcase daemon watchers status` | Inspect opt-in watch diagnostics |
 
 ---
 
@@ -332,6 +333,11 @@ Diagnostics for TypeScript and JavaScript use `tsc` for type checking plus
 Single-file JS/TS diagnostics are project-aware: Code Briefcase extends the nearest
 `tsconfig.json`/`jsconfig.json` in an ephemeral one-file config so path aliases
 and JSX settings work without leaking unrelated project-wide errors.
+
+Opt-in watch diagnostics can keep TypeScript checking warm across post-edit hooks:
+set `CODE_BRIEFCASE_WATCH_DIAGNOSTICS=1` and see
+[docs/watch-diagnostics.md](./docs/watch-diagnostics.md) for status commands,
+telemetry fields, and the real-repo checkpoint script.
 
 Language is auto-detected or specify with `--lang`.
 
@@ -464,6 +470,8 @@ python3 scripts/backfill_tldr_outcomes.py \
 Generated `reports/*.json`, `reports/*.md`, and `reports/*.html` are local artifacts and are gitignored by default.
 
 For local-only dogfooding where you want richer raw evidence, opt into `CODE_BRIEFCASE_TELEMETRY_MODE=local-rich` and run backfill with `--include-local-evidence`. This keeps default secret hygiene but includes readable paths and sanitized tool-call evidence in local reports.
+
+Watch-diagnostics records use telemetry schema v3. See [docs/watch-diagnostics.md](./docs/watch-diagnostics.md) for the isolated checkpoint command and threshold interpretation.
 
 ---
 

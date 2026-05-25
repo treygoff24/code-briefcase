@@ -74,3 +74,19 @@ def test_unix_parent_does_not_unlock_child_pidfile_after_fork(monkeypatch, tmp_p
 
     assert pidfile.closed
     assert startup.fcntl.LOCK_UN not in flock_calls
+
+
+def test_daemon_child_stdio_redirects_to_devnull(monkeypatch):
+    calls = []
+
+    monkeypatch.setattr(startup.os, "open", lambda path, flags: calls.append(("open", path, flags)) or 99)
+    monkeypatch.setattr(startup.os, "dup2", lambda src, dst: calls.append(("dup2", src, dst)))
+    monkeypatch.setattr(startup.os, "close", lambda fd: calls.append(("close", fd)))
+
+    startup._redirect_standard_streams_to_devnull()
+
+    assert calls[0][0] == "open"
+    assert ("dup2", 99, 0) in calls
+    assert ("dup2", 99, 1) in calls
+    assert ("dup2", 99, 2) in calls
+    assert ("close", 99) in calls

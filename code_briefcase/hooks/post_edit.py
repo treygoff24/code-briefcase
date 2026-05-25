@@ -4,7 +4,11 @@ import os
 from pathlib import Path
 from typing import Any
 
-from code_briefcase.diagnostics import _detect_language, get_diagnostics
+from code_briefcase.diagnostics import (
+    _detect_language,
+    get_diagnostics,
+    get_lint_format_diagnostics,
+)
 from code_briefcase.hooks.edit import EDIT_TOOLS, extract_apply_patch_paths
 from code_briefcase.hooks.path_policy import (
     CODE_EXTENSIONS,
@@ -14,6 +18,14 @@ from code_briefcase.hooks.path_policy import (
 )
 from code_briefcase.hooks.outcome import HookExecutionResult, event_relative_path, noop, ok, skipped
 from code_briefcase.hooks.runtime import HookEvent, HookResponse
+
+TRUE_VALUES = {"1", "true", "yes", "on"}
+FALSE_VALUES = {"0", "false", "no", "off", "disabled", ""}
+WATCH_ENV = "CODE_BRIEFCASE_WATCH_DIAGNOSTICS"
+LEGACY_WATCH_ENV = "TLDR_WATCH_DIAGNOSTICS"
+WATCH_BUDGET_ENV = "CODE_BRIEFCASE_WATCH_DIAGNOSTICS_BUDGET_MS"
+WATCH_FALLBACK_STATUSES = {"fallback_required", "unhealthy"}
+WATCH_USED_STATUSES = {"fresh", "stale", "pending"}
 
 
 def extract_edited_files(event: HookEvent) -> list[Path]:
@@ -69,35 +81,64 @@ def extract_edited_files(event: HookEvent) -> list[Path]:
     return paths
 
 
-def _diagnostic_message_for_file(event: HookEvent, file_path: Path) -> tuple[str | None, int, int]:
+def _diagnostic_message_for_file(
+    event: HookEvent,
+    file_path: Path,
+    *,
+    watch_enabled: bool | None = None,
+) -> tuple[str | None, int, int, dict[str, Any] | None]:
     decision = classify_context_path(event.cwd, file_path, include_tests=True)
     if decision.reason == "markdown_unsupported":
-        return None, 0, 0
+        return None, 0, 0, None
     if file_path.suffix.lower() not in CODE_EXTENSIONS and decision.file_kind not in {
         "code",
         "test",
     }:
-        return None, 0, 0
+        return None, 0, 0, None
 
     notify_daemon(event.cwd, file_path)
     if not file_path.exists():
-        return None, 0, 0
+        return None, 0, 0, None
 
     language = _detect_language(str(file_path))
     if language == "unknown":
-        return None, 0, 0
+        return None, 0, 0, None
+
+    enabled = _watch_diagnostics_enabled() if watch_enabled is None else watch_enabled
+    watch_info: dict[str, Any] | None = None
+    if enabled:
+        watch_info = _query_watch_diagnostics(event, file_path, language=language)
+        status = str(watch_info.get("status") or "")
+        if status in WATCH_USED_STATUSES:
+            watch_info["used"] = True
+            if status == "pending":
+                return _format_pending_watch_message(file_path), 0, 0, watch_info
+            result = _result_from_watch_payload(file_path, language, watch_info)
+            result = _merge_lint_format_diagnostics(file_path, language, result)
+            message = format_diagnostic_message(file_path, result)
+            if status == "stale" and message:
+                message = f"{message}\n[showing watcher diagnostics from {_age_label(watch_info)} ago]"
+            return (
+                message,
+                int(result.get("error_count") or 0),
+                int(result.get("warning_count") or 0),
+                watch_info,
+            )
 
     try:
         result = get_diagnostics(str(file_path), language=language)
     except Exception:
-        return None, 0, 0
+        return None, 0, 0, watch_info
 
     error_count = int(result.get("error_count") or 0)
     warning_count = int(result.get("warning_count") or 0)
     message = format_diagnostic_message(file_path, result)
     if message is None:
-        return None, 0, 0
-    return message, error_count, warning_count
+        return None, 0, 0, watch_info
+    if watch_info is not None:
+        watch_info["used"] = False
+        watch_info["fallback_reason"] = watch_info.get("fallback_reason") or status
+    return message, error_count, warning_count, watch_info
 
 
 def build_post_edit_response(event: HookEvent) -> HookExecutionResult:
@@ -127,15 +168,24 @@ def build_post_edit_response(event: HookEvent) -> HookExecutionResult:
 
     messages: list[str] = []
     diagnostics_count = 0
+    watch_enabled = _watch_diagnostics_enabled()
+    watch_infos: list[dict[str, Any]] = []
     for file_path in edited_files:
-        message, error_count, warning_count = _diagnostic_message_for_file(event, file_path)
+        message, error_count, warning_count, watch_info = _diagnostic_message_for_file(
+            event,
+            file_path,
+            watch_enabled=watch_enabled,
+        )
+        if watch_info is not None:
+            watch_infos.append(watch_info)
         if message is None:
             continue
         messages.append(message)
         diagnostics_count += error_count + warning_count
+    watch_summary = _summarize_watch_infos(watch_enabled, watch_infos)
     if not messages:
         if os.environ.get("CODE_BRIEFCASE_POST_EDIT_CLEAN_CONFIRM") == "0":
-            return noop(reason="clean_no_diagnostics", trigger_files=trigger)
+            return noop(reason="clean_no_diagnostics", trigger_files=trigger, **watch_summary)
         confirmation = _format_clean_edit_confirmation(edited_files)
         return ok(
             HookResponse(
@@ -145,6 +195,7 @@ def build_post_edit_response(event: HookEvent) -> HookExecutionResult:
             ),
             trigger_files=trigger,
             noop_reason="clean_no_diagnostics",
+            **watch_summary,
         )
 
     message = "\n\n".join(messages)
@@ -152,7 +203,179 @@ def build_post_edit_response(event: HookEvent) -> HookExecutionResult:
         HookResponse(message=message, additional_context=message, suppress_output=False),
         trigger_files=trigger,
         diagnostics_count=diagnostics_count,
+        **watch_summary,
     )
+
+
+def _watch_diagnostics_enabled() -> bool:
+    raw = os.environ.get(WATCH_ENV)
+    if raw is None:
+        raw = os.environ.get(LEGACY_WATCH_ENV)
+    if raw is None:
+        return False
+    value = raw.strip().lower()
+    if value in FALSE_VALUES:
+        return False
+    return value in TRUE_VALUES
+
+
+def _watch_query_budget_ms() -> int:
+    raw = os.environ.get(WATCH_BUDGET_ENV)
+    if not raw:
+        return 150
+    try:
+        return min(5000, max(0, int(raw)))
+    except ValueError:
+        return 150
+
+
+def _query_watch_diagnostics(
+    event: HookEvent,
+    file_path: Path,
+    *,
+    language: str,
+) -> dict[str, Any]:
+    budget_ms = _watch_query_budget_ms()
+    info: dict[str, Any] = {
+        "enabled": True,
+        "attempted": True,
+        "status": "fallback_required",
+        "query_budget_ms": budget_ms,
+        "backend": "watcher",
+    }
+    try:
+        from code_briefcase.daemon import query_or_start_daemon
+
+        response = query_or_start_daemon(
+            event.cwd,
+            {
+                "cmd": "watchers",
+                "action": "query",
+                "file": str(file_path),
+                "language": language,
+                "budget_ms": budget_ms,
+            },
+            connect_timeout_ms=200,
+            response_timeout_ms=max(1000, budget_ms + 500),
+        )
+    except Exception as exc:
+        info["fallback_reason"] = exc.__class__.__name__
+        return info
+
+    if not response.ok or response.payload is None:
+        info["fallback_reason"] = response.message or response.kind.value
+        return info
+
+    payload = response.payload
+    status = str(payload.get("watcher_status") or payload.get("status") or "fallback_required")
+    info.update(
+        {
+            "status": status,
+            "diagnostics": list(payload.get("diagnostics") or []),
+            "error_count": int(payload.get("error_count") or 0),
+            "warning_count": int(payload.get("warning_count") or 0),
+            "age_ms": payload.get("age_ms"),
+            "wait_ms": payload.get("wait_ms"),
+            "batch_seq": payload.get("batch_seq"),
+            "fallback_reason": payload.get("fallback_reason"),
+            "backend": payload.get("backend") or "watcher",
+        }
+    )
+    return info
+
+
+def _result_from_watch_payload(
+    file_path: Path,
+    language: str,
+    watch_info: dict[str, Any],
+) -> dict[str, Any]:
+    diagnostics = list(watch_info.get("diagnostics") or [])
+    error_count = int(watch_info.get("error_count") or 0)
+    warning_count = int(watch_info.get("warning_count") or 0)
+    return {
+        "file": str(file_path),
+        "language": language,
+        "tools": [str(watch_info.get("backend") or "watcher")],
+        "diagnostics": diagnostics,
+        "error_count": error_count,
+        "warning_count": warning_count,
+    }
+
+
+def _merge_lint_format_diagnostics(
+    file_path: Path,
+    language: str,
+    result: dict[str, Any],
+) -> dict[str, Any]:
+    try:
+        lint_result = get_lint_format_diagnostics(str(file_path), language=language)
+    except Exception:
+        return result
+    diagnostics = list(result.get("diagnostics") or [])
+    diagnostics.extend(lint_result.get("diagnostics") or [])
+    tools = list(result.get("tools") or [])
+    tools.extend(lint_result.get("tools") or [])
+    merged = dict(result)
+    merged["tools"] = tools
+    merged["diagnostics"] = diagnostics
+    merged["error_count"] = sum(1 for d in diagnostics if d.get("severity") == "error")
+    merged["warning_count"] = sum(1 for d in diagnostics if d.get("severity") == "warning")
+    return merged
+
+
+def _format_pending_watch_message(file_path: Path) -> str:
+    return (
+        f"Code Briefcase diagnostics for {file_path.name}: "
+        "watch diagnostics are warming; fresh results are still pending."
+    )
+
+
+def _age_label(watch_info: dict[str, Any]) -> str:
+    age = watch_info.get("age_ms")
+    if isinstance(age, int):
+        return f"{age}ms"
+    return "an unknown interval"
+
+
+def _summarize_watch_infos(
+    enabled: bool,
+    infos: list[dict[str, Any]],
+) -> dict[str, Any]:
+    statuses = [str(item.get("status")) for item in infos if item.get("status")]
+    used = any(bool(item.get("used")) for item in infos)
+    first = infos[0] if infos else {}
+    fallback_reason = next(
+        (str(item.get("fallback_reason")) for item in infos if item.get("fallback_reason")),
+        None,
+    )
+    return {
+        "watch_diagnostics_enabled": enabled,
+        "watch_diagnostics_attempted": bool(infos),
+        "watch_diagnostics_used": used,
+        "watch_diagnostics_status": statuses[0] if statuses else None,
+        "watch_diagnostics_statuses": statuses,
+        "watch_diagnostics_age_ms": _first_int(infos, "age_ms"),
+        "watch_diagnostics_wait_ms": _sum_int(infos, "wait_ms"),
+        "watch_diagnostics_query_budget_ms": first.get("query_budget_ms"),
+        "watch_diagnostics_batch_seq": _first_int(infos, "batch_seq"),
+        "watch_diagnostics_fallback_reason": fallback_reason,
+        "diagnostics_backend": first.get("backend") if infos else None,
+    }
+
+
+def _first_int(items: list[dict[str, Any]], key: str) -> int | None:
+    for item in items:
+        value = item.get(key)
+        if isinstance(value, int):
+            return value
+    return None
+
+
+def _sum_int(items: list[dict[str, Any]], key: str) -> int | None:
+    values = [item.get(key) for item in items if isinstance(item.get(key), int)]
+    if not values:
+        return None
+    return int(sum(values))
 
 
 def notify_daemon(project: Path, file_path: Path) -> None:

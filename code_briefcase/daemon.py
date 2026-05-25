@@ -14,6 +14,7 @@ For new code, import directly from code_briefcase.daemon:
 # Re-export everything for backwards compatibility
 from code_briefcase.daemon import (
     IDLE_TIMEOUT,
+    DaemonResponse,
     TLDRDaemon,
     cached_architecture,
     cached_cfg,
@@ -29,6 +30,8 @@ from code_briefcase.daemon import (
     cached_tree,
     main,
     query_daemon,
+    query_daemon_response,
+    query_or_start_daemon,
     start_daemon,
     stop_daemon,
 )
@@ -39,6 +42,9 @@ __all__ = [
     "start_daemon",
     "stop_daemon",
     "query_daemon",
+    "query_daemon_response",
+    "query_or_start_daemon",
+    "DaemonResponse",
     "main",
     "cached_search",
     "cached_extract",

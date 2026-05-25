@@ -455,6 +455,25 @@ Semantic Search:
     daemon_notify_p.add_argument("file", help="Path to changed file")
     daemon_notify_p.add_argument("--project", "-p", default=".", help="Project path (default: current directory)")
 
+    # code-briefcase daemon watchers status/start/stop
+    daemon_watchers_p = daemon_sub.add_parser("watchers", help="Manage diagnostics watchers")
+    daemon_watchers_sub = daemon_watchers_p.add_subparsers(dest="watchers_action", required=True)
+
+    daemon_watchers_status_p = daemon_watchers_sub.add_parser("status", help="Show watcher status")
+    daemon_watchers_status_p.add_argument("--project", "-p", default=".", help="Project path (default: current directory)")
+    daemon_watchers_status_p.add_argument("--json", action="store_true", help="Emit JSON")
+
+    daemon_watchers_start_p = daemon_watchers_sub.add_parser("start", help="Start/query a watcher for a file")
+    daemon_watchers_start_p.add_argument("file", help="File whose language/config should be watched")
+    daemon_watchers_start_p.add_argument("--project", "-p", default=".", help="Project path (default: current directory)")
+    daemon_watchers_start_p.add_argument("--lang", "--language", dest="language", default=None, help="Language override")
+    daemon_watchers_start_p.add_argument("--budget-ms", type=int, default=0, help="Initial query wait budget")
+    daemon_watchers_start_p.add_argument("--json", action="store_true", help="Emit JSON")
+
+    daemon_watchers_stop_p = daemon_watchers_sub.add_parser("stop", help="Stop all watchers for a project")
+    daemon_watchers_stop_p.add_argument("--project", "-p", default=".", help="Project path (default: current directory)")
+    daemon_watchers_stop_p.add_argument("--json", action="store_true", help="Emit JSON")
+
     # code-briefcase hooks run/install/doctor
     hooks_p = subparsers.add_parser("hooks", help="Agent hook runtime and installer")
     hooks_sub = hooks_p.add_subparsers(dest="hooks_action", required=True)
@@ -489,6 +508,12 @@ Semantic Search:
     )
     hooks_install_p.add_argument("--scope", default="global", choices=["global"])
     hooks_install_p.add_argument("--config", help="Override config path")
+    hooks_install_p.add_argument(
+        "--executable",
+        "--code-briefcase-path",
+        dest="tldr_path",
+        help="Absolute code-briefcase executable to embed in installed hook commands",
+    )
     hooks_install_p.add_argument("--dry-run", action="store_true")
     hooks_install_p.add_argument("--enable-prompt-guard", action="store_true")
     hooks_install_p.add_argument("--enable-tool-guard", action="store_true")
@@ -546,6 +571,7 @@ Semantic Search:
                 scope=args.scope,
                 config_path=args.config,
                 dry_run=args.dry_run,
+                tldr_path=args.tldr_path,
                 enable_prompt_guard=args.enable_prompt_guard,
                 enable_tool_guard=args.enable_tool_guard,
                 enable_compact_context=args.enable_compact_context,
@@ -1217,7 +1243,7 @@ Semantic Search:
                         print("All diagnostic tools installed!")
 
         elif args.command == "daemon":
-            from .daemon import start_daemon, stop_daemon, query_daemon
+            from .daemon import start_daemon, stop_daemon, query_daemon, query_or_start_daemon
 
             project_path = Path(args.project).resolve()
 
@@ -1243,14 +1269,14 @@ Semantic Search:
                         mins, secs = divmod(uptime, 60)
                         hours, mins = divmod(mins, 60)
                         print(f"Uptime: {hours}h {mins}m {secs}s")
-                except (ConnectionRefusedError, FileNotFoundError):
+                except (ConnectionRefusedError, FileNotFoundError, RuntimeError):
                     print("Daemon not running")
 
             elif args.action == "query":
                 try:
                     result = query_daemon(project_path, {"cmd": args.cmd})
                     print(json.dumps(result, indent=2))
-                except (ConnectionRefusedError, FileNotFoundError):
+                except (ConnectionRefusedError, FileNotFoundError, RuntimeError):
                     print("Error: Daemon not running", file=sys.stderr)
                     sys.exit(1)
 
@@ -1271,9 +1297,53 @@ Semantic Search:
                     else:
                         print(f"Error: {result.get('message', 'Unknown error')}", file=sys.stderr)
                         sys.exit(1)
-                except (ConnectionRefusedError, FileNotFoundError):
+                except (ConnectionRefusedError, FileNotFoundError, RuntimeError):
                     # Daemon not running - silently ignore, file edits shouldn't fail
                     pass
+
+            elif args.action == "watchers":
+                command = {"cmd": "watchers", "action": args.watchers_action}
+                if args.watchers_action == "start":
+                    command.update(
+                        {
+                            "file": str(Path(args.file).resolve()),
+                            "language": args.language,
+                            "budget_ms": args.budget_ms,
+                        }
+                    )
+                    response = query_or_start_daemon(project_path, command)
+                    if not response.ok or response.payload is None:
+                        print(
+                            f"Error: {response.message or response.kind.value}",
+                            file=sys.stderr,
+                        )
+                        sys.exit(1)
+                    result = response.payload
+                else:
+                    try:
+                        result = query_daemon(project_path, command)
+                    except (ConnectionRefusedError, FileNotFoundError, RuntimeError):
+                        print("Error: Daemon not running", file=sys.stderr)
+                        sys.exit(1)
+
+                if getattr(args, "json", False):
+                    print(json.dumps(result, indent=2))
+                elif args.watchers_action == "status":
+                    watchers = result.get("watchers") or []
+                    print(f"Watchers: {len(watchers)}")
+                    for watcher in watchers:
+                        print(
+                            "- "
+                            f"{watcher.get('language')} "
+                            f"{watcher.get('status')} "
+                            f"{watcher.get('config_path')}"
+                        )
+                elif args.watchers_action == "stop":
+                    print(f"Stopped watchers: {result.get('stopped', 0)}")
+                else:
+                    print(
+                        f"Watcher status: {result.get('watcher_status') or result.get('status')}"
+                    )
 
     except FileNotFoundError as e:
         print(f"Error: {e}", file=sys.stderr)

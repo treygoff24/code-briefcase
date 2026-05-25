@@ -8,7 +8,12 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from code_briefcase.hooks.runner import run_hook
-from code_briefcase.telemetry import record_hook_execution, telemetry_path_hash, write_telemetry_record
+from code_briefcase.telemetry import (
+    record_hook_execution,
+    record_watch_diagnostics_event,
+    telemetry_path_hash,
+    write_telemetry_record,
+)
 
 
 def test_telemetry_disabled_by_default(monkeypatch, tmp_path):
@@ -257,6 +262,66 @@ def test_hook_telemetry_records_candidate_lifecycle_without_content(monkeypatch,
     assert payload["candidate_files"][0]["surfaced"] is True
     assert "def " not in raw
     assert "content" not in raw.lower()
+
+
+def test_hook_telemetry_schema_v3_records_watch_diagnostics_fields(monkeypatch, tmp_path):
+    monkeypatch.setenv("CODE_BRIEFCASE_TELEMETRY", "1")
+    telemetry_path = tmp_path / "telemetry.jsonl"
+    monkeypatch.setenv("CODE_BRIEFCASE_TELEMETRY_PATH", str(telemetry_path))
+
+    record_hook_execution(
+        client="codex",
+        hook_event="post-edit",
+        project=tmp_path,
+        duration_ms=42,
+        status="ok",
+        watch_diagnostics_enabled=True,
+        watch_diagnostics_attempted=True,
+        watch_diagnostics_used=True,
+        watch_diagnostics_status="fresh",
+        watch_diagnostics_statuses=["fresh"],
+        watch_diagnostics_age_ms=7,
+        watch_diagnostics_wait_ms=11,
+        watch_diagnostics_query_budget_ms=150,
+        watch_diagnostics_batch_seq=3,
+        diagnostics_backend="tsc-watch",
+    )
+
+    payload = json.loads(telemetry_path.read_text(encoding="utf-8"))
+    assert payload["schema_version"] == 3
+    assert payload["watch_diagnostics_enabled"] is True
+    assert payload["watch_diagnostics_used"] is True
+    assert payload["watch_diagnostics_status"] == "fresh"
+    assert payload["watch_diagnostics_statuses"] == ["fresh"]
+    assert payload["watch_diagnostics_age_ms"] == 7
+    assert payload["watch_diagnostics_wait_ms"] == 11
+    assert payload["diagnostics_backend"] == "tsc-watch"
+
+
+def test_watch_diagnostics_event_redacts_adapter_paths_by_default(monkeypatch, tmp_path):
+    monkeypatch.setenv("CODE_BRIEFCASE_TELEMETRY", "1")
+    telemetry_path = tmp_path / "telemetry.jsonl"
+    monkeypatch.setenv("CODE_BRIEFCASE_TELEMETRY_PATH", str(telemetry_path))
+    project = tmp_path / "secret-repo-name"
+    project.mkdir()
+
+    record_watch_diagnostics_event(
+        project=project,
+        action="recheck_complete",
+        adapter_key=f"typescript|{project}/node_modules/.bin/tsc|{project}/tsconfig.json|noemit",
+        duration_ms=33,
+        status="fresh",
+        batch_seq=2,
+    )
+
+    raw = telemetry_path.read_text(encoding="utf-8")
+    payload = json.loads(raw)
+    assert payload["schema_version"] == 3
+    assert payload["event"] == "watch-diagnostics-event"
+    assert payload["action"] == "recheck_complete"
+    assert payload["adapter_key_hash"]
+    assert "secret-repo-name" not in raw
+    assert "node_modules/.bin/tsc" not in raw
 
 
 def test_local_rich_mode_records_raw_local_evidence_with_secret_hygiene(monkeypatch, tmp_path):

@@ -2,12 +2,13 @@
 
 ## What live telemetry captures
 
-With `CODE_BRIEFCASE_TELEMETRY=1`, each hook execution appends one JSONL record (`schema_version: 2`) including:
+With `CODE_BRIEFCASE_TELEMETRY=1`, each hook execution appends one JSONL record. Existing hook records use `schema_version: 2`; post-edit records that carry watch-diagnostics metadata use `schema_version: 3`.
 
 - Hook status, duration, injected bytes, context kind, and `noop_reason`
 - Hashed trigger, recommended, and surfaced file paths
 - Candidate lifecycle metadata (`candidate_files` with reason, rank, score, surfaced flag)
 - Optional `session_id` and `hook_run_id` for offline joins
+- Watch-diagnostics metadata on v3 post-edit records: enabled/attempted/used flags, watcher status, wait/age/batch fields, fallback reason, and diagnostics backend
 
 `surfaced=True` means the hook response actually mentioned or injected that path. Ranked but not injected candidates stay `surfaced=False`.
 `candidate_files_later_used`, `recommended_files_used`, and `surfaced_files_used`
@@ -49,6 +50,28 @@ Basic safety rails still apply:
 - long local evidence strings are capped by `CODE_BRIEFCASE_TELEMETRY_LOCAL_STRING_LIMIT` (default: 8000 chars)
 
 Local-rich reports are intentionally **not shareable**. Use them for local diagnosis, then produce a privacy-safe report by omitting `--include-local-evidence`.
+
+## Watch diagnostics telemetry
+
+Watch diagnostics add two v3 record shapes:
+
+1. Post-edit hook records with fields:
+   - `watch_diagnostics_enabled`
+   - `watch_diagnostics_attempted`
+   - `watch_diagnostics_used`
+   - `watch_diagnostics_status`
+   - `watch_diagnostics_statuses`
+   - `watch_diagnostics_age_ms`
+   - `watch_diagnostics_wait_ms`
+   - `watch_diagnostics_query_budget_ms`
+   - `watch_diagnostics_batch_seq`
+   - `watch_diagnostics_fallback_reason`
+   - `diagnostics_backend`
+2. Daemon lifecycle records with `event="watch-diagnostics-event"`, `action`, `adapter_key_hash`, and optional batch/queue/exit metadata.
+
+Schema v2 records mean watcher state is unknown or not recorded; do not count them as watcher-enabled samples.
+
+See [../watch-diagnostics.md](../watch-diagnostics.md) for operator commands and the real-repo checkpoint script.
 
 ## Retroactive limits
 

@@ -2,6 +2,7 @@ import json
 from pathlib import Path
 
 from code_briefcase.daemon.core import TLDRDaemon
+from code_briefcase.daemon.protocol import send_framed_json
 from code_briefcase.mcp_server import _decode_socket_response
 
 
@@ -87,6 +88,21 @@ def test_mcp_decode_socket_response_does_not_duplicate_chunks():
     assert _decode_socket_response([raw[:midpoint], raw[midpoint:]]) == payload
 
 
+def test_mcp_decode_socket_response_accepts_framed_chunks():
+    import socket
+
+    payload = {"status": "ok", "result": "x" * 100}
+    left, right = socket.socketpair()
+    try:
+        send_framed_json(left, payload)
+        chunks = [right.recv(3), right.recv(7), right.recv(4096)]
+    finally:
+        left.close()
+        right.close()
+
+    assert _decode_socket_response(chunks) == payload
+
+
 def test_daemon_diagnostics_uses_current_schema(tmp_path: Path, monkeypatch):
     source = tmp_path / "app.py"
     source.write_text("def main():\n    return 1\n")
@@ -113,3 +129,25 @@ def test_daemon_diagnostics_uses_current_schema(tmp_path: Path, monkeypatch):
     assert "error_count" in response
     assert "warning_count" in response
     assert "summary" not in response
+
+
+def test_daemon_watchers_status_command_reports_schema(tmp_path: Path):
+    daemon = TLDRDaemon(tmp_path)
+
+    response = daemon.handle_command({"cmd": "watchers", "action": "status"})
+
+    assert response["status"] == "ok"
+    assert response["watchers"] == []
+    assert response["count"] == 0
+
+
+def test_daemon_watchers_stop_command_is_idempotent(tmp_path: Path):
+    daemon = TLDRDaemon(tmp_path)
+
+    first = daemon.handle_command({"cmd": "watchers", "action": "stop"})
+    second = daemon.handle_command({"cmd": "watchers", "action": "stop"})
+
+    assert first["status"] == "ok"
+    assert second["status"] == "ok"
+    assert first["stopped"] == 0
+    assert second["stopped"] == 0

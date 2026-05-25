@@ -105,6 +105,17 @@ def run_hook(event_name: str, payload: dict[str, Any] | None, client: str = "gen
             hook_run_id=hook_run_id,
             tool_name=event.tool_name,
             tool_input=event.tool_input,
+            watch_diagnostics_enabled=execution.watch_diagnostics_enabled,
+            watch_diagnostics_attempted=execution.watch_diagnostics_attempted,
+            watch_diagnostics_used=execution.watch_diagnostics_used,
+            watch_diagnostics_status=execution.watch_diagnostics_status,
+            watch_diagnostics_statuses=execution.watch_diagnostics_statuses,
+            watch_diagnostics_age_ms=execution.watch_diagnostics_age_ms,
+            watch_diagnostics_wait_ms=execution.watch_diagnostics_wait_ms,
+            watch_diagnostics_query_budget_ms=execution.watch_diagnostics_query_budget_ms,
+            watch_diagnostics_batch_seq=execution.watch_diagnostics_batch_seq,
+            watch_diagnostics_fallback_reason=execution.watch_diagnostics_fallback_reason,
+            diagnostics_backend=execution.diagnostics_backend,
         )
     except Exception:
         pass

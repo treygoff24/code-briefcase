@@ -23,6 +23,17 @@ class HookExecutionResult:
     candidate_files: list[dict[str, object]] = field(default_factory=list)
     context_kind: str | None = None
     hook_run_id: str | None = None
+    watch_diagnostics_enabled: bool | None = None
+    watch_diagnostics_attempted: bool = False
+    watch_diagnostics_used: bool = False
+    watch_diagnostics_status: str | None = None
+    watch_diagnostics_statuses: list[str] = field(default_factory=list)
+    watch_diagnostics_age_ms: int | None = None
+    watch_diagnostics_wait_ms: int | None = None
+    watch_diagnostics_query_budget_ms: int | None = None
+    watch_diagnostics_batch_seq: int | None = None
+    watch_diagnostics_fallback_reason: str | None = None
+    diagnostics_backend: str | None = None
 
     def is_noop(self) -> bool:
         return self.response.is_noop()

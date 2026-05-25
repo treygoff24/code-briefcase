@@ -1,5 +1,7 @@
 import json
 import os
+import subprocess
+import sys
 
 import pytest
 
@@ -300,6 +302,56 @@ def test_unrelated_settings_keys_remain_unchanged(tmp_path, fake_tldr):
     assert data["statusLine"] == "ok"
 
 
+def test_installer_migrates_legacy_tldr_env_keys(tmp_path, fake_tldr):
+    config = tmp_path / "settings.json"
+    config.write_text(
+        json.dumps(
+            {
+                "env": {
+                    "TLDR_TELEMETRY": "1",
+                    "TLDR_TELEMETRY_MODE": "local-rich",
+                    "TLDR_TELEMETRY_REDACT_PATHS": "0",
+                    "TLDR_TELEMETRY_LOCAL_STRING_LIMIT": "64000",
+                    "UNRELATED": "kept",
+                }
+            }
+        )
+    )
+
+    result = install_hooks("claude", config_path=str(config), tldr_path=str(fake_tldr))
+    data = json.loads(config.read_text())
+
+    assert result.changed
+    assert data["env"] == {
+        "CODE_BRIEFCASE_TELEMETRY": "1",
+        "CODE_BRIEFCASE_TELEMETRY_MODE": "local-rich",
+        "CODE_BRIEFCASE_TELEMETRY_REDACT_PATHS": "0",
+        "CODE_BRIEFCASE_TELEMETRY_LOCAL_STRING_LIMIT": "64000",
+        "UNRELATED": "kept",
+    }
+    assert all(not key.startswith("TLDR_") for key in data["env"])
+
+
+def test_installer_removes_legacy_tldr_env_without_overwriting_current_values(tmp_path, fake_tldr):
+    config = tmp_path / "settings.json"
+    config.write_text(
+        json.dumps(
+            {
+                "env": {
+                    "TLDR_TELEMETRY_REDACT_PATHS": "0",
+                    "CODE_BRIEFCASE_TELEMETRY_REDACT_PATHS": "1",
+                }
+            }
+        )
+    )
+
+    result = install_hooks("claude", config_path=str(config), tldr_path=str(fake_tldr))
+    data = json.loads(config.read_text())
+
+    assert result.changed
+    assert data["env"] == {"CODE_BRIEFCASE_TELEMETRY_REDACT_PATHS": "1"}
+
+
 def test_installed_hook_commands_use_absolute_paths(tmp_path):
     config = tmp_path / "hooks.json"
     fake = tmp_path / "bin" / "code-briefcase"
@@ -317,6 +369,30 @@ def test_installed_hook_commands_use_absolute_paths(tmp_path):
     payload = json.dumps(result.config)
 
     assert str(fake.resolve()) in payload
+
+
+def test_hook_install_cli_accepts_executable_override(tmp_path, fake_tldr):
+    config = tmp_path / "hooks.json"
+
+    subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "code_briefcase.cli",
+            "hooks",
+            "install",
+            "codex",
+            "--config",
+            str(config),
+            "--executable",
+            str(fake_tldr),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    assert str(fake_tldr.resolve()) in json.dumps(json.loads(config.read_text()))
 
 
 def test_installer_rejects_tldr_without_hooks(tmp_path):
@@ -604,6 +680,35 @@ def test_cursor_doctor_reports_experimental_status():
     info = report["clients"]["cursor"]
     assert info.get("status") == "experimental_unverified"
     assert info.get("code_briefcase_hooks_present") is False
+
+
+def test_doctor_reports_stale_tldr_hooks(tmp_path, monkeypatch):
+    from code_briefcase.hook_installer import doctor_report
+
+    config = tmp_path / "hooks.json"
+    stale_command = (
+        "TLDR_TELEMETRY=1 /Users/treygoff/.local/pipx/venvs/llm-tldr/bin/tldr "
+        "hooks run pre-edit --client codex"
+    )
+    config.write_text(
+        json.dumps(
+            {
+                "hooks": {
+                    "PreToolUse": [
+                        {"matcher": "apply_patch|Edit|Write", "hooks": [{"command": stale_command}]}
+                    ]
+                }
+            }
+        )
+    )
+    monkeypatch.setattr("code_briefcase.hook_installer.default_config_path", lambda _client: config)
+
+    report = doctor_report(clients=["codex"])
+    info = report["clients"]["codex"]
+
+    assert info["code_briefcase_hooks_present"] is True
+    assert info["stale_tldr_hooks_present"] is True
+    assert info["hook_command_targets"] == [stale_command]
 
 
 # OpenCode integration tests
