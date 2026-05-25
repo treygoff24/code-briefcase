@@ -19,7 +19,7 @@ class TestLuauBasicRequire:
 
     def test_luau_imports_script_require(self):
         """Should parse require(script.Utils) pattern."""
-        from tldr.cross_file_calls import parse_luau_imports
+        from code_briefcase.cross_file_calls import parse_luau_imports
 
         with tempfile.NamedTemporaryFile(suffix=".luau", mode="w", delete=False) as f:
             f.write("""local Utils = require(script.Utils)
@@ -34,7 +34,7 @@ class TestLuauBasicRequire:
 
     def test_luau_imports_script_parent_require(self):
         """Should parse require(script.Parent.SharedModule) pattern."""
-        from tldr.cross_file_calls import parse_luau_imports
+        from code_briefcase.cross_file_calls import parse_luau_imports
 
         with tempfile.NamedTemporaryFile(suffix=".luau", mode="w", delete=False) as f:
             f.write("""local module = require(script.Parent.SharedModule)
@@ -49,7 +49,7 @@ class TestLuauBasicRequire:
 
     def test_luau_imports_string_literal_require(self):
         """Should parse require('@pkg/json') string literal pattern."""
-        from tldr.cross_file_calls import parse_luau_imports
+        from code_briefcase.cross_file_calls import parse_luau_imports
 
         with tempfile.NamedTemporaryFile(suffix=".luau", mode="w", delete=False) as f:
             f.write("""local json = require("@pkg/json")
@@ -68,7 +68,7 @@ class TestLuauGetService:
 
     def test_luau_imports_getservice_players(self):
         """Should parse game:GetService('Players') as import-like."""
-        from tldr.cross_file_calls import parse_luau_imports
+        from code_briefcase.cross_file_calls import parse_luau_imports
 
         with tempfile.NamedTemporaryFile(suffix=".luau", mode="w", delete=False) as f:
             f.write("""local Players = game:GetService("Players")
@@ -83,7 +83,7 @@ class TestLuauGetService:
 
     def test_luau_imports_multiple_getservice(self):
         """Should parse multiple GetService calls."""
-        from tldr.cross_file_calls import parse_luau_imports
+        from code_briefcase.cross_file_calls import parse_luau_imports
 
         with tempfile.NamedTemporaryFile(suffix=".luau", mode="w", delete=False) as f:
             f.write("""local Players = game:GetService("Players")
@@ -104,7 +104,7 @@ class TestLuauMultipleImports:
 
     def test_luau_imports_mixed_requires_and_services(self):
         """Should parse both require and GetService in same file."""
-        from tldr.cross_file_calls import parse_luau_imports
+        from code_briefcase.cross_file_calls import parse_luau_imports
 
         with tempfile.NamedTemporaryFile(suffix=".luau", mode="w", delete=False) as f:
             f.write("""local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -132,7 +132,7 @@ class TestLuauEdgeCases:
 
     def test_luau_imports_no_imports(self):
         """Should return empty list for file with no imports."""
-        from tldr.cross_file_calls import parse_luau_imports
+        from code_briefcase.cross_file_calls import parse_luau_imports
 
         with tempfile.NamedTemporaryFile(suffix=".luau", mode="w", delete=False) as f:
             f.write("""local x = 10

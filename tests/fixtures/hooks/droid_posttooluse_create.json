@@ -3,12 +3,12 @@
   "hook_event_name": "PostToolUse",
   "toolName": "Create",
   "toolInput": {
-    "file_path": "/Users/treygoff/Code/llm-tldr/tldr/hooks/new_file.py",
+    "file_path": "/Users/treygoff/Code/code-briefcase/code_briefcase/hooks/new_file.py",
     "content": "print('hello')"
   },
   "toolResponse": {
     "status": "success"
   },
   "sessionId": "droid-session-abc",
-  "project_dir": "/Users/treygoff/Code/llm-tldr"
+  "project_dir": "/Users/treygoff/Code/code-briefcase"
 }

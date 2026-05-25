@@ -1,5 +1,5 @@
-from tldr.hooks.read import build_read_response
-from tldr.hooks.runtime import parse_hook_event
+from code_briefcase.hooks.read import build_read_response
+from code_briefcase.hooks.runtime import parse_hook_event
 
 
 def _event(tmp_path, file_name, extra=None, session_id=None):
@@ -97,7 +97,7 @@ def test_targeted_read_does_not_report_unsurfaced_related_files(monkeypatch, tmp
             "classes": [],
         }
 
-    monkeypatch.setattr("tldr.hooks.file_context.extract_file", fake_extract)
+    monkeypatch.setattr("code_briefcase.hooks.file_context.extract_file", fake_extract)
 
     result = build_read_response(
         _event(tmp_path, "src/app.py", {"offset": 10, "limit": 20}, session_id="s1")
@@ -176,7 +176,7 @@ def test_pre_read_records_related_candidates(monkeypatch, tmp_path):
             "classes": [],
         }
 
-    monkeypatch.setattr("tldr.hooks.file_context.extract_file", fake_extract)
+    monkeypatch.setattr("code_briefcase.hooks.file_context.extract_file", fake_extract)
     event = _event(tmp_path, str(source.relative_to(tmp_path)))
 
     result = build_read_response(event)

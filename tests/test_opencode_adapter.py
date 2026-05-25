@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from tldr.hooks.opencode_adapter import generate_opencode_adapter
+from code_briefcase.hooks.opencode_adapter import generate_opencode_adapter
 
 
 def _node_or_skip() -> str:
@@ -17,7 +17,7 @@ def _node_or_skip() -> str:
 
 
 def _write_fake_tldr(tmp_path: Path) -> Path:
-    fake = tmp_path / "fake-tldr.mjs"
+    fake = tmp_path / "fake-code_briefcase.mjs"
     fake.write_text(
         """
 const event = process.argv[process.argv.indexOf("run") + 1]
@@ -26,11 +26,11 @@ for await (const chunk of process.stdin) {
   stdin += chunk
 }
 const payload = stdin ? JSON.parse(stdin) : {}
-if (process.env.TLDR_CAPTURE) {
+if (process.env.CODE_BRIEFCASE_CAPTURE) {
   const fs = await import("node:fs")
-  fs.appendFileSync(process.env.TLDR_CAPTURE, JSON.stringify({ event, payload }) + "\\n")
+  fs.appendFileSync(process.env.CODE_BRIEFCASE_CAPTURE, JSON.stringify({ event, payload }) + "\\n")
 }
-switch (process.env.TLDR_FAKE_MODE) {
+switch (process.env.CODE_BRIEFCASE_FAKE_MODE) {
   case "empty":
     process.exit(0)
   case "invalid":
@@ -53,7 +53,7 @@ switch (process.env.TLDR_FAKE_MODE) {
   case "context":
     console.log(JSON.stringify({
       hookSpecificOutput: {
-        additionalContext: "TLDR context"
+        additionalContext: "Code Briefcase context"
       }
     }))
     process.exit(0)
@@ -89,7 +89,7 @@ def _run_node(tmp_path: Path, source: str, *, env: dict[str, str] | None = None)
 def _write_adapter(tmp_path: Path, *, enable_tool_guard: bool = True, enable_compact_context: bool = True) -> Path:
     node_bin = _node_or_skip()
     fake = _write_fake_tldr(tmp_path)
-    adapter = tmp_path / "tldr-hooks.mjs"
+    adapter = tmp_path / "code-briefcase-hooks.mjs"
     adapter.write_text(
         generate_opencode_adapter(
             [node_bin, str(fake)],
@@ -115,11 +115,11 @@ def test_generate_opencode_adapter_default_callbacks():
     assert '"experimental.session.compacting"' not in js
 
     # 3. Timeout default is 1500ms
-    assert "TLDR_TIMEOUT_MS = 1500" in js
+    assert "CODE_BRIEFCASE_TIMEOUT_MS = 1500" in js
     assert 'child.stdin.on("error"' in js
     assert 'child.on("close"' in js
 
-    # 4. Resolved absolute TLDR command path is present
+    # 4. Resolved absolute Code Briefcase command path is present
     assert '"/usr/local/bin/tldr"' in js
 
     # 5. Dependency-free: no external dependency imports
@@ -149,20 +149,20 @@ def test_generate_opencode_adapter_opt_in_callbacks():
 
 
 def test_generate_opencode_adapter_list_tldr_command():
-    tldr_cmd = ["/path/to/python", "-m", "tldr.cli"]
+    tldr_cmd = ["/path/to/python", "-m", "code_briefcase.cli"]
     js = generate_opencode_adapter(tldr_cmd)
     
     assert "/path/to/python" in js
     assert "-m" in js
-    assert "tldr.cli" in js
-    assert '["tldr"]' not in js
+    assert "code_briefcase.cli" in js
+    assert '["code-briefcase"]' not in js
 
 
 def test_node_smoke_parsing(tmp_path):
     _write_adapter(tmp_path)
 
     test_js = """
-    import("./tldr-hooks.mjs").then((m) => {
+    import("./code-briefcase-hooks.mjs").then((m) => {
         if (typeof m.TLDRHooks !== "function") {
             process.exit(2);
         }
@@ -202,7 +202,7 @@ def test_node_callback_event_normalization(tmp_path):
     result = _run_node(
         tmp_path,
         """
-import { TLDRHooks } from "./tldr-hooks.mjs"
+import { TLDRHooks } from "./code-briefcase-hooks.mjs"
 const hooks = await TLDRHooks({ directory: "/repo", project: { id: "session-1" } })
 await hooks["session.created"]({}, {})
 await hooks["tool.execute.before"]({ tool: "read" }, { args: { filePath: "README.md" } })
@@ -210,7 +210,7 @@ await hooks["tool.execute.before"]({ tool: "edit" }, { args: { filePath: "README
 await hooks["tool.execute.after"]({ tool: "edit" }, { args: { filePath: "README.md" }, result: { ok: true } })
 await hooks["file.edited"]({ filePath: "README.md" }, {})
 """,
-        env={"TLDR_CAPTURE": str(capture), "TLDR_FAKE_MODE": "default"},
+        env={"CODE_BRIEFCASE_CAPTURE": str(capture), "CODE_BRIEFCASE_FAKE_MODE": "default"},
     )
 
     assert result.returncode == 0, result.stderr
@@ -234,10 +234,10 @@ def test_node_callbacks_treat_empty_parse_failure_subprocess_failure_and_timeout
     result = _run_node(
         tmp_path,
         """
-import { TLDRHooks } from "./tldr-hooks.mjs"
+import { TLDRHooks } from "./code-briefcase-hooks.mjs"
 const hooks = await TLDRHooks({ directory: "/repo", project: { id: "session-1" } })
 for (const mode of ["empty", "invalid", "nonzero", "timeout"]) {
-  process.env.TLDR_FAKE_MODE = mode
+  process.env.CODE_BRIEFCASE_FAKE_MODE = mode
   await hooks["tool.execute.before"]({ tool: "bash" }, { args: { command: "echo ok" } })
 }
 """,
@@ -251,10 +251,10 @@ def test_node_tool_before_applies_updated_input(tmp_path):
     result = _run_node(
         tmp_path,
         """
-import { TLDRHooks } from "./tldr-hooks.mjs"
+import { TLDRHooks } from "./code-briefcase-hooks.mjs"
 const hooks = await TLDRHooks({ directory: "/repo", project: { id: "session-1" } })
 const output = { args: { command: "rm -rf /" } }
-process.env.TLDR_FAKE_MODE = "updated"
+process.env.CODE_BRIEFCASE_FAKE_MODE = "updated"
 await hooks["tool.execute.before"]({ tool: "bash" }, output)
 if (output.args.command !== "echo sanitized") {
   throw new Error(`updatedInput was not applied: ${JSON.stringify(output.args)}`)
@@ -270,9 +270,9 @@ def test_node_permission_and_tool_guards_throw_on_deny(tmp_path):
     result = _run_node(
         tmp_path,
         """
-import { TLDRHooks } from "./tldr-hooks.mjs"
+import { TLDRHooks } from "./code-briefcase-hooks.mjs"
 const hooks = await TLDRHooks({ directory: "/repo", project: { id: "session-1" } })
-process.env.TLDR_FAKE_MODE = "deny"
+process.env.CODE_BRIEFCASE_FAKE_MODE = "deny"
 for (const name of ["tool.execute.before", "permission.asked"]) {
   let threw = false
   try {
@@ -281,7 +281,7 @@ for (const name of ["tool.execute.before", "permission.asked"]) {
     threw = err.message.includes("dangerous command")
   }
   if (!threw) {
-    throw new Error(`${name} did not throw the TLDR denial`)
+    throw new Error(`${name} did not throw the Code Briefcase denial`)
   }
 }
 """,
@@ -295,12 +295,12 @@ def test_node_compaction_callback_pushes_context(tmp_path):
     result = _run_node(
         tmp_path,
         """
-import { TLDRHooks } from "./tldr-hooks.mjs"
+import { TLDRHooks } from "./code-briefcase-hooks.mjs"
 const hooks = await TLDRHooks({ directory: "/repo", project: { id: "session-1" } })
 const output = { context: [] }
-process.env.TLDR_FAKE_MODE = "context"
+process.env.CODE_BRIEFCASE_FAKE_MODE = "context"
 await hooks["experimental.session.compacting"]({}, output)
-if (output.context[0] !== "TLDR context") {
+if (output.context[0] !== "Code Briefcase context") {
   throw new Error(`context was not appended: ${JSON.stringify(output.context)}`)
 }
 """,
@@ -314,12 +314,12 @@ def test_node_session_created_appends_context_when_output_supports_it(tmp_path):
     result = _run_node(
         tmp_path,
         """
-import { TLDRHooks } from "./tldr-hooks.mjs"
+import { TLDRHooks } from "./code-briefcase-hooks.mjs"
 const hooks = await TLDRHooks({ directory: "/repo", project: { id: "session-1" } })
 const output = { context: [] }
-process.env.TLDR_FAKE_MODE = "context"
+process.env.CODE_BRIEFCASE_FAKE_MODE = "context"
 await hooks["session.created"]({}, output)
-if (output.context[0] !== "TLDR context") {
+if (output.context[0] !== "Code Briefcase context") {
   throw new Error(`session context was not appended: ${JSON.stringify(output.context)}`)
 }
 """,

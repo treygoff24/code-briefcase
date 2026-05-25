@@ -17,7 +17,7 @@ The function `extract_luau_dfg` does NOT exist yet - these tests must FAIL.
 
 def test_luau_dfg_basic_def_use():
     """Basic variable definition and use should be tracked."""
-    from tldr.dfg_extractor import extract_luau_dfg
+    from code_briefcase.dfg_extractor import extract_luau_dfg
 
     code = '''
 function example(): number
@@ -52,7 +52,7 @@ end
 
 def test_luau_dfg_typed_declaration():
     """Type annotations should not affect DFG structure."""
-    from tldr.dfg_extractor import extract_luau_dfg
+    from code_briefcase.dfg_extractor import extract_luau_dfg
 
     code = '''
 function typed(): ()
@@ -83,7 +83,7 @@ def test_luau_dfg_compound_assignment():
     1. USE of x (read current value)
     2. DEF of x (write new value)
     """
-    from tldr.dfg_extractor import extract_luau_dfg
+    from code_briefcase.dfg_extractor import extract_luau_dfg
 
     code = '''
 function compound(): number
@@ -119,7 +119,7 @@ end
 
 def test_luau_dfg_parameters():
     """Typed function parameters should be tracked as definitions."""
-    from tldr.dfg_extractor import extract_luau_dfg
+    from code_briefcase.dfg_extractor import extract_luau_dfg
 
     code = '''
 function greet(name: string, count: number): ()
@@ -153,7 +153,7 @@ end
 
 def test_luau_dfg_for_variable():
     """Numeric for loop variable should be tracked."""
-    from tldr.dfg_extractor import extract_luau_dfg
+    from code_briefcase.dfg_extractor import extract_luau_dfg
 
     code = '''
 function sumRange(): number
@@ -183,7 +183,7 @@ end
 
 def test_luau_dfg_generic_for():
     """Generic for-in loop should define iterator variables."""
-    from tldr.dfg_extractor import extract_luau_dfg
+    from code_briefcase.dfg_extractor import extract_luau_dfg
 
     code = '''
 function process(items: {Item}): ()
@@ -211,7 +211,7 @@ end
 
 def test_luau_dfg_table_access():
     """Table field access should track the table variable."""
-    from tldr.dfg_extractor import extract_luau_dfg
+    from code_briefcase.dfg_extractor import extract_luau_dfg
 
     code = '''
 function updatePlayer(player: Player): ()
@@ -241,7 +241,7 @@ end
 
 def test_luau_dfg_closure():
     """Closure should capture variables from outer scope."""
-    from tldr.dfg_extractor import extract_luau_dfg
+    from code_briefcase.dfg_extractor import extract_luau_dfg
 
     code = '''
 function makeCounter(): () -> number
@@ -271,7 +271,7 @@ end
 
 def test_luau_dfg_multiple_assignment():
     """Multiple assignment should track all variables."""
-    from tldr.dfg_extractor import extract_luau_dfg
+    from code_briefcase.dfg_extractor import extract_luau_dfg
 
     code = '''
 function swap(): ()
@@ -299,7 +299,7 @@ end
 
 def test_luau_dfg_optional_type():
     """Optional type (number?) should not affect DFG."""
-    from tldr.dfg_extractor import extract_luau_dfg
+    from code_briefcase.dfg_extractor import extract_luau_dfg
 
     code = '''
 function maybeValue(x: number?): number
@@ -329,7 +329,7 @@ end
 
 def test_luau_dfg_function_not_found():
     """Should return empty DFG when function not found (not raise)."""
-    from tldr.dfg_extractor import extract_luau_dfg
+    from code_briefcase.dfg_extractor import extract_luau_dfg
 
     code = '''
 function exists(): ()
@@ -349,7 +349,7 @@ end
 
 def test_luau_dfg_with_continue():
     """Continue statement should not break variable tracking."""
-    from tldr.dfg_extractor import extract_luau_dfg
+    from code_briefcase.dfg_extractor import extract_luau_dfg
 
     code = '''
 function sumOdd(n: number): number

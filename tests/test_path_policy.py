@@ -2,15 +2,15 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from tldr.hooks.path_policy import (
+from code_briefcase.hooks.path_policy import (
     MAX_CANDIDATES,
     MAX_SURFACED,
     classify_context_path,
     discover_related_candidates,
     should_exclude_context_path,
 )
-from tldr.hooks.read import build_read_response
-from tldr.hooks.runtime import parse_hook_event
+from code_briefcase.hooks.read import build_read_response
+from code_briefcase.hooks.runtime import parse_hook_event
 
 
 def _event(tmp_path: Path, file_name: str, extra: dict | None = None):
@@ -142,7 +142,7 @@ def test_max_surfaced_caps_injected_related_files(tmp_path, monkeypatch):
     def fake_extract(path: str, base_path: str):
         return {"imports": imports, "functions": [], "classes": []}
 
-    monkeypatch.setattr("tldr.hooks.file_context.extract_file", fake_extract)
+    monkeypatch.setattr("code_briefcase.hooks.file_context.extract_file", fake_extract)
     result = build_read_response(_event(tmp_path, str(source.relative_to(tmp_path))))
 
     assert result.status == "ok"
@@ -161,7 +161,7 @@ def test_max_candidates_limits_metadata(tmp_path, monkeypatch):
     def fake_extract(path: str, base_path: str):
         return {"imports": imports, "functions": [], "classes": []}
 
-    monkeypatch.setattr("tldr.hooks.file_context.extract_file", fake_extract)
+    monkeypatch.setattr("code_briefcase.hooks.file_context.extract_file", fake_extract)
     result = build_read_response(_event(tmp_path, str(source.relative_to(tmp_path))))
 
     assert result.status == "ok"
@@ -176,7 +176,7 @@ def test_no_candidates_leaves_surfaced_files_empty(tmp_path, monkeypatch):
     def fake_extract(path: str, base_path: str):
         return {"imports": [], "functions": [], "classes": []}
 
-    monkeypatch.setattr("tldr.hooks.file_context.extract_file", fake_extract)
+    monkeypatch.setattr("code_briefcase.hooks.file_context.extract_file", fake_extract)
     result = build_read_response(_event(tmp_path, "solo.py"))
 
     assert result.status == "ok"

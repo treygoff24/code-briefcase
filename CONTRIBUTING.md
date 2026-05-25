@@ -1,6 +1,6 @@
-# Contributing to llm-tldr
+# Contributing to code-briefcase
 
-Thank you for considering contributing to llm-tldr! We welcome contributions of all kinds.
+Thank you for considering contributing to code-briefcase! We welcome contributions of all kinds.
 
 ## Before You Start
 
@@ -24,7 +24,7 @@ Before submitting:
 
 1. **Rebase on `main`** to avoid merge conflicts
 2. **Run tests**: `pytest tests/`
-3. **Run linter**: `ruff check tldr/`
+3. **Run linter**: `ruff check code_briefcase/`
 4. **Update docs** if you changed public APIs
 
 ### Commit Messages
@@ -40,8 +40,8 @@ docs: description of documentation change
 ## Development Setup
 
 ```bash
-git clone https://github.com/parcadei/llm-tldr.git
-cd llm-tldr
+git clone https://github.com/treygoff24/code-briefcase.git
+cd code-briefcase
 uv venv && uv pip install -e ".[dev]"
 ```
 

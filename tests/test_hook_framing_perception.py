@@ -2,9 +2,9 @@ import json
 
 import pytest
 
-from tldr.hooks.edit import EDIT_TOOLS, build_pre_edit_response
-from tldr.hooks.post_edit import build_post_edit_response
-from tldr.hooks.runtime import parse_hook_event, render_hook_response
+from code_briefcase.hooks.edit import EDIT_TOOLS, build_pre_edit_response
+from code_briefcase.hooks.post_edit import build_post_edit_response
+from code_briefcase.hooks.runtime import parse_hook_event, render_hook_response
 
 
 def _code_fixture(tmp_path):
@@ -69,10 +69,10 @@ class TestPostEditFraming:
         source = tmp_path / "app.py"
         source.write_text("def main():\n    return 1\n")
         monkeypatch.setattr(
-            "tldr.hooks.post_edit.get_diagnostics",
+            "code_briefcase.hooks.post_edit.get_diagnostics",
             lambda *a, **k: {"diagnostics": [], "error_count": 0, "warning_count": 0},
         )
-        monkeypatch.setattr("tldr.hooks.post_edit.notify_daemon", lambda *a, **k: None)
+        monkeypatch.setattr("code_briefcase.hooks.post_edit.notify_daemon", lambda *a, **k: None)
 
         event = parse_hook_event(
             {
@@ -95,7 +95,7 @@ class TestPostEditFraming:
 
 class TestNonCodeFileEditFraming:
     """Covers the non-code-file edit branch in `build_file_context_for_path`
-    (the `[TLDR pre-edit context — ...]` rewrite around L580).
+    (the `[Code Briefcase pre-edit context — ...]` rewrite around L580).
     """
 
     def test_yaml_edit_includes_pre_edit_disclaimer(self, tmp_path):
@@ -119,8 +119,8 @@ class TestNonCodeFileEditFraming:
         assert execution.status == "ok"
 
         context = execution.additional_context or ""
-        # Header was rewritten from "[TLDR " → "[TLDR pre-edit context — ..."
-        assert "[TLDR pre-edit context —" in context
+        # Header was rewritten from "[Code Briefcase " → "[Code Briefcase pre-edit context — ..."
+        assert "[Code Briefcase pre-edit context —" in context
         # Disclaimer paragraph appended
         assert "Pre-edit snapshot only" in context
         assert "does NOT block or modify" in context

@@ -1,6 +1,6 @@
-from tldr.hooks.permission import check_destructive_command, build_permission_request_response
-from tldr.hooks.runtime import parse_hook_event
-from tldr.hooks.tool import build_pre_tool_response
+from code_briefcase.hooks.permission import check_destructive_command, build_permission_request_response
+from code_briefcase.hooks.runtime import parse_hook_event
+from code_briefcase.hooks.tool import build_pre_tool_response
 
 
 class TestDestructiveCommandDetection:

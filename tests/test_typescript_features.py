@@ -1,5 +1,5 @@
 """
-Functional tests for TypeScript support in llm-tldr.
+Functional tests for TypeScript support in code-briefcase.
 
 These tests verify that each feature actually works with TypeScript code,
 not just that the functions exist.
@@ -115,8 +115,8 @@ async function fetchData(url: string): Promise<string> {
 
 
 def run_tldr(args: list[str], cwd: str = None) -> dict:
-    """Run tldr command and return parsed JSON output."""
-    cmd = [sys.executable, "-m", "tldr.cli"] + args + ["--lang", "typescript"]
+    """Run code-briefcase command and return parsed JSON output."""
+    cmd = [sys.executable, "-m", "code_briefcase.cli"] + args + ["--lang", "typescript"]
     result = subprocess.run(cmd, capture_output=True, text=True, cwd=cwd)
     if result.returncode != 0:
         pytest.fail(f"tldr command failed: {result.stderr}")

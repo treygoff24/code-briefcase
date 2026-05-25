@@ -47,7 +47,7 @@ class TestSemanticCFGSummary:
 
     def test_cfg_summary_populated(self, temp_ts_project):
         """_get_cfg_summary should return complexity and blocks for TypeScript."""
-        from tldr.semantic import _get_cfg_summary
+        from code_briefcase.semantic import _get_cfg_summary
 
         file_path = Path(temp_ts_project) / "functions.ts"
         summary = _get_cfg_summary(file_path, "classify", "typescript")
@@ -66,7 +66,7 @@ class TestSemanticCFGSummary:
 
     def test_cfg_summary_simple_function(self, temp_ts_project):
         """CFG summary for simple function should have low complexity."""
-        from tldr.semantic import _get_cfg_summary
+        from code_briefcase.semantic import _get_cfg_summary
 
         file_path = Path(temp_ts_project) / "functions.ts"
         summary = _get_cfg_summary(file_path, "processData", "typescript")
@@ -76,7 +76,7 @@ class TestSemanticCFGSummary:
 
     def test_cfg_summary_javascript(self, temp_ts_project):
         """CFG summary should also work for JavaScript."""
-        from tldr.semantic import _get_cfg_summary
+        from code_briefcase.semantic import _get_cfg_summary
 
         # Create a JS file
         js_file = Path(temp_ts_project) / "functions.js"
@@ -98,7 +98,7 @@ class TestSemanticDFGSummary:
 
     def test_dfg_summary_populated(self, temp_ts_project):
         """_get_dfg_summary should return vars and def-use chains for TypeScript."""
-        from tldr.semantic import _get_dfg_summary
+        from code_briefcase.semantic import _get_dfg_summary
 
         file_path = Path(temp_ts_project) / "functions.ts"
         summary = _get_dfg_summary(file_path, "processData", "typescript")
@@ -116,7 +116,7 @@ class TestSemanticDFGSummary:
 
     def test_dfg_summary_javascript(self, temp_ts_project):
         """DFG summary should also work for JavaScript."""
-        from tldr.semantic import _get_dfg_summary
+        from code_briefcase.semantic import _get_dfg_summary
 
         js_file = Path(temp_ts_project) / "functions.js"
         js_file.write_text("""
@@ -136,13 +136,13 @@ class TestSemanticIndexIntegration:
 
     def test_semantic_index_has_cfg_dfg(self, temp_ts_project):
         """Semantic index metadata should include cfg_summary and dfg_summary."""
-        from tldr.semantic import build_semantic_index
+        from code_briefcase.semantic import build_semantic_index
 
         # Build the semantic index
         build_semantic_index(temp_ts_project, lang="typescript", show_progress=False)
 
         # Check the metadata
-        metadata_path = Path(temp_ts_project) / ".tldr" / "cache" / "semantic" / "metadata.json"
+        metadata_path = Path(temp_ts_project) / ".code-briefcase" / "cache" / "semantic" / "metadata.json"
         assert metadata_path.exists(), "Semantic index should create metadata.json"
 
         with open(metadata_path) as f:
@@ -178,7 +178,7 @@ class TestSemanticLayerParity:
 
     def test_python_cfg_summary_works(self, tmp_path):
         """Sanity check: Python CFG summary should work."""
-        from tldr.semantic import _get_cfg_summary
+        from code_briefcase.semantic import _get_cfg_summary
 
         py_file = tmp_path / "test.py"
         py_file.write_text("""
@@ -194,7 +194,7 @@ def example(x):
 
     def test_typescript_matches_python_format(self, temp_ts_project, tmp_path):
         """TypeScript CFG/DFG summaries should use same format as Python."""
-        from tldr.semantic import _get_cfg_summary
+        from code_briefcase.semantic import _get_cfg_summary
 
         # Get Python format
         py_file = tmp_path / "test.py"

@@ -384,7 +384,7 @@ def test_evaluate_script_writes_markdown_and_json(tmp_path):
         check=False,
     )
     assert result.returncode == 0, result.stderr
-    assert "TLDR efficacy report" in out_md.read_text(encoding="utf-8")
+    assert "Code Briefcase efficacy report" in out_md.read_text(encoding="utf-8")
     payload = json.loads(out_json.read_text(encoding="utf-8"))
     assert "verdict" in payload
     json.loads(out_json.read_text(encoding="utf-8"))

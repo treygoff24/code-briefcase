@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from tldr import diagnostics as diag
+from code_briefcase import diagnostics as diag
 
 
 @pytest.fixture

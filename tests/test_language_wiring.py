@@ -1,7 +1,7 @@
 """
 Test suite for language wiring completeness.
 
-When adding a new language to tldr-code, this test ensures all
+When adding a new language to code-briefcase, this test ensures all
 registration points are properly wired. Run with:
 
     pytest tests/test_language_wiring.py -v
@@ -51,7 +51,7 @@ class TestLanguageWiring:
     @pytest.mark.parametrize("language", INCREMENTAL_PARSE_LANGUAGES)
     def test_incremental_parse_supported_languages(self, language):
         """Language should be in IncrementalParser.SUPPORTED_LANGUAGES."""
-        from tldr.incremental_parse import IncrementalParser
+        from code_briefcase.incremental_parse import IncrementalParser
 
         assert language in IncrementalParser.SUPPORTED_LANGUAGES, (
             f"{language} missing from incremental_parse.py SUPPORTED_LANGUAGES"
@@ -60,7 +60,7 @@ class TestLanguageWiring:
     @pytest.mark.parametrize("language", SUPPORTED_LANGUAGES.keys())
     def test_cli_extension_to_language(self, language):
         """Language extensions should be in cli.py EXTENSION_TO_LANGUAGE."""
-        from tldr.cli import EXTENSION_TO_LANGUAGE
+        from code_briefcase.cli import EXTENSION_TO_LANGUAGE
 
         extensions = SUPPORTED_LANGUAGES[language]
         for ext in extensions:
@@ -74,7 +74,7 @@ class TestLanguageWiring:
     @pytest.mark.parametrize("language", SUPPORTED_LANGUAGES.keys())
     def test_semantic_all_languages(self, language):
         """Language should be in semantic.py ALL_LANGUAGES."""
-        from tldr.semantic import ALL_LANGUAGES
+        from code_briefcase.semantic import ALL_LANGUAGES
 
         assert language in ALL_LANGUAGES, (
             f"{language} missing from semantic.py ALL_LANGUAGES"
@@ -83,7 +83,7 @@ class TestLanguageWiring:
     @pytest.mark.parametrize("language", SUPPORTED_LANGUAGES.keys())
     def test_scan_project_extensions(self, language):
         """Language should be recognized by scan_project()."""
-        from tldr.cross_file_calls import scan_project
+        from code_briefcase.cross_file_calls import scan_project
         import tempfile
 
         # Create a temp directory with a test file
@@ -104,7 +104,7 @@ class TestLanguageWiring:
     @pytest.mark.parametrize("language", SUPPORTED_LANGUAGES.keys())
     def test_api_get_code_structure(self, language):
         """Language should work with get_code_structure()."""
-        from tldr.api import get_code_structure
+        from code_briefcase.api import get_code_structure
         import tempfile
 
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -123,7 +123,7 @@ class TestLanguageWiring:
     @pytest.mark.parametrize("language", SUPPORTED_LANGUAGES.keys())
     def test_hybrid_extractor_detect_language(self, language):
         """Language should be detected by HybridExtractor._detect_language()."""
-        from tldr.hybrid_extractor import HybridExtractor
+        from code_briefcase.hybrid_extractor import HybridExtractor
         import tempfile
 
         extractor = HybridExtractor()
@@ -156,7 +156,7 @@ class TestCFGExtractors:
     @pytest.mark.parametrize("language", CFG_LANGUAGES)
     def test_cfg_extractor_exists(self, language):
         """CFG extractor function should exist for language."""
-        from tldr import cfg_extractor as cfg_mod
+        from code_briefcase import cfg_extractor as cfg_mod
 
         func_name = f"extract_{language}_cfg"
         assert hasattr(cfg_mod, func_name), (
@@ -167,7 +167,7 @@ class TestCFGExtractors:
     def test_cfg_extractor_in_api_map(self, language):
         """CFG extractor should be in api.py cfg_extractors map."""
         # Read api.py and check the cfg_extractors dict
-        api_path = Path(__file__).parent.parent / "tldr" / "api.py"
+        api_path = Path(__file__).parent.parent / "code_briefcase" / "api.py"
         content = api_path.read_text()
 
         # Look for the language in cfg_extractors
@@ -190,7 +190,7 @@ class TestDFGExtractors:
     @pytest.mark.parametrize("language", DFG_LANGUAGES)
     def test_dfg_extractor_exists(self, language):
         """DFG extractor function should exist for language."""
-        from tldr import dfg_extractor as dfg_mod
+        from code_briefcase import dfg_extractor as dfg_mod
 
         func_name = f"extract_{language}_dfg"
         assert hasattr(dfg_mod, func_name), (
@@ -211,7 +211,7 @@ class TestPDGExtractors:
     @pytest.mark.parametrize("language", PDG_LANGUAGES)
     def test_pdg_extractor_exists(self, language):
         """PDG extractor function should exist for language."""
-        from tldr import pdg_extractor as pdg_mod
+        from code_briefcase import pdg_extractor as pdg_mod
 
         func_name = f"extract_{language}_pdg"
         assert hasattr(pdg_mod, func_name), (
@@ -234,7 +234,7 @@ class TestImportParsers:
     @pytest.mark.parametrize("language,func_name", IMPORT_PARSERS)
     def test_import_parser_exists(self, language, func_name):
         """Import parser function should exist for language."""
-        from tldr import cross_file_calls as cfc_mod
+        from code_briefcase import cross_file_calls as cfc_mod
 
         assert hasattr(cfc_mod, func_name), (
             f"Missing {func_name} in cross_file_calls.py"
@@ -252,7 +252,7 @@ class TestCLIArguments:
 
         # Test that the language is accepted (won't error on invalid choice)
         result = subprocess.run(
-            [sys.executable, "-m", "tldr.cli", "structure", "--help"],
+            [sys.executable, "-m", "code_briefcase.cli", "structure", "--help"],
             capture_output=True,
             text=True
         )
@@ -296,7 +296,7 @@ class TestTreeSitterGrammars:
 
 # Summary of all registration points for documentation
 REGISTRATION_POINTS = """
-When adding a new language to tldr-code, ensure it's registered in:
+When adding a new language to code-briefcase, ensure it's registered in:
 
 1. incremental_parse.py
    - Add to SUPPORTED_LANGUAGES set

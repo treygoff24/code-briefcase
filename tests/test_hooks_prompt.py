@@ -1,5 +1,5 @@
-from tldr.hooks.prompt import check_prompt_for_secrets, build_user_prompt_submit_response
-from tldr.hooks.runtime import parse_hook_event
+from code_briefcase.hooks.prompt import check_prompt_for_secrets, build_user_prompt_submit_response
+from code_briefcase.hooks.runtime import parse_hook_event
 
 
 # --- High-confidence detector tests ---

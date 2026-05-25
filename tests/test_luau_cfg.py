@@ -19,7 +19,7 @@ import pytest
 
 def test_luau_cfg_simple_function():
     """Simple typed function should produce linear CFG with entry/exit."""
-    from tldr.cfg_extractor import extract_luau_cfg
+    from code_briefcase.cfg_extractor import extract_luau_cfg
 
     code = '''
 function add(a: number, b: number): number
@@ -48,7 +48,7 @@ end
 
 def test_luau_cfg_typed_parameters():
     """Type annotations on parameters should be parsed but not affect CFG structure."""
-    from tldr.cfg_extractor import extract_luau_cfg
+    from code_briefcase.cfg_extractor import extract_luau_cfg
 
     code = '''
 function greet(name: string, times: number?): string
@@ -70,7 +70,7 @@ end
 
 def test_luau_cfg_if_statement():
     """If-else should create branch in CFG."""
-    from tldr.cfg_extractor import extract_luau_cfg
+    from code_briefcase.cfg_extractor import extract_luau_cfg
 
     code = '''
 function process(x: number): number
@@ -102,7 +102,7 @@ def test_luau_cfg_continue_statement():
 
     This is LUAU-SPECIFIC - Lua 5.1 does not have continue.
     """
-    from tldr.cfg_extractor import extract_luau_cfg
+    from code_briefcase.cfg_extractor import extract_luau_cfg
 
     code = '''
 function sumOdd(n: number): number
@@ -129,7 +129,7 @@ end
 
 def test_luau_cfg_while_loop():
     """While loop should create loop structure with back edge."""
-    from tldr.cfg_extractor import extract_luau_cfg
+    from code_briefcase.cfg_extractor import extract_luau_cfg
 
     code = '''
 function countdown(n: number): ()
@@ -156,7 +156,7 @@ end
 
 def test_luau_cfg_repeat_until():
     """Repeat-until should execute body before checking condition."""
-    from tldr.cfg_extractor import extract_luau_cfg
+    from code_briefcase.cfg_extractor import extract_luau_cfg
 
     code = '''
 function waitUntilReady(): ()
@@ -182,7 +182,7 @@ def test_luau_cfg_compound_assignment():
 
     This is LUAU-SPECIFIC - Lua 5.1 does not have compound assignment.
     """
-    from tldr.cfg_extractor import extract_luau_cfg
+    from code_briefcase.cfg_extractor import extract_luau_cfg
 
     code = '''
 function accumulate(values: {number}): number
@@ -208,7 +208,7 @@ end
 
 def test_luau_cfg_generic_for():
     """Generic for-in loop should create loop structure."""
-    from tldr.cfg_extractor import extract_luau_cfg
+    from code_briefcase.cfg_extractor import extract_luau_cfg
 
     code = '''
 function printAll(items: {string}): ()
@@ -231,7 +231,7 @@ end
 
 def test_luau_cfg_method_definition():
     """Method with colon syntax should be found and analyzed."""
-    from tldr.cfg_extractor import extract_luau_cfg
+    from code_briefcase.cfg_extractor import extract_luau_cfg
 
     code = '''
 local Player = {}
@@ -257,7 +257,7 @@ end
 
 def test_luau_cfg_nested_control():
     """Nested if statements should accumulate complexity."""
-    from tldr.cfg_extractor import extract_luau_cfg
+    from code_briefcase.cfg_extractor import extract_luau_cfg
 
     code = '''
 function classify(x: number): string
@@ -286,7 +286,7 @@ end
 
 def test_luau_cfg_function_not_found():
     """Should raise ValueError when function not found."""
-    from tldr.cfg_extractor import extract_luau_cfg
+    from code_briefcase.cfg_extractor import extract_luau_cfg
 
     code = '''
 function exists(): ()
@@ -305,7 +305,7 @@ def test_luau_cfg_generic_function():
 
     This is LUAU-SPECIFIC - Lua does not have generics.
     """
-    from tldr.cfg_extractor import extract_luau_cfg
+    from code_briefcase.cfg_extractor import extract_luau_cfg
 
     code = '''
 function identity<T>(value: T): T

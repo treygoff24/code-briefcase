@@ -295,6 +295,102 @@ wheels = [
 ]
 
 [[package]]
+name = "code-briefcase"
+version = "0.1.0"
+source = { editable = "." }
+dependencies = [
+    { name = "anthropic" },
+    { name = "faiss-cpu" },
+    { name = "mcp" },
+    { name = "pathspec" },
+    { name = "pygments-tldr" },
+    { name = "requests" },
+    { name = "rich" },
+    { name = "sentence-transformers" },
+    { name = "tiktoken" },
+    { name = "tree-sitter" },
+    { name = "tree-sitter-c" },
+    { name = "tree-sitter-c-sharp" },
+    { name = "tree-sitter-cpp" },
+    { name = "tree-sitter-elixir" },
+    { name = "tree-sitter-go" },
+    { name = "tree-sitter-java" },
+    { name = "tree-sitter-javascript" },
+    { name = "tree-sitter-kotlin" },
+    { name = "tree-sitter-lua" },
+    { name = "tree-sitter-luau" },
+    { name = "tree-sitter-php" },
+    { name = "tree-sitter-python" },
+    { name = "tree-sitter-ruby" },
+    { name = "tree-sitter-rust" },
+    { name = "tree-sitter-scala" },
+    { name = "tree-sitter-typescript" },
+]
+
+[package.optional-dependencies]
+ai = [
+    { name = "anthropic" },
+    { name = "openai" },
+]
+cli = [
+    { name = "rich" },
+    { name = "shtab" },
+]
+dev = [
+    { name = "black" },
+    { name = "flake8" },
+    { name = "mypy" },
+    { name = "pytest" },
+    { name = "pytest-cov" },
+    { name = "rich" },
+    { name = "ruff" },
+    { name = "shtab" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "anthropic", specifier = ">=0.75.0" },
+    { name = "anthropic", marker = "extra == 'ai'", specifier = ">=0.3.0" },
+    { name = "black", marker = "extra == 'dev'", specifier = ">=21.0" },
+    { name = "faiss-cpu", specifier = ">=1.13.2" },
+    { name = "flake8", marker = "extra == 'dev'", specifier = ">=3.8" },
+    { name = "mcp", specifier = ">=1.0.0" },
+    { name = "mypy", marker = "extra == 'dev'", specifier = ">=0.900" },
+    { name = "openai", marker = "extra == 'ai'", specifier = ">=1.0.0" },
+    { name = "pathspec", specifier = ">=0.12.0" },
+    { name = "pygments-tldr", specifier = ">=2.19.1.3" },
+    { name = "pytest", marker = "extra == 'dev'", specifier = ">=6.0" },
+    { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=2.0" },
+    { name = "requests", specifier = ">=2.25.0" },
+    { name = "rich", specifier = ">=14.2.0" },
+    { name = "rich", marker = "extra == 'cli'", specifier = ">=13.0" },
+    { name = "rich", marker = "extra == 'dev'", specifier = ">=13.0" },
+    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.15.13" },
+    { name = "sentence-transformers", specifier = ">=5.2.0" },
+    { name = "shtab", marker = "extra == 'cli'", specifier = ">=1.7.0" },
+    { name = "shtab", marker = "extra == 'dev'", specifier = ">=1.7.0" },
+    { name = "tiktoken", specifier = ">=0.12.0" },
+    { name = "tree-sitter", specifier = ">=0.23.0" },
+    { name = "tree-sitter-c", specifier = ">=0.21.0" },
+    { name = "tree-sitter-c-sharp", specifier = ">=0.20.0" },
+    { name = "tree-sitter-cpp", specifier = ">=0.20.0" },
+    { name = "tree-sitter-elixir", specifier = ">=0.3.0" },
+    { name = "tree-sitter-go", specifier = ">=0.23.0" },
+    { name = "tree-sitter-java", specifier = ">=0.23.0" },
+    { name = "tree-sitter-javascript", specifier = ">=0.23.0" },
+    { name = "tree-sitter-kotlin", specifier = ">=1.0.0" },
+    { name = "tree-sitter-lua", specifier = "<=0.4.1" },
+    { name = "tree-sitter-luau" },
+    { name = "tree-sitter-php", specifier = ">=0.20.0" },
+    { name = "tree-sitter-python", specifier = ">=0.23.0" },
+    { name = "tree-sitter-ruby", specifier = ">=0.20.0" },
+    { name = "tree-sitter-rust", specifier = ">=0.23.0" },
+    { name = "tree-sitter-scala", specifier = ">=0.23.0" },
+    { name = "tree-sitter-typescript", specifier = ">=0.23.0" },
+]
+provides-extras = ["ai", "cli", "dev"]
+
+[[package]]
 name = "colorama"
 version = "0.4.6"
 source = { registry = "https://pypi.org/simple" }
@@ -890,102 +986,6 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/06/21/1abd972349f83a696ea73159ac964e63e2d14086fdd9bc7ca878c25fced4/librt-0.7.7-cp314-cp314t-win_amd64.whl", hash = "sha256:d6b7d93657332c817b8d674ef6bf1ab7796b4f7ce05e420fd45bd258a72ac804", size = 46765, upload-time = "2026-01-01T23:52:08.647Z" },
     { url = "https://files.pythonhosted.org/packages/51/0e/b756c7708143a63fca65a51ca07990fa647db2cc8fcd65177b9e96680255/librt-0.7.7-cp314-cp314t-win_arm64.whl", hash = "sha256:142c2cd91794b79fd0ce113bd658993b7ede0fe93057668c2f98a45ca00b7e91", size = 39724, upload-time = "2026-01-01T23:52:09.745Z" },
 ]
-
-[[package]]
-name = "llm-tldr"
-version = "1.5.2"
-source = { editable = "." }
-dependencies = [
-    { name = "anthropic" },
-    { name = "faiss-cpu" },
-    { name = "mcp" },
-    { name = "pathspec" },
-    { name = "pygments-tldr" },
-    { name = "requests" },
-    { name = "rich" },
-    { name = "sentence-transformers" },
-    { name = "tiktoken" },
-    { name = "tree-sitter" },
-    { name = "tree-sitter-c" },
-    { name = "tree-sitter-c-sharp" },
-    { name = "tree-sitter-cpp" },
-    { name = "tree-sitter-elixir" },
-    { name = "tree-sitter-go" },
-    { name = "tree-sitter-java" },
-    { name = "tree-sitter-javascript" },
-    { name = "tree-sitter-kotlin" },
-    { name = "tree-sitter-lua" },
-    { name = "tree-sitter-luau" },
-    { name = "tree-sitter-php" },
-    { name = "tree-sitter-python" },
-    { name = "tree-sitter-ruby" },
-    { name = "tree-sitter-rust" },
-    { name = "tree-sitter-scala" },
-    { name = "tree-sitter-typescript" },
-]
-
-[package.optional-dependencies]
-ai = [
-    { name = "anthropic" },
-    { name = "openai" },
-]
-cli = [
-    { name = "rich" },
-    { name = "shtab" },
-]
-dev = [
-    { name = "black" },
-    { name = "flake8" },
-    { name = "mypy" },
-    { name = "pytest" },
-    { name = "pytest-cov" },
-    { name = "rich" },
-    { name = "ruff" },
-    { name = "shtab" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "anthropic", specifier = ">=0.75.0" },
-    { name = "anthropic", marker = "extra == 'ai'", specifier = ">=0.3.0" },
-    { name = "black", marker = "extra == 'dev'", specifier = ">=21.0" },
-    { name = "faiss-cpu", specifier = ">=1.13.2" },
-    { name = "flake8", marker = "extra == 'dev'", specifier = ">=3.8" },
-    { name = "mcp", specifier = ">=1.0.0" },
-    { name = "mypy", marker = "extra == 'dev'", specifier = ">=0.900" },
-    { name = "openai", marker = "extra == 'ai'", specifier = ">=1.0.0" },
-    { name = "pathspec", specifier = ">=0.12.0" },
-    { name = "pygments-tldr", specifier = ">=2.19.1.3" },
-    { name = "pytest", marker = "extra == 'dev'", specifier = ">=6.0" },
-    { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=2.0" },
-    { name = "requests", specifier = ">=2.25.0" },
-    { name = "rich", specifier = ">=14.2.0" },
-    { name = "rich", marker = "extra == 'cli'", specifier = ">=13.0" },
-    { name = "rich", marker = "extra == 'dev'", specifier = ">=13.0" },
-    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.15.13" },
-    { name = "sentence-transformers", specifier = ">=5.2.0" },
-    { name = "shtab", marker = "extra == 'cli'", specifier = ">=1.7.0" },
-    { name = "shtab", marker = "extra == 'dev'", specifier = ">=1.7.0" },
-    { name = "tiktoken", specifier = ">=0.12.0" },
-    { name = "tree-sitter", specifier = ">=0.23.0" },
-    { name = "tree-sitter-c", specifier = ">=0.21.0" },
-    { name = "tree-sitter-c-sharp", specifier = ">=0.20.0" },
-    { name = "tree-sitter-cpp", specifier = ">=0.20.0" },
-    { name = "tree-sitter-elixir", specifier = ">=0.3.0" },
-    { name = "tree-sitter-go", specifier = ">=0.23.0" },
-    { name = "tree-sitter-java", specifier = ">=0.23.0" },
-    { name = "tree-sitter-javascript", specifier = ">=0.23.0" },
-    { name = "tree-sitter-kotlin", specifier = ">=1.0.0" },
-    { name = "tree-sitter-lua", specifier = "<=0.4.1" },
-    { name = "tree-sitter-luau" },
-    { name = "tree-sitter-php", specifier = ">=0.20.0" },
-    { name = "tree-sitter-python", specifier = ">=0.23.0" },
-    { name = "tree-sitter-ruby", specifier = ">=0.20.0" },
-    { name = "tree-sitter-rust", specifier = ">=0.23.0" },
-    { name = "tree-sitter-scala", specifier = ">=0.23.0" },
-    { name = "tree-sitter-typescript", specifier = ">=0.23.0" },
-]
-provides-extras = ["ai", "cli", "dev"]
 
 [[package]]
 name = "markdown-it-py"

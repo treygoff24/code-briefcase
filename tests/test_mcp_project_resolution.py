@@ -3,13 +3,13 @@ import sys
 
 import pytest
 
-from tldr import mcp_server
+from code_briefcase import mcp_server
 
 
 def test_explicit_path_wins(tmp_path, monkeypatch):
     other = tmp_path / "other"
     other.mkdir()
-    monkeypatch.setenv("TLDR_PROJECT", str(other))
+    monkeypatch.setenv("CODE_BRIEFCASE_PROJECT", str(other))
 
     assert mcp_server._resolve_project(str(tmp_path)) == str(tmp_path.resolve())
 
@@ -19,14 +19,14 @@ def test_tldr_project_wins_over_pwd(tmp_path, monkeypatch):
     pwd = tmp_path / "pwd"
     project.mkdir()
     pwd.mkdir()
-    monkeypatch.setenv("TLDR_PROJECT", str(project))
+    monkeypatch.setenv("CODE_BRIEFCASE_PROJECT", str(project))
     monkeypatch.setenv("PWD", str(pwd))
 
     assert mcp_server._resolve_project("auto") == str(project.resolve())
 
 
 def test_missing_env_falls_back_to_cwd(tmp_path, monkeypatch):
-    for key in ("TLDR_PROJECT", "CLAUDE_PROJECT_DIR", "CODEX_PROJECT_DIR", "CODEX_CWD", "PWD"):
+    for key in ("CODE_BRIEFCASE_PROJECT", "CLAUDE_PROJECT_DIR", "CODEX_PROJECT_DIR", "CODEX_CWD", "PWD"):
         monkeypatch.delenv(key, raising=False)
     monkeypatch.chdir(tmp_path)
 
@@ -55,14 +55,14 @@ def test_tool_functions_call_resolve_project(tmp_path, monkeypatch):
 
 def test_project_auto_does_not_set_tldr_project_to_auto(tmp_path, monkeypatch):
     seen = {}
-    monkeypatch.delenv("TLDR_PROJECT", raising=False)
+    monkeypatch.delenv("CODE_BRIEFCASE_PROJECT", raising=False)
     monkeypatch.setattr(mcp_server.mcp, "run", lambda transport: seen.setdefault("ran", transport))
-    monkeypatch.setattr(sys, "argv", ["tldr-mcp", "--project", "auto"])
+    monkeypatch.setattr(sys, "argv", ["code-briefcase-mcp", "--project", "auto"])
     monkeypatch.chdir(tmp_path)
 
     mcp_server.main()
 
-    assert os.environ.get("TLDR_PROJECT") is None
+    assert os.environ.get("CODE_BRIEFCASE_PROJECT") is None
     assert seen["ran"] == "stdio"
 
 

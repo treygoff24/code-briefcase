@@ -1,7 +1,7 @@
-# TLDR: Code Analysis for AI Agents
+# Code Briefcase: Code Analysis for AI Agents
 
-[![PyPI](https://img.shields.io/pypi/v/llm-tldr)](https://pypi.org/project/llm-tldr/)
-[![Python](https://img.shields.io/pypi/pyversions/llm-tldr)](https://pypi.org/project/llm-tldr/)
+[![PyPI](https://img.shields.io/pypi/v/code-briefcase)](https://pypi.org/project/code-briefcase/)
+[![Python](https://img.shields.io/pypi/pyversions/code-briefcase)](https://pypi.org/project/code-briefcase/)
 [![License](https://img.shields.io/badge/license-AGPL--3.0-blue)](LICENSE)
 
 > **Fork status:** This repository is a divergent fork of
@@ -13,45 +13,45 @@
 **Give LLMs exactly the code they need. Nothing more.**
 
 ```bash
-pipx install llm-tldr
+pipx install code-briefcase
 
 # Manual use
-tldr pack "understand auth flow" --project . --budget 3000
-tldr context main --project .
+code-briefcase pack "understand auth flow" --project . --budget 3000
+code-briefcase context main --project .
 
 # Agent integration dry-run (does not mutate global config)
-tldr hooks doctor
-tldr hooks install claude --scope global --dry-run
-tldr hooks install codex --scope global --dry-run
-tldr hooks install droid --scope global --dry-run
-tldr hooks install opencode --scope global --dry-run
+code-briefcase hooks doctor
+code-briefcase hooks install claude --scope global --dry-run
+code-briefcase hooks install codex --scope global --dry-run
+code-briefcase hooks install droid --scope global --dry-run
+code-briefcase hooks install opencode --scope global --dry-run
 ```
 
 Your codebase is 100K lines. Claude's context window is 200K tokens. Raw code won't fit—and even if it did, the LLM would drown in irrelevant details.
 
-TLDR extracts *structure* instead of dumping *text*. The result: **95% fewer tokens** while preserving everything needed to understand and edit code correctly.
+Code Briefcase extracts *structure* instead of dumping *text*. The result: **95% fewer tokens** while preserving everything needed to understand and edit code correctly.
 
 ```bash
-pip install llm-tldr
-tldr warm .                    # Build the call graph cache
-tldr context main --project .  # Get LLM-ready summary
+pip install code-briefcase
+code-briefcase warm .                    # Build the call graph cache
+code-briefcase context main --project .  # Get LLM-ready summary
 ```
 
-Semantic search is opt-in: run `tldr semantic index .` when you want embeddings.
+Semantic search is opt-in: run `code-briefcase semantic index .` when you want embeddings.
 The session-start hook never downloads the semantic model.
 
 ### Agent Hook Integration
 
-TLDR can run as a package-owned hook runtime for Claude Code, Codex, Factory
+Code Briefcase can run as a package-owned hook runtime for Claude Code, Codex, Factory
 Droid, and OpenCode:
 
 ```bash
-tldr pack "fix login bug" --project . --budget 3000
-tldr hooks run pre-read --client claude
-tldr hooks install claude --scope global --dry-run
-tldr hooks install codex --scope global --dry-run
-tldr hooks install droid --scope global --dry-run
-tldr hooks install opencode --scope global --dry-run
+code-briefcase pack "fix login bug" --project . --budget 3000
+code-briefcase hooks run pre-read --client claude
+code-briefcase hooks install claude --scope global --dry-run
+code-briefcase hooks install codex --scope global --dry-run
+code-briefcase hooks install droid --scope global --dry-run
+code-briefcase hooks install opencode --scope global --dry-run
 ```
 
 Claude hooks are the most automatic path because Claude hook JSON supports
@@ -59,7 +59,7 @@ permission decisions, updated tool input, and additional context before reads.
 Codex hooks now cover session start, edit diagnostics, prompt-secret blocking,
 optional permission guards, default non-blocking Bash/shell `pre-tool` file-intent
 context, and no-op lifecycle hooks such as stop/session-end where the client
-requires silence. TLDR hook context supports code, tests, HTML, SQL, YAML/JSON,
+requires silence. Code Briefcase hook context supports code, tests, HTML, SQL, YAML/JSON,
 shell/config files, and common shell command file references. Line-specific
 reads get only a small orientation once per file/session; repeated targeted
 reads stay quiet. Markdown/MDX, secrets, lockfiles, and generated dependency
@@ -73,7 +73,7 @@ runtime is proven; use Cursor rules/MCP context for now.
 
 ## How It Works
 
-TLDR builds 5 analysis layers, each answering different questions:
+Code Briefcase builds 5 analysis layers, each answering different questions:
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -138,7 +138,7 @@ This gets encoded into **1024-dimensional vectors** using `bge-large-en-v1.5`. T
 
 ```bash
 # "validate JWT" finds verify_access_token() even without that exact text
-tldr semantic "validate JWT tokens and check expiration" .
+code-briefcase semantic "validate JWT tokens and check expiration" .
 ```
 
 **Why this works:** Traditional search finds `authentication` in variable names and comments. Semantic search understands that `verify_access_token()` *performs* JWT validation because the call graph and data flow reveal its purpose.
@@ -147,14 +147,14 @@ tldr semantic "validate JWT tokens and check expiration" .
 
 ```bash
 # Build the semantic index (one-time, explicit)
-tldr semantic index /path/to/project
+code-briefcase semantic index /path/to/project
 
 # Search by behavior
-tldr semantic "database connection pooling" .
+code-briefcase semantic "database connection pooling" .
 ```
 
 Embedding dependencies (`sentence-transformers`, `faiss-cpu`) are included with
-`pip install llm-tldr`. The index is cached under `.tldr/cache/semantic/`.
+`pip install code-briefcase`. The index is cached under `.code-briefcase/cache/semantic/`.
 
 ### Keeping the Index Fresh
 
@@ -162,24 +162,24 @@ The daemon tracks dirty files and auto-rebuilds after 20 changes, but you need t
 
 ```bash
 # Notify daemon of a changed file
-tldr daemon notify src/auth.py --project .
+code-briefcase daemon notify src/auth.py --project .
 ```
 
 **Integration options:**
 
 1. **Git hook** (post-commit):
    ```bash
-   git diff --name-only HEAD~1 | xargs -I{} tldr daemon notify {} --project .
+   git diff --name-only HEAD~1 | xargs -I{} code-briefcase daemon notify {} --project .
    ```
 
 2. **Editor hook** (on save):
    ```bash
-   tldr daemon notify "$FILE" --project .
+   code-briefcase daemon notify "$FILE" --project .
    ```
 
 3. **Manual rebuild** (when needed):
    ```bash
-   tldr warm .  # Full rebuild
+   code-briefcase warm .  # Full rebuild
    ```
 
 The daemon auto-rebuilds semantic embeddings in the background once the dirty threshold (default: 20 files) is reached.
@@ -190,31 +190,31 @@ The daemon auto-rebuilds semantic embeddings in the background once the dirty th
 
 ### Before Reading Code
 ```bash
-tldr tree src/                      # See file structure
-tldr structure src/ --lang python   # See functions/classes
+code-briefcase tree src/                      # See file structure
+code-briefcase structure src/ --lang python   # See functions/classes
 ```
 
 ### Before Editing
 ```bash
-tldr extract src/auth.py            # Full file analysis
-tldr context login --project .      # LLM-ready summary (95% savings)
+code-briefcase extract src/auth.py            # Full file analysis
+code-briefcase context login --project .      # LLM-ready summary (95% savings)
 ```
 
 ### Before Refactoring
 ```bash
-tldr impact login .                 # Who calls this? (reverse call graph)
-tldr change-impact                  # Which tests need to run?
+code-briefcase impact login .                 # Who calls this? (reverse call graph)
+code-briefcase change-impact                  # Which tests need to run?
 ```
 
 ### Debugging
 ```bash
-tldr slice src/auth.py login 42     # What affects line 42?
-tldr dfg src/auth.py login          # Trace data flow
+code-briefcase slice src/auth.py login 42     # What affects line 42?
+code-briefcase dfg src/auth.py login          # Trace data flow
 ```
 
 ### Finding Code by Behavior
 ```bash
-tldr semantic "validate JWT tokens" .   # Natural language search
+code-briefcase semantic "validate JWT tokens" .   # Natural language search
 ```
 
 ---
@@ -224,13 +224,13 @@ tldr semantic "validate JWT tokens" .   # Natural language search
 ### 1. Install
 
 ```bash
-pip install llm-tldr
+pip install code-briefcase
 ```
 
 ### 2. Index Your Project
 
 ```bash
-tldr warm /path/to/project
+code-briefcase warm /path/to/project
 ```
 
 This builds all analysis layers and starts the daemon. Takes 30-60 seconds for a typical project, then queries are instant.
@@ -238,9 +238,9 @@ This builds all analysis layers and starts the daemon. Takes 30-60 seconds for a
 ### 3. Start Using
 
 ```bash
-tldr context main --project .   # Get context for a function
-tldr impact helper_func .       # See who calls it
-tldr semantic "error handling"  # Find by behavior
+code-briefcase context main --project .   # Get context for a function
+code-briefcase impact helper_func .       # See who calls it
+code-briefcase semantic "error handling"  # Find by behavior
 ```
 
 ---
@@ -249,14 +249,14 @@ tldr semantic "error handling"  # Find by behavior
 
 **Scenario:** Debug why `user` is null on line 42.
 
-**Without TLDR:**
+**Without Code Briefcase:**
 1. Read the 150-line function
 2. Trace every variable manually
 3. Miss the bug because it's hidden in control flow
 
-**With TLDR:**
+**With Code Briefcase:**
 ```bash
-tldr slice src/auth.py login 42
+code-briefcase slice src/auth.py login 42
 ```
 
 **Output:** Only 6 lines that affect line 42:
@@ -278,48 +278,48 @@ The bug is obvious. Line 28 uses `user` without going through the null check pat
 ### Exploration
 | Command | What It Does |
 |---------|--------------|
-| `tldr tree [path]` | File tree |
-| `tldr structure [path] --lang <lang>` | Functions, classes, methods |
-| `tldr search <pattern> [path]` | Text pattern search |
-| `tldr extract <file>` | Full file analysis |
+| `code-briefcase tree [path]` | File tree |
+| `code-briefcase structure [path] --lang <lang>` | Functions, classes, methods |
+| `code-briefcase search <pattern> [path]` | Text pattern search |
+| `code-briefcase extract <file>` | Full file analysis |
 
 ### Analysis
 | Command | What It Does |
 |---------|--------------|
-| `tldr context <func> --project <path>` | LLM-ready summary (95% savings) |
-| `tldr cfg <file> <function>` | Control flow graph |
-| `tldr dfg <file> <function>` | Data flow graph |
-| `tldr slice <file> <func> <line>` | Program slice |
+| `code-briefcase context <func> --project <path>` | LLM-ready summary (95% savings) |
+| `code-briefcase cfg <file> <function>` | Control flow graph |
+| `code-briefcase dfg <file> <function>` | Data flow graph |
+| `code-briefcase slice <file> <func> <line>` | Program slice |
 
 ### Cross-File
 | Command | What It Does |
 |---------|--------------|
-| `tldr calls [path]` | Build call graph |
-| `tldr impact <func> [path]` | Find all callers (reverse call graph) |
-| `tldr dead [path]` | Find unreachable code |
-| `tldr arch [path]` | Detect architecture layers |
-| `tldr imports <file>` | Parse imports |
-| `tldr importers <module> [path]` | Find files that import a module |
+| `code-briefcase calls [path]` | Build call graph |
+| `code-briefcase impact <func> [path]` | Find all callers (reverse call graph) |
+| `code-briefcase dead [path]` | Find unreachable code |
+| `code-briefcase arch [path]` | Detect architecture layers |
+| `code-briefcase imports <file>` | Parse imports |
+| `code-briefcase importers <module> [path]` | Find files that import a module |
 
 ### Semantic
 | Command | What It Does |
 |---------|--------------|
-| `tldr warm <path>` | Build all indexes (including embeddings) |
-| `tldr semantic <query> [path]` | Natural language code search |
+| `code-briefcase warm <path>` | Build all indexes (including embeddings) |
+| `code-briefcase semantic <query> [path]` | Natural language code search |
 
 ### Diagnostics
 | Command | What It Does |
 |---------|--------------|
-| `tldr diagnostics <file>` | Type check + lint/format diagnostics |
-| `tldr change-impact [files]` | Find tests affected by changes |
-| `tldr doctor` | Check/install diagnostic tools |
+| `code-briefcase diagnostics <file>` | Type check + lint/format diagnostics |
+| `code-briefcase change-impact [files]` | Find tests affected by changes |
+| `code-briefcase doctor` | Check/install diagnostic tools |
 
 ### Daemon
 | Command | What It Does |
 |---------|--------------|
-| `tldr daemon start` | Start background daemon |
-| `tldr daemon stop` | Stop daemon |
-| `tldr daemon status` | Check status |
+| `code-briefcase daemon start` | Start background daemon |
+| `code-briefcase daemon stop` | Stop daemon |
+| `code-briefcase daemon status` | Check status |
 
 ---
 
@@ -329,7 +329,7 @@ Python, TypeScript, JavaScript, Go, Rust, Java, C, C++, Ruby, PHP, C#, Kotlin, S
 
 Diagnostics for TypeScript and JavaScript use `tsc` for type checking plus
 `oxlint` and `oxfmt` for lint/format feedback when those tools are installed.
-Single-file JS/TS diagnostics are project-aware: TLDR extends the nearest
+Single-file JS/TS diagnostics are project-aware: Code Briefcase extends the nearest
 `tsconfig.json`/`jsconfig.json` in an ephemeral one-file config so path aliases
 and JSX settings work without leaking unrelated project-wide errors.
 
@@ -340,14 +340,14 @@ Language is auto-detected or specify with `--lang`.
 ## MCP Integration
 
 For AI tools (Claude Desktop, Claude Code, Codex), MCP exposes explicit manual
-TLDR tool calls. Hooks provide automatic context; MCP is the portable fallback.
+Code Briefcase tool calls. Hooks provide automatic context; MCP is the portable fallback.
 
 **Claude Desktop** - Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
 ```json
 {
   "mcpServers": {
-    "tldr": {
-      "command": "tldr-mcp",
+    "code-briefcase": {
+      "command": "code-briefcase-mcp",
       "args": ["--project", "auto"]
     }
   }
@@ -358,15 +358,15 @@ TLDR tool calls. Hooks provide automatic context; MCP is the portable fallback.
 ```json
 {
   "mcpServers": {
-    "tldr": {
-      "command": "tldr-mcp",
+    "code-briefcase": {
+      "command": "code-briefcase-mcp",
       "args": ["--project", "auto"]
     }
   }
 }
 ```
 
-`--project auto` resolves from `TLDR_PROJECT`, `CLAUDE_PROJECT_DIR`,
+`--project auto` resolves from `CODE_BRIEFCASE_PROJECT`, `CLAUDE_PROJECT_DIR`,
 `CODEX_PROJECT_DIR`, `CODEX_CWD`, `PWD`, then the current directory. Explicit
 tool-level `project` arguments still override the environment.
 
@@ -374,13 +374,13 @@ tool-level `project` arguments still override the environment.
 
 ## Configuration
 
-### `.tldrignore` - Exclude Files
+### `.code-briefcaseignore` - Exclude Files
 
-TLDR respects `.tldrignore` (gitignore syntax) for all commands including `tree`, `structure`, `search`, `calls`, and semantic indexing:
+Code Briefcase respects `.code-briefcaseignore` (gitignore syntax) for all commands including `tree`, `structure`, `search`, `calls`, and semantic indexing:
 
 ```bash
 # Auto-create with sensible defaults
-tldr warm .  # Creates .tldrignore if missing
+code-briefcase warm .  # Creates .code-briefcaseignore if missing
 ```
 
 **Default exclusions:**
@@ -389,7 +389,7 @@ tldr warm .  # Creates .tldrignore if missing
 - Binary files (`*.so`, `*.dll`, `*.whl`)
 - Security files (`.env`, `*.pem`, `*.key`)
 
-**Customize** by editing `.tldrignore`:
+**Customize** by editing `.code-briefcaseignore`:
 ```gitignore
 # Add your patterns
 large_test_fixtures/
@@ -400,15 +400,15 @@ data/*.csv
 **CLI Flags:**
 ```bash
 # Add patterns from command line (can be repeated)
-tldr --ignore "packages/old/" --ignore "*.generated.ts" tree .
+code-briefcase --ignore "packages/old/" --ignore "*.generated.ts" tree .
 
 # Bypass all ignore patterns
-tldr --no-ignore tree .
+code-briefcase --no-ignore tree .
 ```
 
 ### Settings - Daemon Behavior
 
-Create `.tldr/config.json` for daemon settings:
+Create `.code-briefcase/config.json` for daemon settings:
 
 ```json
 {
@@ -439,7 +439,7 @@ For monorepos, create `.claude/workspace.json` to scope indexing:
 
 ## Performance
 
-| Metric | Raw Code | TLDR | Improvement |
+| Metric | Raw Code | Code Briefcase | Improvement |
 |--------|----------|------|-------------|
 | Tokens for function context | 21,000 | 175 | **99% savings** |
 | Tokens for codebase overview | 104,000 | 12,000 | **89% savings** |
@@ -449,7 +449,7 @@ For monorepos, create `.claude/workspace.json` to scope indexing:
 
 ## Outcome telemetry and reports
 
-Enable privacy-safe hook telemetry with `TLDR_TELEMETRY=1`, then backfill sanitized session rollups and render daily outcome reports. See [docs/dev-notes/outcome-telemetry.md](./docs/dev-notes/outcome-telemetry.md) for schema details, confidence labels, and interpretation.
+Enable privacy-safe hook telemetry with `CODE_BRIEFCASE_TELEMETRY=1`, then backfill sanitized session rollups and render daily outcome reports. See [docs/dev-notes/outcome-telemetry.md](./docs/dev-notes/outcome-telemetry.md) for schema details, confidence labels, and interpretation.
 
 ```bash
 # Fixture-safe smoke (no real agent logs required)
@@ -457,13 +457,13 @@ python3 scripts/backfill_tldr_outcomes.py \
   --start 2026-05-20T00:00:00Z --end 2026-05-21T00:00:00Z \
   --codex-root tests/fixtures/eval/backfill_codex_root \
   --claude-root tests/fixtures/eval/backfill_claude_root \
-  --tldr-telemetry tests/fixtures/eval/backfill_tldr_telemetry.jsonl \
-  --json-out /tmp/tldr-backfill-fixture.json
+  --code-briefcase-telemetry tests/fixtures/eval/backfill_tldr_telemetry.jsonl \
+  --json-out /tmp/code-briefcase-backfill-fixture.json
 ```
 
 Generated `reports/*.json`, `reports/*.md`, and `reports/*.html` are local artifacts and are gitignored by default.
 
-For local-only dogfooding where you want richer raw evidence, opt into `TLDR_TELEMETRY_MODE=local-rich` and run backfill with `--include-local-evidence`. This keeps default secret hygiene but includes readable paths and sanitized tool-call evidence in local reports.
+For local-only dogfooding where you want richer raw evidence, opt into `CODE_BRIEFCASE_TELEMETRY_MODE=local-rich` and run backfill with `--include-local-evidence`. This keeps default secret hygiene but includes readable paths and sanitized tool-call evidence in local reports.
 
 ---
 
@@ -471,7 +471,7 @@ For local-only dogfooding where you want richer raw evidence, opt into `TLDR_TEL
 
 For the full architecture explanation, benchmarks, and advanced workflows:
 
-**[Full Documentation](./docs/TLDR.md)**
+**[Full Documentation](./docs/Code Briefcase.md)**
 
 ---
 

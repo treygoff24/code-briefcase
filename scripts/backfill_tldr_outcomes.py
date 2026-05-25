@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Backfill privacy-safe TLDR outcome rollups from Codex/Claude JSONL and telemetry."""
+"""Backfill privacy-safe Code Briefcase outcome rollups from Codex/Claude JSONL and telemetry."""
 
 from __future__ import annotations
 
@@ -36,7 +36,7 @@ from scripts.tldr_outcome_model import (  # noqa: E402
     UserCorrectionEvent,
     VerificationEvent,
 )
-from tldr.telemetry import sanitize_local_evidence  # noqa: E402
+from code_briefcase.telemetry import sanitize_local_evidence  # noqa: E402
 
 CORRECTION_PATTERNS: tuple[tuple[str, str], ...] = (
     (r"you missed", "missed_requirement"),
@@ -641,12 +641,17 @@ def build_backfill_report(
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Backfill TLDR outcome rollups.")
+    parser = argparse.ArgumentParser(description="Backfill Code Briefcase outcome rollups.")
     parser.add_argument("--start", required=True)
     parser.add_argument("--end", required=True)
     parser.add_argument("--codex-root", default="~/.codex")
     parser.add_argument("--claude-root", action="append")
-    parser.add_argument("--tldr-telemetry", default="~/.tldr/telemetry.jsonl")
+    parser.add_argument(
+        "--code-briefcase-telemetry",
+        "--tldr-telemetry",
+        dest="tldr_telemetry",
+        default="~/.code-briefcase/telemetry.jsonl",
+    )
     parser.add_argument("--json-out", required=True)
     parser.add_argument(
         "--include-local-evidence",

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Dogfood TLDR JS/TS diagnostics against synthetic and real repositories.
+"""Dogfood Code Briefcase JS/TS diagnostics against synthetic and real repositories.
 
 The synthetic repo deliberately includes:
 - a TS path alias that only works when tsc runs project-aware
@@ -55,12 +55,12 @@ def run(
 
 
 def run_tldr(args: list[str], *, timeout: int = 180) -> dict[str, Any]:
-    result = run([sys.executable, "-m", "tldr.cli", *args], timeout=timeout)
+    result = run([sys.executable, "-m", "code_briefcase.cli", *args], timeout=timeout)
     try:
         return json.loads(result.stdout)
     except json.JSONDecodeError as exc:
         raise DogfoodFailure(
-            f"TLDR did not emit JSON for args={args}\n"
+            f"Code Briefcase did not emit JSON for args={args}\n"
             f"stdout={result.stdout}\n"
             f"stderr={result.stderr}"
         ) from exc

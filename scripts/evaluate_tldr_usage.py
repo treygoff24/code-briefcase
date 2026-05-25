@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Evaluate TLDR hook efficacy from local Codex/Claude logs and optional telemetry."""
+"""Evaluate Code Briefcase hook efficacy from local Codex/Claude logs and optional telemetry."""
 
 from __future__ import annotations
 
@@ -42,7 +42,7 @@ EXPLORE_PATTERNS = (
 EDIT_PATTERNS = (r"\bapply_patch\b", r"\bwrite\b", r"\bedit\b", r"\bpython\b.*\.py")
 VERIFY_PATTERNS = (r"\bpytest\b", r"\bnpm test\b", r"\bpnpm\b", r"\bruff\b", r"\bmypy\b", r"\bnpm run\b")
 GIT_PATTERNS = (r"\bgit status\b", r"\bgit diff\b", r"\bgit log\b", r"\bgit add\b", r"\bgit commit\b")
-TLDR_PATTERNS = (r"\btldr\b", r"\btldr-mcp\b", r"TLDR", r"hook_success")
+CODE_BRIEFCASE_PATTERNS = (r"\btldr\b", r"\bcode-briefcase-mcp\b", r"Code Briefcase", r"hook_success")
 
 
 @dataclass
@@ -339,9 +339,9 @@ def command_from_arguments(arguments: dict[str, Any]) -> str:
 
 def categorize_command(command: str, tool_name: str | None = None) -> str:
     haystack = f"{tool_name or ''} {command}".lower()
-    for pattern in TLDR_PATTERNS:
+    for pattern in CODE_BRIEFCASE_PATTERNS:
         if re.search(pattern, haystack, re.IGNORECASE):
-            return "tldr"
+            return "code-briefcase"
     for pattern in EDIT_PATTERNS:
         if re.search(pattern, haystack, re.IGNORECASE):
             return "edit"
@@ -411,7 +411,7 @@ def parse_codex_file(path: Path, cohort: str) -> SessionSummary | None:
                 output = str(payload.get("output") or "")
                 if "error" in output.lower() or "failed" in output.lower():
                     rework.failed_commands += 1
-                if "tldr" in output.lower() or "hook" in output.lower():
+                if "code-briefcase" in output.lower() or "hook" in output.lower():
                     tldr_hooks += 1
                 continue
             if payload_type != "function_call":
@@ -795,7 +795,7 @@ def render_markdown(
     has_annotations: bool,
 ) -> str:
     lines = [
-        "# TLDR efficacy report",
+        "# Code Briefcase efficacy report",
         "",
         f"- Baseline window: `{baseline_start.isoformat()}` → `{baseline_end.isoformat()}`",
         f"- Treatment window: `{baseline_end.isoformat()}` → `{treatment_end.isoformat()}`",
@@ -884,11 +884,11 @@ def _top_sessions(sessions: list[SessionSummary]) -> list[str]:
 
 def _telemetry_section(telemetry: list[TelemetryRecord], hit_stats: dict[str, Any]) -> list[str]:
     if not telemetry:
-        return ["## TLDR hook reliability", "", "_No telemetry found (proxy-only from agent logs)._", ""]
+        return ["## Code Briefcase hook reliability", "", "_No telemetry found (proxy-only from agent logs)._", ""]
     durations = [record.duration_ms for record in telemetry]
     statuses = Counter(record.status for record in telemetry)
     lines = [
-        "## TLDR hook reliability",
+        "## Code Briefcase hook reliability",
         "",
         f"- Records: {len(telemetry)}",
         f"- Status counts: {dict(statuses)}",
@@ -909,7 +909,7 @@ def _recommendations(sessions: list[SessionSummary], telemetry: list[TelemetryRe
     if any(session.tools.by_category["explore"] > 20 for session in sessions):
         lines.append("- High explore volume: tighten pre-read bypass rules or increase nav-map budgets.")
     if not telemetry:
-        lines.append("- Enable `TLDR_TELEMETRY=1` during dogfood to unlock hook latency and injection metrics.")
+        lines.append("- Enable `CODE_BRIEFCASE_TELEMETRY=1` during dogfood to unlock hook latency and injection metrics.")
     if not lines[-1].startswith("-"):
         lines.append("- Continue proxy-only monitoring until sample sizes reach 20+ sessions per cohort.")
     lines.append("")
@@ -1036,7 +1036,7 @@ def _safe_rate(hits: int, total: int) -> float | None:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Evaluate TLDR efficacy from local agent logs.")
+    parser = argparse.ArgumentParser(description="Evaluate Code Briefcase efficacy from local agent logs.")
     parser.add_argument("--baseline-start", required=True)
     parser.add_argument("--treatment-start", required=True)
     parser.add_argument("--baseline-end")
@@ -1050,8 +1050,13 @@ def main() -> int:
             "Defaults to ~/.claude, ~/.claude-work, ~/.claude-personal, and ~/.claude-space."
         ),
     )
-    parser.add_argument("--tldr-telemetry", default="~/.tldr/telemetry.jsonl")
-    parser.add_argument("--annotations", default="reports/tldr-efficacy-annotations.jsonl")
+    parser.add_argument(
+        "--code-briefcase-telemetry",
+        "--tldr-telemetry",
+        dest="tldr_telemetry",
+        default="~/.code-briefcase/telemetry.jsonl",
+    )
+    parser.add_argument("--annotations", default="reports/code-briefcase-efficacy-annotations.jsonl")
     parser.add_argument("--out", required=True)
     parser.add_argument("--json-out")
     parser.add_argument("--rollups-json")

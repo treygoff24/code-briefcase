@@ -3,10 +3,10 @@
   "hook_event_name": "PreToolUse",
   "toolName": "Edit",
   "toolInput": {
-    "file_path": "/Users/treygoff/Code/llm-tldr/tldr/hooks/runtime.py",
+    "file_path": "/Users/treygoff/Code/code-briefcase/code_briefcase/hooks/runtime.py",
     "old_str": "foo",
     "new_str": "bar"
   },
   "sessionId": "droid-session-abc",
-  "project_dir": "/Users/treygoff/Code/llm-tldr"
+  "project_dir": "/Users/treygoff/Code/code-briefcase"
 }

@@ -39,7 +39,7 @@ def run(args: list[str], *, input_json: dict[str, Any] | None = None) -> subproc
 
 
 def tldr(args: list[str], *, input_json: dict[str, Any] | None = None) -> str:
-    return run([sys.executable, "-m", "tldr.cli", *args], input_json=input_json).stdout
+    return run([sys.executable, "-m", "code_briefcase.cli", *args], input_json=input_json).stdout
 
 
 def project_daemon_pids(project: Path) -> list[int]:
@@ -53,7 +53,7 @@ def project_daemon_pids(project: Path) -> list[int]:
     )
     pids: list[int] = []
     for line in result.stdout.splitlines():
-        if "tldr.cli daemon start --project" not in line:
+        if "code_briefcase.cli daemon start --project" not in line:
             continue
         if not any(path in line for path in paths):
             continue
@@ -65,7 +65,7 @@ def project_daemon_pids(project: Path) -> list[int]:
 def stop_project_daemon(project: Path) -> None:
     for _ in range(5):
         subprocess.run(
-            [sys.executable, "-m", "tldr.cli", "daemon", "stop", "--project", str(project)],
+            [sys.executable, "-m", "code_briefcase.cli", "daemon", "stop", "--project", str(project)],
             cwd=ROOT,
             capture_output=True,
             text=True,
@@ -108,8 +108,8 @@ def main() -> int:
         Path("~/.claude/settings.json").expanduser(): file_fingerprint(Path("~/.claude/settings.json")),
         Path("~/.codex/hooks.json").expanduser(): file_fingerprint(Path("~/.codex/hooks.json")),
         Path("~/.factory/settings.json").expanduser(): file_fingerprint(Path("~/.factory/settings.json")),
-        Path("~/.config/opencode/plugins/tldr-hooks.js").expanduser(): file_fingerprint(
-            Path("~/.config/opencode/plugins/tldr-hooks.js")
+        Path("~/.config/opencode/plugins/code-briefcase-hooks.js").expanduser(): file_fingerprint(
+            Path("~/.config/opencode/plugins/code-briefcase-hooks.js")
         ),
     }
     summary: dict[str, Any] = {}
@@ -177,7 +177,7 @@ def main() -> int:
                 assert "UserPromptSubmit" in droid_config_payload["hooks"]
                 assert "PreCompact" in droid_config_payload["hooks"]
                 assert "export const TLDRHooks" in opencode_source
-                assert "TLDR_TIMEOUT_MS = 1500" in opencode_source
+                assert "CODE_BRIEFCASE_TIMEOUT_MS = 1500" in opencode_source
                 assert '"permission.asked"' in opencode_source
                 assert '"experimental.session.compacting"' in opencode_source
                 summary["temp_install"] = "ok"

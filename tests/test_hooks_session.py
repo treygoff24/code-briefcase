@@ -1,10 +1,10 @@
-from tldr.hooks.runtime import parse_hook_event
-from tldr.hooks.session import build_session_start_response
+from code_briefcase.hooks.runtime import parse_hook_event
+from code_briefcase.hooks.session import build_session_start_response
 
 
 def test_no_crash_on_empty_project(tmp_path, monkeypatch):
     calls = []
-    monkeypatch.setattr("tldr.hooks.session._spawn", lambda *args, **kwargs: calls.append(args))
+    monkeypatch.setattr("code_briefcase.hooks.session._spawn", lambda *args, **kwargs: calls.append(args))
 
     response = build_session_start_response(parse_hook_event({"cwd": str(tmp_path)}))
 
@@ -14,7 +14,7 @@ def test_no_crash_on_empty_project(tmp_path, monkeypatch):
 
 def test_no_semantic_index_command(tmp_path, monkeypatch):
     commands = []
-    monkeypatch.setattr("tldr.hooks.session._spawn", lambda command, *args, **kwargs: commands.append(command))
+    monkeypatch.setattr("code_briefcase.hooks.session._spawn", lambda command, *args, **kwargs: commands.append(command))
 
     build_session_start_response(parse_hook_event({"cwd": str(tmp_path)}))
 
@@ -23,8 +23,8 @@ def test_no_semantic_index_command(tmp_path, monkeypatch):
 
 def test_large_repo_skips_warm(tmp_path, monkeypatch):
     commands = []
-    monkeypatch.setattr("tldr.hooks.session._spawn", lambda command, *args, **kwargs: commands.append(command))
-    monkeypatch.setattr("tldr.hooks.session.count_source_files", lambda *args, **kwargs: 999)
+    monkeypatch.setattr("code_briefcase.hooks.session._spawn", lambda command, *args, **kwargs: commands.append(command))
+    monkeypatch.setattr("code_briefcase.hooks.session.count_source_files", lambda *args, **kwargs: 999)
 
     response = build_session_start_response(parse_hook_event({"cwd": str(tmp_path)}), max_files=10)
 
@@ -34,8 +34,8 @@ def test_large_repo_skips_warm(tmp_path, monkeypatch):
 
 def test_small_repo_schedules_warm(tmp_path, monkeypatch):
     commands = []
-    monkeypatch.setattr("tldr.hooks.session._spawn", lambda command, *args, **kwargs: commands.append(command))
-    monkeypatch.setattr("tldr.hooks.session.count_source_files", lambda *args, **kwargs: 1)
+    monkeypatch.setattr("code_briefcase.hooks.session._spawn", lambda command, *args, **kwargs: commands.append(command))
+    monkeypatch.setattr("code_briefcase.hooks.session.count_source_files", lambda *args, **kwargs: 1)
 
     build_session_start_response(parse_hook_event({"cwd": str(tmp_path)}))
 

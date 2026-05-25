@@ -3,8 +3,8 @@
   "hook_event_name": "PreToolUse",
   "toolName": "Read",
   "toolInput": {
-    "file_path": "/Users/treygoff/Code/llm-tldr/tldr/hooks/runtime.py"
+    "file_path": "/Users/treygoff/Code/code-briefcase/code_briefcase/hooks/runtime.py"
   },
   "sessionId": "droid-session-abc",
-  "project_dir": "/Users/treygoff/Code/llm-tldr"
+  "project_dir": "/Users/treygoff/Code/code-briefcase"
 }

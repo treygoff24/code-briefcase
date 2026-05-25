@@ -15,7 +15,7 @@ class TestLuauPDGBasic:
 
     def test_luau_pdg_simple_function(self):
         """Should extract PDG for simple typed function."""
-        from tldr.pdg_extractor import extract_luau_pdg
+        from code_briefcase.pdg_extractor import extract_luau_pdg
 
         code = """function simple(x: number): number
     local y = x + 1
@@ -34,7 +34,7 @@ end
 
     def test_luau_pdg_with_continue(self):
         """Should handle continue statement (Luau-specific) in PDG."""
-        from tldr.pdg_extractor import extract_luau_pdg
+        from code_briefcase.pdg_extractor import extract_luau_pdg
 
         code = """function filterOdd(n: number): number
     local sum = 0
@@ -61,7 +61,7 @@ class TestLuauPDGCompoundAssignment:
 
     def test_luau_pdg_compound_assignment_chain(self):
         """Should track data flow through compound assignments."""
-        from tldr.pdg_extractor import extract_luau_pdg
+        from code_briefcase.pdg_extractor import extract_luau_pdg
 
         code = """function accumulate(): number
     local x = 0
@@ -86,7 +86,7 @@ class TestLuauPDGNotFound:
 
     def test_luau_pdg_function_not_found(self):
         """Should return None for non-existent function."""
-        from tldr.pdg_extractor import extract_luau_pdg
+        from code_briefcase.pdg_extractor import extract_luau_pdg
 
         code = """function exists(): ()
 end

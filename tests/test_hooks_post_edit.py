@@ -1,7 +1,7 @@
 from pathlib import Path
 
-from tldr.hooks.post_edit import build_post_edit_response, extract_edited_files
-from tldr.hooks.runtime import parse_hook_event
+from code_briefcase.hooks.post_edit import build_post_edit_response, extract_edited_files
+from code_briefcase.hooks.runtime import parse_hook_event
 
 
 def _event(tmp_path, payload):
@@ -14,10 +14,10 @@ def test_post_edit_skips_excluded_vendor_paths(tmp_path, monkeypatch):
     vendor.parent.mkdir(parents=True)
     vendor.write_text("export const x = 1;\n", encoding="utf-8")
     monkeypatch.setattr(
-        "tldr.hooks.post_edit.get_diagnostics",
+        "code_briefcase.hooks.post_edit.get_diagnostics",
         lambda *a, **k: (_ for _ in ()).throw(AssertionError("should not run")),
     )
-    monkeypatch.setattr("tldr.hooks.post_edit.notify_daemon", lambda *a, **k: None)
+    monkeypatch.setattr("code_briefcase.hooks.post_edit.notify_daemon", lambda *a, **k: None)
 
     response = build_post_edit_response(
         _event(
@@ -34,10 +34,10 @@ def test_clean_diagnostics_emits_confirmation(tmp_path, monkeypatch):
     source = tmp_path / "app.py"
     source.write_text("def main():\n    return 1\n")
     monkeypatch.setattr(
-        "tldr.hooks.post_edit.get_diagnostics",
+        "code_briefcase.hooks.post_edit.get_diagnostics",
         lambda *a, **k: {"diagnostics": [], "error_count": 0, "warning_count": 0},
     )
-    monkeypatch.setattr("tldr.hooks.post_edit.notify_daemon", lambda *a, **k: None)
+    monkeypatch.setattr("code_briefcase.hooks.post_edit.notify_daemon", lambda *a, **k: None)
 
     response = build_post_edit_response(_event(tmp_path, {"toolInput": {"file_path": "app.py"}}))
     assert response.status == "ok"
@@ -68,8 +68,8 @@ def test_diagnostics_count_reports_error_and_warning_totals(tmp_path, monkeypatc
             "warning_count": 0,
         }
 
-    monkeypatch.setattr("tldr.hooks.post_edit.get_diagnostics", fake)
-    monkeypatch.setattr("tldr.hooks.post_edit.notify_daemon", lambda *a, **k: None)
+    monkeypatch.setattr("code_briefcase.hooks.post_edit.get_diagnostics", fake)
+    monkeypatch.setattr("code_briefcase.hooks.post_edit.notify_daemon", lambda *a, **k: None)
 
     response = build_post_edit_response(
         _event(
@@ -99,7 +99,7 @@ def test_error_diagnostics_message_includes_count_and_first_diagnostic(tmp_path,
     source = tmp_path / "app.py"
     source.write_text("def main():\n    return 1\n")
     monkeypatch.setattr(
-        "tldr.hooks.post_edit.get_diagnostics",
+        "code_briefcase.hooks.post_edit.get_diagnostics",
         lambda *a, **k: {
             "diagnostics": [
                 {"file": "app.py", "line": 1, "column": 1, "source": "pyright", "message": "bad"}
@@ -108,7 +108,7 @@ def test_error_diagnostics_message_includes_count_and_first_diagnostic(tmp_path,
             "warning_count": 0,
         },
     )
-    monkeypatch.setattr("tldr.hooks.post_edit.notify_daemon", lambda *a, **k: None)
+    monkeypatch.setattr("code_briefcase.hooks.post_edit.notify_daemon", lambda *a, **k: None)
 
     response = build_post_edit_response(_event(tmp_path, {"toolInput": {"file_path": "app.py"}}))
 
@@ -124,15 +124,15 @@ def test_notify_fallback_marks_dirty_when_daemon_unavailable(tmp_path, monkeypat
     def fail(*args, **kwargs):
         raise FileNotFoundError
 
-    monkeypatch.setattr("tldr.daemon.query_daemon", fail)
+    monkeypatch.setattr("code_briefcase.daemon.query_daemon", fail)
     monkeypatch.setattr(
-        "tldr.hooks.post_edit.get_diagnostics",
+        "code_briefcase.hooks.post_edit.get_diagnostics",
         lambda *a, **k: {"diagnostics": [], "error_count": 0, "warning_count": 0},
     )
 
     build_post_edit_response(_event(tmp_path, {"toolInput": {"file_path": "app.py"}}))
 
-    assert (tmp_path / ".tldr" / "cache" / "dirty.json").exists()
+    assert (tmp_path / ".code-briefcase" / "cache" / "dirty.json").exists()
 
 
 def test_markdown_post_edit_is_unsupported(tmp_path):
@@ -149,10 +149,10 @@ def test_test_file_post_edit_is_eligible(tmp_path, monkeypatch):
     source.parent.mkdir(parents=True)
     source.write_text("def test_main():\n    assert True\n")
     monkeypatch.setattr(
-        "tldr.hooks.post_edit.get_diagnostics",
+        "code_briefcase.hooks.post_edit.get_diagnostics",
         lambda *a, **k: {"diagnostics": [], "error_count": 0, "warning_count": 0},
     )
-    monkeypatch.setattr("tldr.hooks.post_edit.notify_daemon", lambda *a, **k: None)
+    monkeypatch.setattr("code_briefcase.hooks.post_edit.notify_daemon", lambda *a, **k: None)
 
     response = build_post_edit_response(
         _event(tmp_path, {"toolInput": {"file_path": "tests/test_app.py"}})
@@ -166,10 +166,10 @@ def test_external_path_skips_without_crashing(tmp_path, monkeypatch):
     external = tmp_path.parent / "external_post_edit.py"
     external.write_text("def main():\n    return 1\n")
     monkeypatch.setattr(
-        "tldr.hooks.post_edit.get_diagnostics",
+        "code_briefcase.hooks.post_edit.get_diagnostics",
         lambda *a, **k: {"diagnostics": [], "error_count": 0, "warning_count": 0},
     )
-    monkeypatch.setattr("tldr.hooks.post_edit.notify_daemon", lambda *a, **k: None)
+    monkeypatch.setattr("code_briefcase.hooks.post_edit.notify_daemon", lambda *a, **k: None)
 
     response = build_post_edit_response(_event(tmp_path, {"toolInput": {"file_path": str(external)}}))
 
@@ -180,10 +180,10 @@ def test_codex_tool_response_filepath_finds_file(tmp_path, monkeypatch):
     source = tmp_path / "app.py"
     source.write_text("def main():\n    return 1\n")
     monkeypatch.setattr(
-        "tldr.hooks.post_edit.get_diagnostics",
+        "code_briefcase.hooks.post_edit.get_diagnostics",
         lambda *a, **k: {"diagnostics": [], "error_count": 0, "warning_count": 0},
     )
-    monkeypatch.setattr("tldr.hooks.post_edit.notify_daemon", lambda *a, **k: None)
+    monkeypatch.setattr("code_briefcase.hooks.post_edit.notify_daemon", lambda *a, **k: None)
 
     response = build_post_edit_response(_event(tmp_path, {"tool_response": {"filePath": "app.py"}}))
     assert response.noop_reason == "clean_no_diagnostics"
@@ -199,8 +199,8 @@ def test_codex_toolresponse_filepath_finds_file(tmp_path, monkeypatch):
         seen["path"] = Path(path).name
         return {"diagnostics": [], "error_count": 0, "warning_count": 0}
 
-    monkeypatch.setattr("tldr.hooks.post_edit.get_diagnostics", fake)
-    monkeypatch.setattr("tldr.hooks.post_edit.notify_daemon", lambda *a, **k: None)
+    monkeypatch.setattr("code_briefcase.hooks.post_edit.get_diagnostics", fake)
+    monkeypatch.setattr("code_briefcase.hooks.post_edit.notify_daemon", lambda *a, **k: None)
 
     build_post_edit_response(_event(tmp_path, {"toolResponse": {"filePath": "app.py"}}))
 
@@ -222,8 +222,8 @@ def test_codex_apply_patch_command_finds_updated_file(tmp_path, monkeypatch):
             "warning_count": 0,
         }
 
-    monkeypatch.setattr("tldr.hooks.post_edit.get_diagnostics", fake)
-    monkeypatch.setattr("tldr.hooks.post_edit.notify_daemon", lambda *a, **k: None)
+    monkeypatch.setattr("code_briefcase.hooks.post_edit.get_diagnostics", fake)
+    monkeypatch.setattr("code_briefcase.hooks.post_edit.notify_daemon", lambda *a, **k: None)
 
     response = build_post_edit_response(
         _event(
@@ -256,8 +256,8 @@ def test_codex_apply_patch_move_prefers_destination_file(tmp_path, monkeypatch):
             "warning_count": 0,
         }
 
-    monkeypatch.setattr("tldr.hooks.post_edit.get_diagnostics", fake)
-    monkeypatch.setattr("tldr.hooks.post_edit.notify_daemon", lambda *a, **k: None)
+    monkeypatch.setattr("code_briefcase.hooks.post_edit.get_diagnostics", fake)
+    monkeypatch.setattr("code_briefcase.hooks.post_edit.notify_daemon", lambda *a, **k: None)
 
     response = build_post_edit_response(
         _event(
@@ -300,8 +300,8 @@ def test_codex_apply_patch_checks_all_updated_files(tmp_path, monkeypatch):
             }
         return {"diagnostics": [], "error_count": 0, "warning_count": 0}
 
-    monkeypatch.setattr("tldr.hooks.post_edit.get_diagnostics", fake)
-    monkeypatch.setattr("tldr.hooks.post_edit.notify_daemon", lambda *a, **k: None)
+    monkeypatch.setattr("code_briefcase.hooks.post_edit.get_diagnostics", fake)
+    monkeypatch.setattr("code_briefcase.hooks.post_edit.notify_daemon", lambda *a, **k: None)
 
     response = build_post_edit_response(
         _event(
@@ -342,8 +342,8 @@ def test_codex_apply_patch_combines_diagnostics_from_multiple_files(tmp_path, mo
             "warning_count": 0,
         }
 
-    monkeypatch.setattr("tldr.hooks.post_edit.get_diagnostics", fake)
-    monkeypatch.setattr("tldr.hooks.post_edit.notify_daemon", lambda *a, **k: None)
+    monkeypatch.setattr("code_briefcase.hooks.post_edit.get_diagnostics", fake)
+    monkeypatch.setattr("code_briefcase.hooks.post_edit.notify_daemon", lambda *a, **k: None)
 
     response = build_post_edit_response(
         _event(
@@ -368,7 +368,7 @@ def test_codex_apply_patch_combines_diagnostics_from_multiple_files(tmp_path, mo
 
     assert "a.py bad" in response.additional_context
     assert "b.py bad" in response.additional_context
-    assert "\n\nTLDR diagnostics for b.py" in response.additional_context
+    assert "\n\nCode Briefcase diagnostics for b.py" in response.additional_context
 
 
 def test_codex_apply_patch_keeps_missing_paths_when_other_paths_exist(tmp_path):
@@ -400,11 +400,11 @@ def test_clean_confirmation_can_be_disabled_via_env(tmp_path, monkeypatch):
     source = tmp_path / "app.py"
     source.write_text("def main():\n    return 1\n")
     monkeypatch.setattr(
-        "tldr.hooks.post_edit.get_diagnostics",
+        "code_briefcase.hooks.post_edit.get_diagnostics",
         lambda *a, **k: {"diagnostics": [], "error_count": 0, "warning_count": 0},
     )
-    monkeypatch.setattr("tldr.hooks.post_edit.notify_daemon", lambda *a, **k: None)
-    monkeypatch.setenv("TLDR_POST_EDIT_CLEAN_CONFIRM", "0")
+    monkeypatch.setattr("code_briefcase.hooks.post_edit.notify_daemon", lambda *a, **k: None)
+    monkeypatch.setenv("CODE_BRIEFCASE_POST_EDIT_CLEAN_CONFIRM", "0")
 
     response = build_post_edit_response(_event(tmp_path, {"toolInput": {"file_path": "app.py"}}))
 
@@ -417,10 +417,10 @@ def test_clean_confirmation_lists_multiple_files(tmp_path, monkeypatch):
     (tmp_path / "a.py").write_text("def a():\n    return 1\n")
     (tmp_path / "b.py").write_text("def b():\n    return 2\n")
     monkeypatch.setattr(
-        "tldr.hooks.post_edit.get_diagnostics",
+        "code_briefcase.hooks.post_edit.get_diagnostics",
         lambda *a, **k: {"diagnostics": [], "error_count": 0, "warning_count": 0},
     )
-    monkeypatch.setattr("tldr.hooks.post_edit.notify_daemon", lambda *a, **k: None)
+    monkeypatch.setattr("code_briefcase.hooks.post_edit.notify_daemon", lambda *a, **k: None)
 
     response = build_post_edit_response(
         _event(

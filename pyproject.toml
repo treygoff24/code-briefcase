@@ -3,23 +3,21 @@ requires = ["setuptools>=45", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "llm-tldr"
-version = "1.5.2"
-description = "Token-efficient code analysis for LLMs. 5-layer stack: AST, Call Graph, CFG, DFG, PDG. 95% token savings. 17 languages."
+name = "code-briefcase"
+version = "0.1.0"
+description = "Agent context runtime for coding agents: hooks, diagnostics, telemetry, and compact code intelligence."
 readme = "README.md"
 requires-python = ">=3.10"
 license = {text = "AGPL-3.0"}
-authors = [{name = "parcadei"}]
+authors = [{name = "Trey Goff"}]
 maintainers = [{name = "Trey Goff"}]
-keywords = ["code-analysis", "llm", "ai", "tree-sitter", "call-graph", "cfg", "dfg", "pdg", "mcp", "static-analysis"]
+keywords = ["agent-context", "code-analysis", "llm", "ai", "tree-sitter", "hooks", "diagnostics", "mcp", "static-analysis"]
 classifiers = [
-    "Development Status :: 5 - Production/Stable",
+    "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
     "License :: OSI Approved :: GNU Affero General Public License v3",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.8",
-    "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
@@ -78,24 +76,23 @@ dev = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/treygoff24/llm-tldr"
-Repository = "https://github.com/treygoff24/llm-tldr"
-Issues = "https://github.com/treygoff24/llm-tldr/issues"
-Documentation = "https://github.com/treygoff24/llm-tldr#readme"
+Homepage = "https://github.com/treygoff24/code-briefcase"
+Repository = "https://github.com/treygoff24/code-briefcase"
+Issues = "https://github.com/treygoff24/code-briefcase/issues"
+Documentation = "https://github.com/treygoff24/code-briefcase#readme"
 Upstream = "https://github.com/parcadei/llm-tldr"
 
 [project.scripts]
-tldr = "tldr.cli:main"
-llm-tldr = "tldr.cli:main"
-tldr-mcp = "tldr.mcp_server:main"
+code-briefcase = "code_briefcase.cli:main"
+code-briefcase-mcp = "code_briefcase.mcp_server:main"
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["tldr*"]
+include = ["code_briefcase*"]
 exclude = ["tests*"]
 
 [tool.setuptools.package-data]
-tldr = ["py.typed"]
+code_briefcase = ["py.typed"]
 
 [tool.black]
 line-length = 88
@@ -135,4 +132,4 @@ testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
-addopts = "--cov=tldr --cov-report=term-missing --cov-report=html"
+addopts = "--cov=code_briefcase --cov-report=term-missing --cov-report=html"

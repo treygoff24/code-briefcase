@@ -1,5 +1,5 @@
-from tldr.hooks.outcome import classify_from_response, ok
-from tldr.hooks.runtime import HookEvent, HookResponse
+from code_briefcase.hooks.outcome import classify_from_response, ok
+from code_briefcase.hooks.runtime import HookEvent, HookResponse
 
 
 def test_ok_preserves_explicit_empty_surfaced_files():

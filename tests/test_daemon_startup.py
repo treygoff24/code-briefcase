@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from tldr.daemon import startup
+from code_briefcase.daemon import startup
 
 
 class FakePidFile:
@@ -36,12 +36,12 @@ def test_start_daemon_uses_live_socket_as_duplicate_guard(monkeypatch, tmp_path,
     pidfile = FakePidFile()
     monkeypatch.setattr(startup, "_try_acquire_pidfile_lock", lambda _path: pidfile)
     monkeypatch.setattr(startup, "_is_socket_connectable", lambda *_args, **_kwargs: True)
-    monkeypatch.setattr("tldr.tldrignore.ensure_tldrignore", lambda _project: (False, ""))
+    monkeypatch.setattr("code_briefcase.tldrignore.ensure_tldrignore", lambda _project: (False, ""))
 
     def fail_if_constructed(_project: Path) -> None:
         raise AssertionError("daemon should not be constructed when a live socket exists")
 
-    monkeypatch.setattr("tldr.daemon.core.TLDRDaemon", fail_if_constructed)
+    monkeypatch.setattr("code_briefcase.daemon.core.TLDRDaemon", fail_if_constructed)
 
     startup.start_daemon(tmp_path)
 
@@ -64,8 +64,8 @@ def test_unix_parent_does_not_unlock_child_pidfile_after_fork(monkeypatch, tmp_p
     monkeypatch.setattr(startup, "_try_acquire_pidfile_lock", lambda _path: pidfile)
     monkeypatch.setattr(startup, "_is_socket_connectable", lambda *_args, **_kwargs: next(connectable))
     monkeypatch.setattr(startup, "_get_socket_path", lambda _project: socket_path)
-    monkeypatch.setattr("tldr.tldrignore.ensure_tldrignore", lambda _project: (False, ""))
-    monkeypatch.setattr("tldr.daemon.core.TLDRDaemon", FakeDaemon)
+    monkeypatch.setattr("code_briefcase.tldrignore.ensure_tldrignore", lambda _project: (False, ""))
+    monkeypatch.setattr("code_briefcase.daemon.core.TLDRDaemon", FakeDaemon)
     monkeypatch.setattr(startup.os, "fork", lambda: 12345)
     monkeypatch.setattr(startup.time, "sleep", lambda _seconds: None)
     monkeypatch.setattr(startup.fcntl, "flock", lambda _fd, op: flock_calls.append(op))

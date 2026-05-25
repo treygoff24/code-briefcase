@@ -7,22 +7,22 @@ import sys
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
-from tldr.hooks.runner import run_hook
-from tldr.telemetry import record_hook_execution, telemetry_path_hash, write_telemetry_record
+from code_briefcase.hooks.runner import run_hook
+from code_briefcase.telemetry import record_hook_execution, telemetry_path_hash, write_telemetry_record
 
 
 def test_telemetry_disabled_by_default(monkeypatch, tmp_path):
-    monkeypatch.delenv("TLDR_TELEMETRY", raising=False)
-    monkeypatch.setattr("tldr.telemetry.TELEMETRY_ENABLE_FILE", tmp_path / "missing.enabled")
-    monkeypatch.setenv("TLDR_TELEMETRY_PATH", str(tmp_path / "telemetry.jsonl"))
+    monkeypatch.delenv("CODE_BRIEFCASE_TELEMETRY", raising=False)
+    monkeypatch.setattr("code_briefcase.telemetry.TELEMETRY_ENABLE_FILE", tmp_path / "missing.enabled")
+    monkeypatch.setenv("CODE_BRIEFCASE_TELEMETRY_PATH", str(tmp_path / "telemetry.jsonl"))
     write_telemetry_record({"event": "test"})
     assert not (tmp_path / "telemetry.jsonl").exists()
 
 
 def test_telemetry_writes_when_enabled(monkeypatch, tmp_path):
-    monkeypatch.setenv("TLDR_TELEMETRY", "1")
+    monkeypatch.setenv("CODE_BRIEFCASE_TELEMETRY", "1")
     path = tmp_path / "telemetry.jsonl"
-    monkeypatch.setenv("TLDR_TELEMETRY_PATH", str(path))
+    monkeypatch.setenv("CODE_BRIEFCASE_TELEMETRY_PATH", str(path))
     record_hook_execution(
         client="codex",
         hook_event="session-start",
@@ -40,9 +40,9 @@ def test_telemetry_writes_when_enabled(monkeypatch, tmp_path):
 
 
 def test_telemetry_can_be_enabled_by_global_flag_file(monkeypatch, tmp_path):
-    monkeypatch.delenv("TLDR_TELEMETRY", raising=False)
-    monkeypatch.setattr("tldr.telemetry.TELEMETRY_ENABLE_FILE", tmp_path / "telemetry.enabled")
-    monkeypatch.setenv("TLDR_TELEMETRY_PATH", str(tmp_path / "telemetry.jsonl"))
+    monkeypatch.delenv("CODE_BRIEFCASE_TELEMETRY", raising=False)
+    monkeypatch.setattr("code_briefcase.telemetry.TELEMETRY_ENABLE_FILE", tmp_path / "telemetry.enabled")
+    monkeypatch.setenv("CODE_BRIEFCASE_TELEMETRY_PATH", str(tmp_path / "telemetry.jsonl"))
     (tmp_path / "telemetry.enabled").write_text("1\n", encoding="utf-8")
 
     write_telemetry_record({"event": "test"})
@@ -51,9 +51,9 @@ def test_telemetry_can_be_enabled_by_global_flag_file(monkeypatch, tmp_path):
 
 
 def test_env_can_disable_global_telemetry_flag_file(monkeypatch, tmp_path):
-    monkeypatch.setenv("TLDR_TELEMETRY", "0")
-    monkeypatch.setattr("tldr.telemetry.TELEMETRY_ENABLE_FILE", tmp_path / "telemetry.enabled")
-    monkeypatch.setenv("TLDR_TELEMETRY_PATH", str(tmp_path / "telemetry.jsonl"))
+    monkeypatch.setenv("CODE_BRIEFCASE_TELEMETRY", "0")
+    monkeypatch.setattr("code_briefcase.telemetry.TELEMETRY_ENABLE_FILE", tmp_path / "telemetry.enabled")
+    monkeypatch.setenv("CODE_BRIEFCASE_TELEMETRY_PATH", str(tmp_path / "telemetry.jsonl"))
     (tmp_path / "telemetry.enabled").write_text("1\n", encoding="utf-8")
 
     write_telemetry_record({"event": "test"})
@@ -62,10 +62,10 @@ def test_env_can_disable_global_telemetry_flag_file(monkeypatch, tmp_path):
 
 
 def test_redacted_file_paths_keep_distinct_stable_hashes(monkeypatch, tmp_path):
-    monkeypatch.setenv("TLDR_TELEMETRY", "1")
-    monkeypatch.setenv("TLDR_TELEMETRY_REDACT_PATHS", "1")
+    monkeypatch.setenv("CODE_BRIEFCASE_TELEMETRY", "1")
+    monkeypatch.setenv("CODE_BRIEFCASE_TELEMETRY_REDACT_PATHS", "1")
     telemetry_path = tmp_path / "telemetry.jsonl"
-    monkeypatch.setenv("TLDR_TELEMETRY_PATH", str(telemetry_path))
+    monkeypatch.setenv("CODE_BRIEFCASE_TELEMETRY_PATH", str(telemetry_path))
 
     record_hook_execution(
         client="codex",
@@ -84,8 +84,8 @@ def test_redacted_file_paths_keep_distinct_stable_hashes(monkeypatch, tmp_path):
 
 
 def test_unwritable_telemetry_path_is_swallowed(monkeypatch, tmp_path):
-    monkeypatch.setenv("TLDR_TELEMETRY", "1")
-    monkeypatch.setenv("TLDR_TELEMETRY_PATH", str(tmp_path / "missing" / "nested" / "telemetry.jsonl"))
+    monkeypatch.setenv("CODE_BRIEFCASE_TELEMETRY", "1")
+    monkeypatch.setenv("CODE_BRIEFCASE_TELEMETRY_PATH", str(tmp_path / "missing" / "nested" / "telemetry.jsonl"))
     os.chmod(tmp_path, 0o500)
     try:
         record_hook_execution(
@@ -100,12 +100,12 @@ def test_unwritable_telemetry_path_is_swallowed(monkeypatch, tmp_path):
 
 
 def test_malformed_env_path_is_swallowed(monkeypatch):
-    monkeypatch.setenv("TLDR_TELEMETRY", "1")
+    monkeypatch.setenv("CODE_BRIEFCASE_TELEMETRY", "1")
 
     def broken_path() -> Path:
         raise OSError("invalid telemetry path")
 
-    monkeypatch.setattr("tldr.telemetry.telemetry_path", broken_path)
+    monkeypatch.setattr("code_briefcase.telemetry.telemetry_path", broken_path)
     record_hook_execution(
         client="codex",
         hook_event="session-start",
@@ -116,9 +116,9 @@ def test_malformed_env_path_is_swallowed(monkeypatch):
 
 
 def test_concurrent_hook_writes_produce_parseable_jsonl(monkeypatch, tmp_path):
-    monkeypatch.setenv("TLDR_TELEMETRY", "1")
+    monkeypatch.setenv("CODE_BRIEFCASE_TELEMETRY", "1")
     path = tmp_path / "telemetry.jsonl"
-    monkeypatch.setenv("TLDR_TELEMETRY_PATH", str(path))
+    monkeypatch.setenv("CODE_BRIEFCASE_TELEMETRY_PATH", str(path))
 
     def write_one(index: int) -> None:
         record_hook_execution(
@@ -143,18 +143,18 @@ def test_hook_stdout_unchanged_with_telemetry(monkeypatch, tmp_path):
         "tool_input": {"file_path": "README.md"},
         "cwd": str(tmp_path),
     }
-    monkeypatch.delenv("TLDR_TELEMETRY", raising=False)
+    monkeypatch.delenv("CODE_BRIEFCASE_TELEMETRY", raising=False)
     without = run_hook("pre-read", payload, client="claude")
-    monkeypatch.setenv("TLDR_TELEMETRY", "1")
-    monkeypatch.setenv("TLDR_TELEMETRY_PATH", str(tmp_path / "telemetry.jsonl"))
+    monkeypatch.setenv("CODE_BRIEFCASE_TELEMETRY", "1")
+    monkeypatch.setenv("CODE_BRIEFCASE_TELEMETRY_PATH", str(tmp_path / "telemetry.jsonl"))
     with_enabled = run_hook("pre-read", payload, client="claude")
     assert without == with_enabled
 
 
 def test_statuses_are_distinguishable_in_telemetry(monkeypatch, tmp_path):
-    monkeypatch.setenv("TLDR_TELEMETRY", "1")
+    monkeypatch.setenv("CODE_BRIEFCASE_TELEMETRY", "1")
     path = tmp_path / "telemetry.jsonl"
-    monkeypatch.setenv("TLDR_TELEMETRY_PATH", str(path))
+    monkeypatch.setenv("CODE_BRIEFCASE_TELEMETRY_PATH", str(path))
     source = tmp_path / "app.py"
     source.write_text("def main():\n    return 1\n" + "x = 1\n" * 400)
 
@@ -192,12 +192,12 @@ def test_statuses_are_distinguishable_in_telemetry(monkeypatch, tmp_path):
 
 
 def test_telemetry_redacts_paths_by_default(monkeypatch, tmp_path):
-    monkeypatch.setenv("TLDR_TELEMETRY", "1")
-    monkeypatch.delenv("TLDR_TELEMETRY_REDACT_PATHS", raising=False)
+    monkeypatch.setenv("CODE_BRIEFCASE_TELEMETRY", "1")
+    monkeypatch.delenv("CODE_BRIEFCASE_TELEMETRY_REDACT_PATHS", raising=False)
     project = tmp_path / "secret-repo-name"
     project.mkdir()
     telemetry_path = tmp_path / "telemetry.jsonl"
-    monkeypatch.setenv("TLDR_TELEMETRY_PATH", str(telemetry_path))
+    monkeypatch.setenv("CODE_BRIEFCASE_TELEMETRY_PATH", str(telemetry_path))
 
     record_hook_execution(
         client="codex",
@@ -220,9 +220,9 @@ def test_telemetry_redacts_paths_by_default(monkeypatch, tmp_path):
 
 
 def test_hook_telemetry_records_candidate_lifecycle_without_content(monkeypatch, tmp_path):
-    monkeypatch.setenv("TLDR_TELEMETRY", "1")
+    monkeypatch.setenv("CODE_BRIEFCASE_TELEMETRY", "1")
     telemetry_path = tmp_path / "telemetry.jsonl"
-    monkeypatch.setenv("TLDR_TELEMETRY_PATH", str(telemetry_path))
+    monkeypatch.setenv("CODE_BRIEFCASE_TELEMETRY_PATH", str(telemetry_path))
 
     record_hook_execution(
         client="codex",
@@ -260,10 +260,10 @@ def test_hook_telemetry_records_candidate_lifecycle_without_content(monkeypatch,
 
 
 def test_local_rich_mode_records_raw_local_evidence_with_secret_hygiene(monkeypatch, tmp_path):
-    monkeypatch.setenv("TLDR_TELEMETRY", "1")
-    monkeypatch.setenv("TLDR_TELEMETRY_MODE", "local-rich")
+    monkeypatch.setenv("CODE_BRIEFCASE_TELEMETRY", "1")
+    monkeypatch.setenv("CODE_BRIEFCASE_TELEMETRY_MODE", "local-rich")
     telemetry_path = tmp_path / "telemetry.jsonl"
-    monkeypatch.setenv("TLDR_TELEMETRY_PATH", str(telemetry_path))
+    monkeypatch.setenv("CODE_BRIEFCASE_TELEMETRY_PATH", str(telemetry_path))
     project = tmp_path / "repo"
     project.mkdir()
 
@@ -301,10 +301,10 @@ def test_local_rich_mode_records_raw_local_evidence_with_secret_hygiene(monkeypa
 
 
 def test_local_rich_mode_redacts_secret_like_paths_everywhere(monkeypatch, tmp_path):
-    monkeypatch.setenv("TLDR_TELEMETRY", "1")
-    monkeypatch.setenv("TLDR_TELEMETRY_MODE", "local-rich")
+    monkeypatch.setenv("CODE_BRIEFCASE_TELEMETRY", "1")
+    monkeypatch.setenv("CODE_BRIEFCASE_TELEMETRY_MODE", "local-rich")
     telemetry_path = tmp_path / "telemetry.jsonl"
-    monkeypatch.setenv("TLDR_TELEMETRY_PATH", str(telemetry_path))
+    monkeypatch.setenv("CODE_BRIEFCASE_TELEMETRY_PATH", str(telemetry_path))
 
     record_hook_execution(
         client="codex",
@@ -347,10 +347,10 @@ def test_local_rich_mode_redacts_secret_like_paths_everywhere(monkeypatch, tmp_p
 
 
 def test_runner_passes_tool_input_to_local_rich_telemetry(monkeypatch, tmp_path):
-    monkeypatch.setenv("TLDR_TELEMETRY", "1")
-    monkeypatch.setenv("TLDR_TELEMETRY_MODE", "local-rich")
+    monkeypatch.setenv("CODE_BRIEFCASE_TELEMETRY", "1")
+    monkeypatch.setenv("CODE_BRIEFCASE_TELEMETRY_MODE", "local-rich")
     telemetry_path = tmp_path / "telemetry.jsonl"
-    monkeypatch.setenv("TLDR_TELEMETRY_PATH", str(telemetry_path))
+    monkeypatch.setenv("CODE_BRIEFCASE_TELEMETRY_PATH", str(telemetry_path))
     (tmp_path / "README.md").write_text("# hello\n", encoding="utf-8")
 
     run_hook(
@@ -370,9 +370,9 @@ def test_runner_passes_tool_input_to_local_rich_telemetry(monkeypatch, tmp_path)
 
 
 def test_cli_hook_emits_telemetry(monkeypatch, tmp_path):
-    monkeypatch.setenv("TLDR_TELEMETRY", "1")
+    monkeypatch.setenv("CODE_BRIEFCASE_TELEMETRY", "1")
     telemetry_path = tmp_path / "telemetry.jsonl"
-    monkeypatch.setenv("TLDR_TELEMETRY_PATH", str(telemetry_path))
+    monkeypatch.setenv("CODE_BRIEFCASE_TELEMETRY_PATH", str(telemetry_path))
     (tmp_path / "README.md").write_text("# hello\n", encoding="utf-8")
     payload = {
         "hook_event_name": "PreToolUse",
@@ -381,7 +381,7 @@ def test_cli_hook_emits_telemetry(monkeypatch, tmp_path):
         "cwd": str(tmp_path),
     }
     result = subprocess.run(
-        [sys.executable, "-m", "tldr.cli", "hooks", "run", "pre-read", "--client", "codex"],
+        [sys.executable, "-m", "code_briefcase.cli", "hooks", "run", "pre-read", "--client", "codex"],
         input=json.dumps(payload),
         capture_output=True,
         text=True,

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from tldr.hooks.runtime import parse_hook_event
-from tldr.hooks.tool import build_pre_tool_response, extract_shell_file_candidates
+from code_briefcase.hooks.runtime import parse_hook_event
+from code_briefcase.hooks.tool import build_pre_tool_response, extract_shell_file_candidates
 
 
 def make_event(tmp_path, tool_name: str, tool_input: dict):

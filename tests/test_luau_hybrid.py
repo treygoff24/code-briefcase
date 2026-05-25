@@ -18,7 +18,7 @@ All tests should FAIL initially because:
 from pathlib import Path
 
 import pytest
-from tldr.hybrid_extractor import HybridExtractor
+from code_briefcase.hybrid_extractor import HybridExtractor
 
 
 class TestLuauFileExtensionRecognition:

@@ -2,5 +2,5 @@
   "event": "SessionStart",
   "hook_event_name": "SessionStart",
   "session_id": "codex-session-123",
-  "cwd": "/Users/treygoff/Code/llm-tldr"
+  "cwd": "/Users/treygoff/Code/code-briefcase"
 }

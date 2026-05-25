@@ -11,7 +11,7 @@ def test_extract_accepts_format_json(tmp_path):
         [
             sys.executable,
             "-m",
-            "tldr.cli",
+            "code_briefcase.cli",
             "extract",
             str(source),
             "--format",

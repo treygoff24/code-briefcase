@@ -3,8 +3,8 @@ import sys
 from pathlib import Path
 import pytest
 
-from tldr.hooks.runtime import HookResponse, parse_hook_event, render_hook_response
-from tldr.hooks.session import build_session_start_response
+from code_briefcase.hooks.runtime import HookResponse, parse_hook_event, render_hook_response
+from code_briefcase.hooks.session import build_session_start_response
 
 
 def test_parse_claude_tool_event(tmp_path):
@@ -90,14 +90,14 @@ def test_render_codex_post_tool_response_uses_supported_context_shape():
 
 def test_render_codex_session_start_message_uses_hook_specific_context():
     rendered = render_hook_response(
-        HookResponse(message="TLDR session hook: daemon start requested", suppress_output=True),
+        HookResponse(message="Code Briefcase session hook: daemon start requested", suppress_output=True),
         client="codex",
         event_name="SessionStart",
     )
 
     assert rendered["hookSpecificOutput"] == {
         "hookEventName": "SessionStart",
-        "additionalContext": "TLDR session hook: daemon start requested",
+        "additionalContext": "Code Briefcase session hook: daemon start requested",
     }
     assert "continue" not in rendered
     assert "suppressOutput" not in rendered
@@ -229,7 +229,7 @@ def test_session_start_noop_can_render_for_missing_project(tmp_path):
             "client": "droid",
             "event_name": "PreToolUse",
             "tool_name": "Read",
-            "tool_input": {"file_path": "/Users/treygoff/Code/llm-tldr/tldr/hooks/runtime.py"},
+            "tool_input": {"file_path": "/Users/treygoff/Code/code-briefcase/code_briefcase/hooks/runtime.py"},
             "tool_result": {},
             "session_id": "droid-session-abc",
         },
@@ -241,7 +241,7 @@ def test_session_start_noop_can_render_for_missing_project(tmp_path):
             "client": "droid",
             "event_name": "PreToolUse",
             "tool_name": "Edit",
-            "tool_input": {"file_path": "/Users/treygoff/Code/llm-tldr/tldr/hooks/runtime.py", "old_str": "foo", "new_str": "bar"},
+            "tool_input": {"file_path": "/Users/treygoff/Code/code-briefcase/code_briefcase/hooks/runtime.py", "old_str": "foo", "new_str": "bar"},
             "tool_result": {},
             "session_id": "droid-session-abc",
         },
@@ -253,7 +253,7 @@ def test_session_start_noop_can_render_for_missing_project(tmp_path):
             "client": "droid",
             "event_name": "PreToolUse",
             "tool_name": "Create",
-            "tool_input": {"file_path": "/Users/treygoff/Code/llm-tldr/tldr/hooks/new_file.py", "content": "print('hello')"},
+            "tool_input": {"file_path": "/Users/treygoff/Code/code-briefcase/code_briefcase/hooks/new_file.py", "content": "print('hello')"},
             "tool_result": {},
             "session_id": "droid-session-abc",
         },
@@ -289,7 +289,7 @@ def test_session_start_noop_can_render_for_missing_project(tmp_path):
             "client": "droid",
             "event_name": "PostToolUse",
             "tool_name": "Create",
-            "tool_input": {"file_path": "/Users/treygoff/Code/llm-tldr/tldr/hooks/new_file.py", "content": "print('hello')"},
+            "tool_input": {"file_path": "/Users/treygoff/Code/code-briefcase/code_briefcase/hooks/new_file.py", "content": "print('hello')"},
             "tool_result": {"status": "success"},
             "session_id": "droid-session-abc",
         },
@@ -540,8 +540,8 @@ def test_droid_stop_loop_prevention_payload(monkeypatch):
 
 
 def test_droid_stop_loop_prevention_env_var(monkeypatch):
-    """Stop/SubagentStop with TLDR_STOP_HOOK_ACTIVE env var must emit {} and never return decision=block."""
-    monkeypatch.setenv("TLDR_STOP_HOOK_ACTIVE", "1")
+    """Stop/SubagentStop with CODE_BRIEFCASE_STOP_HOOK_ACTIVE env var must emit {} and never return decision=block."""
+    monkeypatch.setenv("CODE_BRIEFCASE_STOP_HOOK_ACTIVE", "1")
     response = HookResponse(additional_context="should be ignored")
     rendered = render_hook_response(response, client="droid", event_name="Stop")
     assert rendered == {}
@@ -550,7 +550,7 @@ def test_droid_stop_loop_prevention_env_var(monkeypatch):
 
 def test_runner_exit_behavior_noop(monkeypatch, capsys):
     import io
-    from tldr.hooks.runner import run_hook_from_stdin
+    from code_briefcase.hooks.runner import run_hook_from_stdin
     monkeypatch.setattr(sys, "stdin", io.StringIO("{}"))
     exit_code = run_hook_from_stdin("SessionStart", client="codex")
     assert exit_code == 0
@@ -561,8 +561,8 @@ def test_runner_exit_behavior_noop(monkeypatch, capsys):
 def test_runner_exit_behavior_fallback_blocking(monkeypatch, capsys):
     """Generic client returns exit 2 for blocking decisions where JSON control is not available."""
     import io
-    from tldr.hooks import runner
-    from tldr.hooks.outcome import HookExecutionResult
+    from code_briefcase.hooks import runner
+    from code_briefcase.hooks.outcome import HookExecutionResult
 
     res = HookExecutionResult(
         status="ok",
@@ -679,7 +679,7 @@ class TestDroidSubagentStopLoopPrevention:
         assert rendered == {}
 
     def test_droid_subagent_stop_loop_prevention_env_var(self, monkeypatch):
-        monkeypatch.setenv("TLDR_STOP_HOOK_ACTIVE", "1")
+        monkeypatch.setenv("CODE_BRIEFCASE_STOP_HOOK_ACTIVE", "1")
         response = HookResponse(additional_context="should be ignored")
         rendered = render_hook_response(response, client="droid", event_name="SubagentStop")
         assert rendered == {}
@@ -725,7 +725,7 @@ class TestFactoryRendering:
 class TestRunnerDispatchNewEvents:
     def test_user_prompt_submit_dispatch(self, monkeypatch, capsys):
         import io
-        from tldr.hooks.runner import run_hook_from_stdin
+        from code_briefcase.hooks.runner import run_hook_from_stdin
         # Clean prompt, should noop
         payload = json.dumps({"hook_event_name": "UserPromptSubmit", "prompt": "Hello world", "cwd": "/tmp"})
         monkeypatch.setattr(sys, "stdin", io.StringIO(payload))
@@ -736,7 +736,7 @@ class TestRunnerDispatchNewEvents:
 
     def test_permission_request_dispatch_blocks_destructive(self, monkeypatch, capsys):
         import io
-        from tldr.hooks.runner import run_hook_from_stdin
+        from code_briefcase.hooks.runner import run_hook_from_stdin
         payload = json.dumps({
             "hook_event_name": "PermissionRequest",
             "tool_name": "Bash",
@@ -749,7 +749,7 @@ class TestRunnerDispatchNewEvents:
 
     def test_stop_dispatch_noop(self, monkeypatch, capsys):
         import io
-        from tldr.hooks.runner import run_hook_from_stdin
+        from code_briefcase.hooks.runner import run_hook_from_stdin
         payload = json.dumps({"hook_event_name": "Stop", "cwd": "/tmp"})
         monkeypatch.setattr(sys, "stdin", io.StringIO(payload))
         exit_code = run_hook_from_stdin("stop", client="codex")
@@ -759,7 +759,7 @@ class TestRunnerDispatchNewEvents:
 
     def test_session_end_dispatch_noop(self, monkeypatch, capsys):
         import io
-        from tldr.hooks.runner import run_hook_from_stdin
+        from code_briefcase.hooks.runner import run_hook_from_stdin
         payload = json.dumps({"hook_event_name": "SessionEnd", "cwd": "/tmp"})
         monkeypatch.setattr(sys, "stdin", io.StringIO(payload))
         exit_code = run_hook_from_stdin("session-end", client="droid")
@@ -767,7 +767,7 @@ class TestRunnerDispatchNewEvents:
 
     def test_notification_dispatch_noop(self, monkeypatch, capsys):
         import io
-        from tldr.hooks.runner import run_hook_from_stdin
+        from code_briefcase.hooks.runner import run_hook_from_stdin
         payload = json.dumps({"hook_event_name": "Notification", "cwd": "/tmp"})
         monkeypatch.setattr(sys, "stdin", io.StringIO(payload))
         exit_code = run_hook_from_stdin("notification", client="droid")
@@ -775,7 +775,7 @@ class TestRunnerDispatchNewEvents:
 
     def test_pre_compact_dispatch_adds_context(self, monkeypatch, capsys, tmp_path):
         import io
-        from tldr.hooks.runner import run_hook_from_stdin
+        from code_briefcase.hooks.runner import run_hook_from_stdin
         (tmp_path / "app.py").write_text("def main():\n    return 1\n")
         payload = json.dumps({"hook_event_name": "PreCompact", "cwd": str(tmp_path)})
         monkeypatch.setattr(sys, "stdin", io.StringIO(payload))
@@ -784,48 +784,48 @@ class TestRunnerDispatchNewEvents:
         captured = capsys.readouterr()
         rendered = json.loads(captured.out)
         assert rendered["hookSpecificOutput"]["hookEventName"] == "PreCompact"
-        assert "TLDR compact context" in rendered["hookSpecificOutput"]["additionalContext"]
+        assert "Code Briefcase compact context" in rendered["hookSpecificOutput"]["additionalContext"]
 
 
 # --- Phase 1: Event alias tests ---
 
 class TestEventAliases:
     def test_user_prompt_submit_alias(self):
-        from tldr.hooks.runtime import canonical_event_name
+        from code_briefcase.hooks.runtime import canonical_event_name
         assert canonical_event_name("user-prompt-submit") == "UserPromptSubmit"
         assert canonical_event_name("UserPromptSubmit") == "UserPromptSubmit"
 
     def test_permission_request_alias(self):
-        from tldr.hooks.runtime import canonical_event_name
+        from code_briefcase.hooks.runtime import canonical_event_name
         assert canonical_event_name("permission-request") == "PermissionRequest"
 
     def test_pre_tool_alias(self):
-        from tldr.hooks.runtime import canonical_event_name
+        from code_briefcase.hooks.runtime import canonical_event_name
         assert canonical_event_name("pre-tool") == "PreToolUse"
 
     def test_post_tool_alias(self):
-        from tldr.hooks.runtime import canonical_event_name
+        from code_briefcase.hooks.runtime import canonical_event_name
         assert canonical_event_name("post-tool") == "PostToolUse"
 
     def test_session_end_alias(self):
-        from tldr.hooks.runtime import canonical_event_name
+        from code_briefcase.hooks.runtime import canonical_event_name
         assert canonical_event_name("session-end") == "SessionEnd"
         assert canonical_event_name("SessionEnd") == "SessionEnd"
 
     def test_notification_alias(self):
-        from tldr.hooks.runtime import canonical_event_name
+        from code_briefcase.hooks.runtime import canonical_event_name
         assert canonical_event_name("notification") == "Notification"
 
     def test_subagent_start_alias(self):
-        from tldr.hooks.runtime import canonical_event_name
+        from code_briefcase.hooks.runtime import canonical_event_name
         assert canonical_event_name("subagent-start") == "SubagentStart"
 
     def test_subagent_stop_alias(self):
-        from tldr.hooks.runtime import canonical_event_name
+        from code_briefcase.hooks.runtime import canonical_event_name
         assert canonical_event_name("subagent-stop") == "SubagentStop"
 
     def test_pre_compact_alias(self):
-        from tldr.hooks.runtime import canonical_event_name
+        from code_briefcase.hooks.runtime import canonical_event_name
         assert canonical_event_name("pre-compact") == "PreCompact"
         assert canonical_event_name("PreCompact") == "PreCompact"
 

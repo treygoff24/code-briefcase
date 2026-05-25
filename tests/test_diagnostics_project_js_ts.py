@@ -1,6 +1,6 @@
 import json
 
-from tldr import diagnostics as diag
+from code_briefcase import diagnostics as diag
 
 
 def test_project_typescript_runs_oxlint_and_oxfmt(tmp_path, monkeypatch, make_executable):

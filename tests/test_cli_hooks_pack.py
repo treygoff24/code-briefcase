@@ -5,7 +5,7 @@ import sys
 
 def run_cli(args, input_text=""):
     return subprocess.run(
-        [sys.executable, "-m", "tldr.cli", *args],
+        [sys.executable, "-m", "code_briefcase.cli", *args],
         input=input_text,
         capture_output=True,
         text=True,

@@ -3,12 +3,12 @@ import os
 
 import pytest
 
-from tldr.hook_installer import default_config_path, install_hooks
+from code_briefcase.hook_installer import default_config_path, install_hooks
 
 
 @pytest.fixture
 def fake_tldr(tmp_path):
-    executable = tmp_path / "bin" / "tldr"
+    executable = tmp_path / "bin" / "code-briefcase"
     executable.parent.mkdir()
     executable.write_text(
         "#!/bin/sh\n"
@@ -239,7 +239,7 @@ def test_claude_space_installer_replaces_legacy_hooks_with_current_claude_runtim
     assert "hooks run pre-edit --client claude" in serialized
     assert "hooks run post-edit --client claude" in serialized
     assert "--client claude-space" not in serialized
-    assert "TLDR_TELEMETRY=1 TLDR_TELEMETRY_REDACT_PATHS=1" in serialized
+    assert "CODE_BRIEFCASE_TELEMETRY=1 CODE_BRIEFCASE_TELEMETRY_REDACT_PATHS=1" in serialized
     assert "rtk hook claude" in serialized
     assert "node pre-compact.mjs" in serialized
 
@@ -263,7 +263,7 @@ def test_existing_legacy_read_hook_is_replaced(tmp_path, fake_tldr):
 
     result = install_hooks("claude", config_path=str(config), dry_run=True, tldr_path=str(fake_tldr))
 
-    assert any("legacy TLDR hook" in action for action in result.actions)
+    assert any("legacy Code Briefcase hook" in action for action in result.actions)
     assert "tldr-read.mjs" not in json.dumps(result.config)
 
 
@@ -302,7 +302,7 @@ def test_unrelated_settings_keys_remain_unchanged(tmp_path, fake_tldr):
 
 def test_installed_hook_commands_use_absolute_paths(tmp_path):
     config = tmp_path / "hooks.json"
-    fake = tmp_path / "bin" / "tldr"
+    fake = tmp_path / "bin" / "code-briefcase"
     fake.parent.mkdir()
     fake.write_text(
         "#!/bin/sh\n"
@@ -321,12 +321,12 @@ def test_installed_hook_commands_use_absolute_paths(tmp_path):
 
 def test_installer_rejects_tldr_without_hooks(tmp_path):
     config = tmp_path / "hooks.json"
-    fake = tmp_path / "bin" / "tldr"
+    fake = tmp_path / "bin" / "code-briefcase"
     fake.parent.mkdir()
     fake.write_text("#!/bin/sh\nexit 2\n")
     fake.chmod(0o755)
 
-    with pytest.raises(RuntimeError, match="does not support 'tldr hooks'"):
+    with pytest.raises(RuntimeError, match="does not support 'code-briefcase hooks'"):
         install_hooks("codex", config_path=str(config), tldr_path=str(fake))
 
     assert not config.exists()
@@ -340,7 +340,7 @@ def test_installer_prefers_current_python_module_over_stale_path_tldr(tmp_path, 
     python = bin_dir / "python"
     python.write_text(
         "#!/bin/sh\n"
-        "if [ \"$1\" = \"-m\" ] && [ \"$2\" = \"tldr.cli\" ] && [ \"$3\" = \"hooks\" ]; then\n"
+        "if [ \"$1\" = \"-m\" ] && [ \"$2\" = \"code_briefcase.cli\" ] && [ \"$3\" = \"hooks\" ]; then\n"
         "  exit 0\n"
         "fi\n"
         "exit 2\n"
@@ -351,13 +351,13 @@ def test_installer_prefers_current_python_module_over_stale_path_tldr(tmp_path, 
     stale_global.write_text("#!/bin/sh\nexit 2\n")
     stale_global.chmod(0o755)
 
-    monkeypatch.setattr("tldr.hook_installer.sys.executable", str(python))
-    monkeypatch.setattr("tldr.hook_installer.shutil.which", lambda name: str(stale_global) if name == "tldr" else None)
+    monkeypatch.setattr("code_briefcase.hook_installer.sys.executable", str(python))
+    monkeypatch.setattr("code_briefcase.hook_installer.shutil.which", lambda name: str(stale_global) if name == "code-briefcase" else None)
 
     result = install_hooks("codex", config_path=str(config))
     payload = json.dumps(result.config)
 
-    assert f"{python} -m tldr.cli hooks run" in payload
+    assert f"{python} -m code_briefcase.cli hooks run" in payload
     assert str(stale_global) not in payload
 
 
@@ -365,7 +365,7 @@ def test_installer_prefers_current_python_module_over_stale_path_tldr(tmp_path, 
 
 
 def test_droid_factory_default_config_path():
-    from tldr.hook_installer import default_config_path
+    from code_briefcase.hook_installer import default_config_path
 
     droid_path = default_config_path("droid")
     factory_path = default_config_path("factory")
@@ -479,7 +479,7 @@ def test_codex_default_install_adds_shell_context_without_permission_guard(tmp_p
 
     assert "PermissionRequest" not in data["hooks"]
     assert any("pre-tool" in json.dumps(g) for g in data["hooks"].get("PreToolUse", []))
-    assert "TLDR shell context" in serialized
+    assert "Code Briefcase shell context" in serialized
 
 
 def test_droid_reinstall_without_optins_removes_owned_optin_hooks(tmp_path, fake_tldr):
@@ -580,8 +580,8 @@ def test_installer_reports_exact_added_removed_actions(tmp_path, fake_tldr):
     actions_text = "\n".join(result.actions)
 
     assert "remove" in actions_text
-    assert "add TLDR hook for SessionStart" in actions_text
-    assert "Other" not in actions_text  # unrelated preserved and not reported as TLDR action
+    assert "add Code Briefcase hook for SessionStart" in actions_text
+    assert "Other" not in actions_text  # unrelated preserved and not reported as Code Briefcase action
 
 
 def test_installer_creates_backup_and_preserves_unrelated(tmp_path, fake_tldr):
@@ -597,26 +597,26 @@ def test_installer_creates_backup_and_preserves_unrelated(tmp_path, fake_tldr):
 
 
 def test_cursor_doctor_reports_experimental_status():
-    from tldr.hook_installer import doctor_report
+    from code_briefcase.hook_installer import doctor_report
 
     # Doctor should report cursor status without requiring a default path
     report = doctor_report(clients=["cursor"])
     info = report["clients"]["cursor"]
     assert info.get("status") == "experimental_unverified"
-    assert info.get("tldr_hooks_present") is False
+    assert info.get("code_briefcase_hooks_present") is False
 
 
 # OpenCode integration tests
 
 
 def test_opencode_default_config_path():
-    from tldr.hook_installer import default_config_path
+    from code_briefcase.hook_installer import default_config_path
     path = default_config_path("opencode")
-    assert str(path).endswith(".config/opencode/plugins/tldr-hooks.js")
+    assert str(path).endswith(".config/opencode/plugins/code-briefcase-hooks.js")
 
 
 def test_opencode_dry_run_does_not_write(tmp_path, fake_tldr):
-    config = tmp_path / "tldr-hooks.js"
+    config = tmp_path / "code-briefcase-hooks.js"
     result = install_hooks("opencode", config_path=str(config), dry_run=True, tldr_path=str(fake_tldr))
     assert result.changed
     assert not config.exists()
@@ -624,7 +624,7 @@ def test_opencode_dry_run_does_not_write(tmp_path, fake_tldr):
 
 
 def test_opencode_install_writes_file_with_absolute_path(tmp_path, fake_tldr):
-    config = tmp_path / "tldr-hooks.js"
+    config = tmp_path / "code-briefcase-hooks.js"
     result = install_hooks("opencode", config_path=str(config), tldr_path=str(fake_tldr))
     assert result.changed
     assert config.exists()
@@ -632,12 +632,12 @@ def test_opencode_install_writes_file_with_absolute_path(tmp_path, fake_tldr):
     content = config.read_text()
     assert "TLDRHooks" in content
     assert str(fake_tldr.resolve()) in content
-    assert 'const TLDR_COMMAND = ["/bin/sh",' in content
-    assert "TLDR_TIMEOUT_MS = 1500" in content
+    assert 'const CODE_BRIEFCASE_COMMAND = ["/bin/sh",' in content
+    assert "CODE_BRIEFCASE_TIMEOUT_MS = 1500" in content
 
 
 def test_opencode_install_existing_unrelated_backups(tmp_path, fake_tldr):
-    config = tmp_path / "tldr-hooks.js"
+    config = tmp_path / "code-briefcase-hooks.js"
     config.write_text("console.log('some existing unrelated plugin content');")
     
     result = install_hooks("opencode", config_path=str(config), tldr_path=str(fake_tldr))
@@ -651,17 +651,17 @@ def test_opencode_install_existing_unrelated_backups(tmp_path, fake_tldr):
 
 
 def test_opencode_doctor_reports_status(tmp_path, fake_tldr):
-    from tldr.hook_installer import doctor_report
-    config = tmp_path / "tldr-hooks.js"
+    from code_briefcase.hook_installer import doctor_report
+    config = tmp_path / "code-briefcase-hooks.js"
     
     # Not present
     report = doctor_report(clients=["opencode"])
     assert report["clients"]["opencode"]["exists"] is False
-    assert report["clients"]["opencode"]["tldr_hooks_present"] is False
+    assert report["clients"]["opencode"]["code_briefcase_hooks_present"] is False
     
-    # Write some placeholder representing TLDR
+    # Write some placeholder representing Code Briefcase
     config.parent.mkdir(parents=True, exist_ok=True)
-    config.write_text("// TLDR_COMMAND is present")
+    config.write_text("// CODE_BRIEFCASE_COMMAND is present")
     
     # Overriding default_config_path behavior or monkeypatching is easier, but
     # doctor_report uses default_config_path directly which targets ~/.config.
@@ -670,4 +670,4 @@ def test_opencode_doctor_reports_status(tmp_path, fake_tldr):
     report = doctor_report(clients=["opencode"])
     assert "opencode" in report["clients"]
     assert "config_path" in report["clients"]["opencode"]
-    assert "tldr_hooks_present" in report["clients"]["opencode"]
+    assert "code_briefcase_hooks_present" in report["clients"]["opencode"]

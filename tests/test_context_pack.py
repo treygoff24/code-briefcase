@@ -1,7 +1,7 @@
 import json
 import subprocess
 
-from tldr.context_pack import build_context_pack
+from code_briefcase.context_pack import build_context_pack
 
 
 def test_explicit_file_produces_function_outline(tmp_path):
@@ -48,7 +48,7 @@ def test_secret_looking_files_are_excluded(tmp_path):
 
 
 def test_tldrignore_excludes_explicit_file_and_fallback_tree(tmp_path):
-    (tmp_path / ".tldrignore").write_text("ignored.py\n")
+    (tmp_path / ".code-briefcaseignore").write_text("ignored.py\n")
     (tmp_path / "ignored.py").write_text("def ignored_target():\n    return True\n")
 
     pack = build_context_pack("ignored_target", project=tmp_path, files=["ignored.py"])
@@ -57,7 +57,7 @@ def test_tldrignore_excludes_explicit_file_and_fallback_tree(tmp_path):
 
 
 def test_tldrignore_excludes_text_search_matches(tmp_path):
-    (tmp_path / ".tldrignore").write_text("ignored.py\n")
+    (tmp_path / ".code-briefcaseignore").write_text("ignored.py\n")
     (tmp_path / "ignored.py").write_text("def ignored_target():\n    return True\n")
     (tmp_path / "visible.py").write_text("def visible_target():\n    return True\n")
 
@@ -77,7 +77,7 @@ def test_changed_mode_includes_untracked_files(tmp_path):
             "-c",
             "user.email=tldr@example.test",
             "-c",
-            "user.name=TLDR Tests",
+            "user.name=Code Briefcase Tests",
             "commit",
             "-m",
             "seed",

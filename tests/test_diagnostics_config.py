@@ -2,7 +2,7 @@ import json
 import subprocess
 import sys
 
-from tldr.diagnostics import DIAGNOSTIC_RUNNERS, LANG_TOOLS, TOOL_SLOTS
+from code_briefcase.diagnostics import DIAGNOSTIC_RUNNERS, LANG_TOOLS, TOOL_SLOTS
 
 
 def tool_names(language: str, slot: str) -> list[str]:
@@ -25,7 +25,7 @@ def test_javascript_typescript_tool_config_snapshot():
 
 def test_doctor_json_is_derived_from_lang_tools():
     result = subprocess.run(
-        [sys.executable, "-m", "tldr.cli", "doctor", "--json"],
+        [sys.executable, "-m", "code_briefcase.cli", "doctor", "--json"],
         capture_output=True,
         text=True,
     )

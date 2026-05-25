@@ -5,7 +5,7 @@ from pathlib import Path
 
 def test_pack_help_smoke():
     result = subprocess.run(
-        [sys.executable, "-m", "tldr.cli", "pack", "--help"],
+        [sys.executable, "-m", "code_briefcase.cli", "pack", "--help"],
         capture_output=True,
         text=True,
         check=True,
@@ -16,7 +16,7 @@ def test_pack_help_smoke():
 
 def test_hooks_help_smoke():
     result = subprocess.run(
-        [sys.executable, "-m", "tldr.cli", "hooks", "--help"],
+        [sys.executable, "-m", "code_briefcase.cli", "hooks", "--help"],
         capture_output=True,
         text=True,
         check=True,
@@ -40,7 +40,7 @@ def test_outcome_backfill_fixture_command(tmp_path):
             str(fixtures / "backfill_codex_root"),
             "--claude-root",
             str(fixtures / "backfill_claude_root"),
-            "--tldr-telemetry",
+            "--code-briefcase-telemetry",
             str(fixtures / "backfill_tldr_telemetry.jsonl"),
             "--json-out",
             str(out_json),
@@ -67,7 +67,7 @@ def test_outcome_render_fixture_command(tmp_path):
             str(fixtures / "backfill_codex_root"),
             "--claude-root",
             str(fixtures / "backfill_claude_root"),
-            "--tldr-telemetry",
+            "--code-briefcase-telemetry",
             str(fixtures / "backfill_tldr_telemetry.jsonl"),
             "--json-out",
             str(backfill_json),
@@ -94,7 +94,7 @@ def test_outcome_render_fixture_command(tmp_path):
 
 def test_tldr_mcp_help_smoke():
     result = subprocess.run(
-        [sys.executable, "-m", "tldr.mcp_server", "--help"],
+        [sys.executable, "-m", "code_briefcase.mcp_server", "--help"],
         capture_output=True,
         text=True,
         check=True,

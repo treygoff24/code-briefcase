@@ -23,7 +23,7 @@ def render_markdown(payload: dict[str, Any]) -> str:
     attr_conf = Counter(item.get("attribution_confidence") for item in rollups)
     causal_conf = Counter(item.get("causal_confidence") for item in rollups)
     lines = [
-        "# TLDR outcome report",
+        "# Code Briefcase outcome report",
         "",
         f"- Window: `{payload.get('window', {}).get('start')}` → `{payload.get('window', {}).get('end')}`",
         f"- Sessions: {len(rollups)}",
@@ -193,7 +193,7 @@ def render_html(payload: dict[str, Any], markdown: str) -> str:
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>TLDR outcome report</title>
+  <title>Code Briefcase outcome report</title>
   <style>
     body {{ font-family: system-ui, sans-serif; margin: 2rem; color: #111; }}
     table {{ border-collapse: collapse; width: 100%; margin-top: 1rem; }}
@@ -202,7 +202,7 @@ def render_html(payload: dict[str, Any], markdown: str) -> str:
   </style>
 </head>
 <body>
-  <h1>TLDR outcome report</h1>
+  <h1>Code Briefcase outcome report</h1>
   <p>Verdict distribution: {_html_text(dict(verdicts))}</p>
   <table>
     <thead><tr><th>Session</th><th>Client</th><th>Verdict</th><th>Hooks</th><th>Errors</th></tr></thead>
@@ -217,7 +217,7 @@ def render_html(payload: dict[str, Any], markdown: str) -> str:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Render TLDR outcome report.")
+    parser = argparse.ArgumentParser(description="Render Code Briefcase outcome report.")
     parser.add_argument("--input", required=True)
     parser.add_argument("--markdown-out", required=True)
     parser.add_argument("--html-out", required=True)

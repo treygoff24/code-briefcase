@@ -25,11 +25,11 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from tldr.hooks.edit import build_pre_edit_response  # noqa: E402
-from tldr.hooks.post_edit import build_post_edit_response  # noqa: E402
-from tldr.hooks.runtime import parse_hook_event, render_hook_response  # noqa: E402
+from code_briefcase.hooks.edit import build_pre_edit_response  # noqa: E402
+from code_briefcase.hooks.post_edit import build_post_edit_response  # noqa: E402
+from code_briefcase.hooks.runtime import parse_hook_event, render_hook_response  # noqa: E402
 
-TARGET = Path("tldr/hooks/edit.py")
+TARGET = Path("code_briefcase/hooks/edit.py")
 PROMPT_TEMPLATE = (
     "You are reviewing hook output shown to an agent right after a tool runs. "
     "Given ONLY the JSON below, did the system block, modify, or revert the "

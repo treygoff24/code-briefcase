@@ -1,14 +1,14 @@
 # Fork Status and Attribution
 
-This repository is a divergent fork of [parcadei/llm-tldr](https://github.com/parcadei/llm-tldr).
+Code Briefcase is a divergent fork of [parcadei/llm-tldr](https://github.com/parcadei/llm-tldr).
 
 ## Upstream
 
 - Original project: https://github.com/parcadei/llm-tldr
-- Local fork remote: https://github.com/treygoff24/llm-tldr
+- Fork repository: https://github.com/treygoff24/code-briefcase
 - Upstream remote: `https://github.com/parcadei/llm-tldr`
 
-The local `upstream` remote is intentionally configured with push disabled to avoid accidental pushes to the original project.
+The local upstream remote should remain fetch-only/read-only. Do not imply the original maintainer endorses this fork.
 
 ## License
 
@@ -18,18 +18,16 @@ The existing `NOTICE` file also preserves attribution for the earlier MIT-licens
 
 ## Fork Direction
 
-The current fork direction is to build a more agent-oriented context system:
+Code Briefcase is an agent-context runtime for coding agents:
 
-- global Claude Code and Codex integration
+- Claude Code, Codex, Factory Droid, and OpenCode hook integration
 - installable hook runtime
 - MCP hardening
 - budgeted task context packs
 - safer daemon/cache behavior
 - attribution-preserving packaging and docs
 
-Implementation planning lives in:
-
-- `docs/plans/2026-05-16-agent-context-integration.md`
+Historical implementation planning lives in `docs/plans/` and may reference the upstream TLDR name because those files preserve development history.
 
 ## Publishing Rules
 
@@ -38,8 +36,8 @@ Before publishing this fork publicly or distributing packages:
 1. Preserve upstream Git history where possible.
 2. Keep `LICENSE` and `NOTICE`.
 3. Do not imply the original maintainer endorses this fork.
-4. Rename/rebrand if the fork diverges enough to confuse users.
-5. Do not publish to PyPI under `llm-tldr` unless ownership/maintainer rights and naming are clearly resolved.
+4. Publish under the Code Briefcase name (`code-briefcase`) rather than `llm-tldr` or `tldr`.
+5. Do not publish to PyPI under `llm-tldr`, `tldr`, or bare `briefcase`.
 6. Document source availability for any network-accessible deployment, consistent with AGPL-3.0 obligations.
 
 ## Upstream Sync Practice
@@ -49,5 +47,4 @@ Use:
     git fetch upstream
     git log --oneline --left-right --graph upstream/main...main
 
-Then selectively merge or cherry-pick upstream changes when they are relevant to the fork.
-
+Then selectively cherry-pick upstream changes when they are relevant to the fork.

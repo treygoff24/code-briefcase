@@ -11,7 +11,7 @@ from pathlib import Path
 
 def run_cli(args: list[str], *, input_payload: dict | None = None, cwd: Path | None = None) -> dict:
     result = subprocess.run(
-        [sys.executable, "-m", "tldr.cli", *args],
+        [sys.executable, "-m", "code_briefcase.cli", *args],
         input=json.dumps(input_payload) if input_payload is not None else None,
         capture_output=True,
         text=True,
@@ -28,10 +28,10 @@ def run_cli(args: list[str], *, input_payload: dict | None = None, cwd: Path | N
 
 
 def daemon_context(project: Path) -> dict:
-    from tldr.daemon import query_daemon
+    from code_briefcase.daemon import query_daemon
 
     proc = subprocess.Popen(
-        [sys.executable, "-m", "tldr.cli", "daemon", "start", "--project", str(project)],
+        [sys.executable, "-m", "code_briefcase.cli", "daemon", "start", "--project", str(project)],
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
     )
@@ -52,7 +52,7 @@ def daemon_context(project: Path) -> dict:
         return {"ok": False, "error": last_error}
     finally:
         subprocess.run(
-            [sys.executable, "-m", "tldr.cli", "daemon", "stop", "--project", str(project)],
+            [sys.executable, "-m", "code_briefcase.cli", "daemon", "stop", "--project", str(project)],
             capture_output=True,
             text=True,
             timeout=30,

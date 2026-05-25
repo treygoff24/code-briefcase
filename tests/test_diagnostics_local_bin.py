@@ -1,4 +1,4 @@
-from tldr import diagnostics as diag
+from code_briefcase import diagnostics as diag
 
 
 def test_resolve_tool_finds_plain_project_local_bin(tmp_path, monkeypatch, make_executable):

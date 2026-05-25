@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 
-from tldr import diagnostics as diag
+from code_briefcase import diagnostics as diag
 
 
 def test_parse_oxlint_fixture():

@@ -1,5 +1,5 @@
-from tldr.hooks.edit import build_pre_edit_response
-from tldr.hooks.runtime import parse_hook_event
+from code_briefcase.hooks.edit import build_pre_edit_response
+from code_briefcase.hooks.runtime import parse_hook_event
 
 
 def _event(tmp_path, tool_name, file_name):

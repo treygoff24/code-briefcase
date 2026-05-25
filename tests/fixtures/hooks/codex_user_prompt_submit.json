@@ -2,6 +2,6 @@
   "event": "UserPromptSubmit",
   "hook_event_name": "UserPromptSubmit",
   "prompt": "Hello world, here is my secret OpenAI API key: sk-proj-12345",
-  "cwd": "/Users/treygoff/Code/llm-tldr",
+  "cwd": "/Users/treygoff/Code/code-briefcase",
   "session_id": "codex-session-123"
 }

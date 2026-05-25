@@ -9,7 +9,7 @@ Tests extraction of function_expression nodes in CommonJS patterns:
 from pathlib import Path
 
 import pytest
-from tldr.hybrid_extractor import HybridExtractor
+from code_briefcase.hybrid_extractor import HybridExtractor
 
 
 @pytest.fixture

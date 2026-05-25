@@ -5,8 +5,8 @@ import sys
 import time
 from pathlib import Path
 
-from tldr import diagnostics as diag
-from tldr import tsc_cache
+from code_briefcase import diagnostics as diag
+from code_briefcase import tsc_cache
 
 
 def _fake_tsc(path: Path, args_file: Path, make_executable, version: str = "") -> Path:
@@ -42,7 +42,7 @@ def test_phase0_cache_reuses_stable_config_and_buildinfo(
     tmp_path, monkeypatch, make_executable
 ):
     cache_root = tmp_path / "home-cache" / "tsc"
-    monkeypatch.setenv("TLDR_TSC_CACHE_ROOT", str(cache_root))
+    monkeypatch.setenv("CODE_BRIEFCASE_TSC_CACHE_ROOT", str(cache_root))
     monkeypatch.setattr(diag.shutil, "which", lambda name: None)
 
     source, tsconfig = _single_file_project(tmp_path)
@@ -78,7 +78,7 @@ def test_phase0_cache_invalidates_buildinfo_on_tsconfig_mtime_change(
     tmp_path, monkeypatch, make_executable
 ):
     cache_root = tmp_path / "cache"
-    monkeypatch.setenv("TLDR_TSC_CACHE_ROOT", str(cache_root))
+    monkeypatch.setenv("CODE_BRIEFCASE_TSC_CACHE_ROOT", str(cache_root))
     monkeypatch.setattr(diag.shutil, "which", lambda name: None)
 
     source, tsconfig = _single_file_project(tmp_path)
@@ -104,7 +104,7 @@ def test_phase0_cache_key_changes_with_tsc_version(
     tmp_path, monkeypatch, make_executable
 ):
     cache_root = tmp_path / "cache"
-    monkeypatch.setenv("TLDR_TSC_CACHE_ROOT", str(cache_root))
+    monkeypatch.setenv("CODE_BRIEFCASE_TSC_CACHE_ROOT", str(cache_root))
     monkeypatch.setattr(diag.shutil, "which", lambda name: None)
 
     source, _tsconfig = _single_file_project(tmp_path)
@@ -136,7 +136,7 @@ def test_phase0_lock_contention_falls_back_to_ephemeral_config(
     tmp_path, monkeypatch, make_executable
 ):
     cache_root = tmp_path / "cache"
-    monkeypatch.setenv("TLDR_TSC_CACHE_ROOT", str(cache_root))
+    monkeypatch.setenv("CODE_BRIEFCASE_TSC_CACHE_ROOT", str(cache_root))
 
     source, tsconfig = _single_file_project(tmp_path)
     args_file = tmp_path / "tsc-args.txt"
@@ -155,7 +155,7 @@ def test_phase0_lock_contention_falls_back_to_ephemeral_config(
             (
                 "from pathlib import Path\n"
                 "import sys, time\n"
-                "from tldr.tsc_cache import CacheLock\n"
+                "from code_briefcase.tsc_cache import CacheLock\n"
                 "lock = CacheLock(Path(sys.argv[1]))\n"
                 "if not lock.acquire(timeout_seconds=0):\n"
                 "    raise SystemExit(1)\n"
@@ -194,7 +194,7 @@ def test_phase0_lock_contention_falls_back_to_ephemeral_config(
 
 def test_prune_removes_phase0_entries_but_skips_recent_watchers(tmp_path, monkeypatch):
     cache_root = tmp_path / "cache"
-    monkeypatch.setenv("TLDR_TSC_CACHE_ROOT", str(cache_root))
+    monkeypatch.setenv("CODE_BRIEFCASE_TSC_CACHE_ROOT", str(cache_root))
     now = time.time_ns()
 
     phase0_dir = cache_root / "proj" / "phase0"
@@ -237,7 +237,7 @@ def test_prune_removes_phase0_entries_but_skips_recent_watchers(tmp_path, monkey
 
 def test_prune_skips_locked_cache_dirs(tmp_path, monkeypatch):
     cache_root = tmp_path / "cache"
-    monkeypatch.setenv("TLDR_TSC_CACHE_ROOT", str(cache_root))
+    monkeypatch.setenv("CODE_BRIEFCASE_TSC_CACHE_ROOT", str(cache_root))
     locked_dir = cache_root / "proj" / "locked"
     locked_dir.mkdir(parents=True)
     (locked_dir / "buildinfo").write_text("x" * 100)
@@ -267,7 +267,7 @@ def test_prune_skips_locked_cache_dirs(tmp_path, monkeypatch):
 
 def test_cache_clean_force_ignores_recent_watcher_skip(tmp_path, monkeypatch):
     cache_root = tmp_path / "cache"
-    monkeypatch.setenv("TLDR_TSC_CACHE_ROOT", str(cache_root))
+    monkeypatch.setenv("CODE_BRIEFCASE_TSC_CACHE_ROOT", str(cache_root))
     watcher_dir = cache_root / "proj" / "watcher"
     watcher_dir.mkdir(parents=True)
     (watcher_dir / "buildinfo").write_text("x" * 100)
@@ -309,12 +309,12 @@ def test_cache_clean_cli_prunes_tsc_cache(tmp_path):
     )
 
     env = os.environ.copy()
-    env["TLDR_TSC_CACHE_ROOT"] = str(cache_root)
+    env["CODE_BRIEFCASE_TSC_CACHE_ROOT"] = str(cache_root)
     home = tmp_path / "home"
     home.mkdir()
     env["HOME"] = str(home)
     result = subprocess.run(
-        [sys.executable, "-m", "tldr.cli", "cache", "clean", "--json"],
+        [sys.executable, "-m", "code_briefcase.cli", "cache", "clean", "--json"],
         cwd=Path(__file__).resolve().parents[1],
         env=env,
         capture_output=True,
@@ -360,7 +360,7 @@ def test_unknown_tsc_version_returns_none_and_skips_cache(
 ):
     tsc_cache._TSC_VERSION_CACHE.clear()
     cache_root = tmp_path / "cache"
-    monkeypatch.setenv("TLDR_TSC_CACHE_ROOT", str(cache_root))
+    monkeypatch.setenv("CODE_BRIEFCASE_TSC_CACHE_ROOT", str(cache_root))
 
     source, tsconfig = _single_file_project(tmp_path)
     # tsc that prints nothing → version probe returns None → callers fall back
@@ -380,7 +380,7 @@ def test_unknown_tsc_version_returns_none_and_skips_cache(
 
 def test_prune_uses_size_bytes_from_meta_without_rescanning(tmp_path, monkeypatch):
     cache_root = tmp_path / "cache"
-    monkeypatch.setenv("TLDR_TSC_CACHE_ROOT", str(cache_root))
+    monkeypatch.setenv("CODE_BRIEFCASE_TSC_CACHE_ROOT", str(cache_root))
     entry = cache_root / "proj" / "entry"
     entry.mkdir(parents=True)
     # Real bytes on disk are 1; the cached size_bytes says 100 — prune should
@@ -415,7 +415,7 @@ def test_phase0_cache_hit_skips_prune_side_effect(
 ):
     tsc_cache._TSC_VERSION_CACHE.clear()
     cache_root = tmp_path / "cache"
-    monkeypatch.setenv("TLDR_TSC_CACHE_ROOT", str(cache_root))
+    monkeypatch.setenv("CODE_BRIEFCASE_TSC_CACHE_ROOT", str(cache_root))
 
     source, tsconfig = _single_file_project(tmp_path)
     args_file = tmp_path / "tsc-args.txt"

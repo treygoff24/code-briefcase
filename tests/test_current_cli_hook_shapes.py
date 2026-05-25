@@ -4,7 +4,7 @@ import sys
 
 def run_cli(args, payload=None):
     return subprocess.run(
-        [sys.executable, "-m", "tldr.cli", *args],
+        [sys.executable, "-m", "code_briefcase.cli", *args],
         input=json.dumps(payload) if payload is not None else None,
         capture_output=True,
         text=True,
@@ -101,7 +101,7 @@ def test_opencode_client_accepted_in_hooks_run(tmp_path):
     }
     result = run_cli(["hooks", "run", "session-start", "--client", "opencode"], payload)
     rendered = json.loads(result.stdout)
-    # OpenCode adapter consumes TLDR-internal JSON and mutates OpenCode callback
+    # OpenCode adapter consumes Code Briefcase-internal JSON and mutates OpenCode callback
     # output where the plugin API supports it.
     assert rendered["hookSpecificOutput"]["hookEventName"] == "SessionStart"
 
@@ -215,7 +215,7 @@ def test_pre_compact_event_accepted_in_hooks_run(tmp_path):
     result = run_cli(["hooks", "run", "pre-compact", "--client", "droid"], payload)
     rendered = json.loads(result.stdout)
     assert rendered["hookSpecificOutput"]["hookEventName"] == "PreCompact"
-    assert "TLDR compact context" in rendered["hookSpecificOutput"]["additionalContext"]
+    assert "Code Briefcase compact context" in rendered["hookSpecificOutput"]["additionalContext"]
 
 
 def test_codex_permission_request_cli_blocks_destructive():

@@ -1,8 +1,8 @@
 import json
 from pathlib import Path
 
-from tldr.daemon.core import TLDRDaemon
-from tldr.mcp_server import _decode_socket_response
+from code_briefcase.daemon.core import TLDRDaemon
+from code_briefcase.mcp_server import _decode_socket_response
 
 
 def test_daemon_context_response_is_json_serializable(tmp_path: Path):
@@ -25,7 +25,7 @@ def test_daemon_context_response_is_json_serializable(tmp_path: Path):
 
 
 def test_daemon_loads_call_graph_from_cache_dir(tmp_path: Path):
-    cache_dir = tmp_path / ".tldr" / "cache"
+    cache_dir = tmp_path / ".code-briefcase" / "cache"
     cache_dir.mkdir(parents=True)
     (cache_dir / "call_graph.json").write_text(
         json.dumps(
@@ -51,7 +51,7 @@ def test_daemon_loads_call_graph_from_cache_dir(tmp_path: Path):
 
 
 def test_daemon_impact_uses_current_edge_shape(tmp_path: Path):
-    cache_dir = tmp_path / ".tldr" / "cache"
+    cache_dir = tmp_path / ".code-briefcase" / "cache"
     cache_dir.mkdir(parents=True)
     (cache_dir / "call_graph.json").write_text(
         json.dumps(
@@ -101,7 +101,7 @@ def test_daemon_diagnostics_uses_current_schema(tmp_path: Path, monkeypatch):
             "warning_count": 0,
         }
 
-    monkeypatch.setattr("tldr.diagnostics.get_diagnostics", fake_get_diagnostics)
+    monkeypatch.setattr("code_briefcase.diagnostics.get_diagnostics", fake_get_diagnostics)
 
     daemon = TLDRDaemon(tmp_path)
     response = daemon.handle_command(

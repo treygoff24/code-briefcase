@@ -1,7 +1,7 @@
 # Agent Hook Surfaces Research Appendix
 
 Date: 2026-05-20
-Repo: `/Users/treygoff/Code/llm-tldr`
+Repo: `/Users/treygoff/Code/code-briefcase`
 
 ## Local versions observed
 
@@ -10,7 +10,7 @@ Repo: `/Users/treygoff/Code/llm-tldr`
 - Cursor Agent CLI: `cursor-agent 2026.05.16-0338208`
 - Cursor app CLI: `3.5.11`, build `4830a52b57b7283f2d1ae93f8121d2b10cfb8420`, `arm64`
 - OpenCode: `1.14.29`
-- `factory` binary: not present locally; TLDR `factory` is only an alias for Droid hook configuration.
+- `factory` binary: not present locally; Code Briefcase `factory` is only an alias for Droid hook configuration.
 
 ## Sources checked
 
@@ -49,7 +49,7 @@ Config locations:
 
 Important constraints:
 
-- Hooks can also live inline under `[hooks]` in TOML, but TLDR's current installer writes JSON and should keep doing that for now.
+- Hooks can also live inline under `[hooks]` in TOML, but Code Briefcase's current installer writes JSON and should keep doing that for now.
 - Matching hooks from multiple files all run; layers do not replace lower-precedence hooks.
 - Command hooks for the same event are launched concurrently.
 - Non-managed hooks must be reviewed/trusted through `/hooks`.
@@ -120,10 +120,10 @@ Confirmed stable docs:
 - Cursor CLI config paths are `~/.cursor/cli-config.json` globally and `<project>/.cursor/cli.json` locally.
 - Cursor Marketplace exposes plugins containing hooks, skills, agents, commands, and MCP entries.
 
-Unstable/unconfirmed for TLDR:
+Unstable/unconfirmed for Code Briefcase:
 
 - Official Cursor docs checked do not provide a complete hook reference comparable to Codex or Factory.
-- Marketplace/community evidence indicates hooks exist, but TLDR must not default-install Cursor hooks until a local runtime smoke proves the exact hook path, payload, and output schema for the installed version.
+- Marketplace/community evidence indicates hooks exist, but Code Briefcase must not default-install Cursor hooks until a local runtime smoke proves the exact hook path, payload, and output schema for the installed version.
 
 ## OpenCode 1.14.29 surface
 

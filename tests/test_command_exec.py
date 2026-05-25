@@ -1,4 +1,4 @@
-from tldr.command_exec import expand_shebang_command
+from code_briefcase.command_exec import expand_shebang_command
 
 
 def test_empty_command():
