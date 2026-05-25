@@ -13,6 +13,7 @@ import signal
 import socket
 import sys
 import tempfile
+import threading
 import time
 from pathlib import Path
 from typing import Any, Optional
@@ -45,7 +46,7 @@ from .cached_queries import (
 from code_briefcase.daemon.protocol import (
     PROTOCOL_VERSION,
     DaemonProtocolError,
-    recv_json_line,
+    LineReader,
     send_framed_json,
     send_json_line,
 )
@@ -340,7 +341,8 @@ class TLDRDaemon:
         }
 
         return {
-            "status": self._status,
+            "status": "ok",
+            "state": self._status,
             "uptime": uptime,
             "files": len(self.indexes.get("files", [])),
             "project": str(self.project),
@@ -353,11 +355,13 @@ class TLDRDaemon:
 
     def _handle_shutdown(self, command: dict) -> dict:
         """Handle shutdown command with stats persistence."""
-        # Persist all session stats before shutdown
+        self._shutdown_requested = True
+        threading.Thread(target=self._shutdown_cleanup, daemon=True).start()
+        return {"status": "shutting_down", "cleanup_in_progress": True}
+
+    def _shutdown_cleanup(self) -> None:
         self._persist_all_stats()
         self._stop_watch_supervisor()
-        self._shutdown_requested = True
-        return {"status": "shutting_down"}
 
     def _handle_watchers(self, command: dict) -> dict:
         """Handle watch-diagnostics lifecycle and query commands."""
@@ -1247,8 +1251,9 @@ class TLDRDaemon:
         try:
             conn.settimeout(5.0)
             use_framed_responses = False
+            line_reader = LineReader()
             while True:
-                data = recv_json_line(conn)
+                data = line_reader.readline(conn)
                 if data is None:
                     break
 

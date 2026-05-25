@@ -395,6 +395,24 @@ def test_hook_install_cli_accepts_executable_override(tmp_path, fake_tldr):
     assert str(fake_tldr.resolve()) in json.dumps(json.loads(config.read_text()))
 
 
+def test_executable_override_missing_raises_clear_error(tmp_path):
+    from code_briefcase.hook_installer import _resolve_tldr_command
+
+    missing = tmp_path / "missing-code-briefcase"
+    with pytest.raises(RuntimeError, match=r"Executable not found:.*missing-code-briefcase"):
+        _resolve_tldr_command(str(missing))
+
+
+def test_executable_override_non_executable_raises_clear_error(tmp_path):
+    from code_briefcase.hook_installer import _resolve_tldr_command
+
+    path = tmp_path / "not-exec"
+    path.write_text("not a script\n", encoding="utf-8")
+
+    with pytest.raises(RuntimeError, match=r"Executable is not executable:.*not-exec"):
+        _resolve_tldr_command(str(path))
+
+
 def test_installer_rejects_tldr_without_hooks(tmp_path):
     config = tmp_path / "hooks.json"
     fake = tmp_path / "bin" / "code-briefcase"

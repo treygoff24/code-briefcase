@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import os
 from pathlib import Path
 from typing import Any
@@ -19,8 +20,10 @@ from code_briefcase.hooks.path_policy import (
 from code_briefcase.hooks.outcome import HookExecutionResult, event_relative_path, noop, ok, skipped
 from code_briefcase.hooks.runtime import HookEvent, HookResponse
 
-TRUE_VALUES = {"1", "true", "yes", "on"}
-FALSE_VALUES = {"0", "false", "no", "off", "disabled", ""}
+logger = logging.getLogger(__name__)
+
+TRUE_VALUES = {"1", "true", "yes", "on", "enabled", "enable", "y", "t"}
+FALSE_VALUES = {"0", "false", "no", "off", "disabled", "disable", "n", "f", ""}
 WATCH_ENV = "CODE_BRIEFCASE_WATCH_DIAGNOSTICS"
 LEGACY_WATCH_ENV = "TLDR_WATCH_DIAGNOSTICS"
 WATCH_BUDGET_ENV = "CODE_BRIEFCASE_WATCH_DIAGNOSTICS_BUDGET_MS"
@@ -112,7 +115,8 @@ def _diagnostic_message_for_file(
         if status in WATCH_USED_STATUSES:
             watch_info["used"] = True
             if status == "pending":
-                return _format_pending_watch_message(file_path), 0, 0, watch_info
+                watch_info["notice"] = _format_pending_watch_notice(file_path)
+                return None, 0, 0, watch_info
             result = _result_from_watch_payload(file_path, language, watch_info)
             result = _merge_lint_format_diagnostics(file_path, language, result)
             message = format_diagnostic_message(file_path, result)
@@ -167,6 +171,7 @@ def build_post_edit_response(event: HookEvent) -> HookExecutionResult:
         return skipped(reason="no_edit_targets")
 
     messages: list[str] = []
+    watcher_notices: list[str] = []
     diagnostics_count = 0
     watch_enabled = _watch_diagnostics_enabled()
     watch_infos: list[dict[str, Any]] = []
@@ -178,15 +183,21 @@ def build_post_edit_response(event: HookEvent) -> HookExecutionResult:
         )
         if watch_info is not None:
             watch_infos.append(watch_info)
+            notice = watch_info.get("notice")
+            if isinstance(notice, str) and notice:
+                watcher_notices.append(notice)
         if message is None:
             continue
         messages.append(message)
         diagnostics_count += error_count + warning_count
     watch_summary = _summarize_watch_infos(watch_enabled, watch_infos)
+    watcher_section = _format_watcher_notices(watcher_notices)
     if not messages:
         if os.environ.get("CODE_BRIEFCASE_POST_EDIT_CLEAN_CONFIRM") == "0":
             return noop(reason="clean_no_diagnostics", trigger_files=trigger, **watch_summary)
         confirmation = _format_clean_edit_confirmation(edited_files)
+        if watcher_section:
+            confirmation = f"{confirmation}\n\n{watcher_section}"
         return ok(
             HookResponse(
                 message=confirmation,
@@ -199,6 +210,8 @@ def build_post_edit_response(event: HookEvent) -> HookExecutionResult:
         )
 
     message = "\n\n".join(messages)
+    if watcher_section:
+        message = f"{message}\n\n{watcher_section}"
     return ok(
         HookResponse(message=message, additional_context=message, suppress_output=False),
         trigger_files=trigger,
@@ -209,14 +222,23 @@ def build_post_edit_response(event: HookEvent) -> HookExecutionResult:
 
 def _watch_diagnostics_enabled() -> bool:
     raw = os.environ.get(WATCH_ENV)
+    env_var_name = WATCH_ENV
     if raw is None:
         raw = os.environ.get(LEGACY_WATCH_ENV)
+        env_var_name = LEGACY_WATCH_ENV
     if raw is None:
         return False
     value = raw.strip().lower()
     if value in FALSE_VALUES:
         return False
-    return value in TRUE_VALUES
+    if value in TRUE_VALUES:
+        return True
+    logger.warning(
+        "Unrecognized %s value: %r — treating as disabled",
+        env_var_name,
+        raw,
+    )
+    return False
 
 
 def _watch_query_budget_ms() -> int:
@@ -263,7 +285,14 @@ def _query_watch_diagnostics(
         return info
 
     if not response.ok or response.payload is None:
-        info["fallback_reason"] = response.message or response.kind.value
+        reason = response.message or response.kind.value
+        if response.payload and response.payload.get("message"):
+            reason = str(response.payload["message"])
+        logger.warning(
+            "Watcher daemon query failed (%s), using sync fallback",
+            reason,
+        )
+        info["fallback_reason"] = reason
         return info
 
     payload = response.payload
@@ -323,11 +352,17 @@ def _merge_lint_format_diagnostics(
     return merged
 
 
-def _format_pending_watch_message(file_path: Path) -> str:
+def _format_pending_watch_notice(file_path: Path) -> str:
     return (
-        f"Code Briefcase diagnostics for {file_path.name}: "
+        f"[Code Briefcase watcher] {file_path.name}: "
         "watch diagnostics are warming; fresh results are still pending."
     )
+
+
+def _format_watcher_notices(notices: list[str]) -> str | None:
+    if not notices:
+        return None
+    return "\n".join(notices)
 
 
 def _age_label(watch_info: dict[str, Any]) -> str:

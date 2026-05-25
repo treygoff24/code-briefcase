@@ -1,17 +1,24 @@
 from __future__ import annotations
 
+import signal
+import time
 from pathlib import Path
 
 from code_briefcase.daemon.watchers.base import (
     AdapterKey,
     CanStartResult,
+    FileVersion,
     QueryResponse,
     QueryStatus,
     file_version,
 )
+from code_briefcase.daemon.watchers import typescript as typescript_module
 from code_briefcase.daemon.watchers.typescript import (
     TypeScriptWatchAdapter,
     can_start_typescript,
+    sweep_orphan_watchers,
+    _read_registry,
+    _write_registry,
 )
 
 
@@ -186,3 +193,288 @@ def test_unknown_project_coverage_never_reports_clean_fresh(tmp_path):
 
     assert response.status == QueryStatus.FALLBACK_REQUIRED
     assert response.fallback_reason == "not_in_project_config"
+
+
+def test_batch_completion_does_not_cover_edit_newer_than_compile_snapshot(tmp_path):
+    source = tmp_path / "src" / "racy.ts"
+    source.parent.mkdir()
+    source.write_text("const answer: number = 42;\n", encoding="utf-8")
+    adapter = _adapter(tmp_path)
+    adapter._project_files = {source.resolve()}
+    first = FileVersion(mtime_ns=100)
+    second = FileVersion(mtime_ns=200)
+
+    adapter.notify_edit(source, first)
+    with adapter._condition:
+        adapter._mark_batch_started_locked()
+    adapter.notify_edit(source, second)
+    adapter._complete_batch([], expected_errors=0)
+
+    response = adapter.query(source, second, budget_ms=0)
+
+    assert response.status != QueryStatus.FRESH
+    assert adapter._covered_mtime_by_file[source.resolve()] == first.mtime_ns
+    assert adapter._pending_versions[source.resolve()] == second
+
+
+def test_non_project_pending_versions_are_cleared_after_batch(tmp_path):
+    adapter = _adapter(tmp_path)
+    adapter._project_files = set()
+
+    for index in range(25):
+        source = tmp_path / "ignored" / f"excluded-{index}.ts"
+        source.parent.mkdir(exist_ok=True)
+        source.write_text("const answer: number = 42;\n", encoding="utf-8")
+        adapter.notify_edit(source, FileVersion(mtime_ns=100 + index))
+        adapter._complete_batch([], expected_errors=0)
+
+    assert adapter._pending_versions == {}
+    assert len(adapter._uncovered_versions) == 25
+
+
+class _RunResult:
+    def __init__(self, *, returncode: int, stdout: str = "", stderr: str = "") -> None:
+        self.returncode = returncode
+        self.stdout = stdout
+        self.stderr = stderr
+
+
+def _ps_stdout(*, started_at: float, comm: str, command: str) -> str:
+    lstart = time.strftime("%a %b %d %H:%M:%S %Y", time.localtime(started_at))
+    return f"{lstart} {comm} {command}\n"
+
+
+def test_orphan_sweep_kills_registered_pid_only_when_identity_matches(
+    tmp_path,
+    monkeypatch,
+):
+    tool = tmp_path / "node_modules" / ".bin" / "tsc"
+    config = tmp_path / "tsconfig.json"
+    started_at = 1_800_000_000.0
+    entry = {
+        "pid": 123,
+        "tool_path": str(tool),
+        "config_path": str(config),
+        "command": [str(tool), "--watch", "--project", str(config)],
+        "started_at": started_at,
+    }
+    command = f"{tool} --noEmit --watch --project {config}"
+
+    monkeypatch.setattr(typescript_module, "_read_registry", lambda _project: [entry])
+    written_entries = []
+    monkeypatch.setattr(
+        typescript_module,
+        "_write_registry",
+        lambda _project, entries: written_entries.append(entries),
+    )
+    monkeypatch.setattr(typescript_module, "_is_process_running", lambda _pid: True)
+    monkeypatch.setattr(
+        typescript_module.subprocess,
+        "run",
+        lambda *_args, **_kwargs: _RunResult(
+            returncode=0,
+            stdout=_ps_stdout(started_at=started_at, comm=str(tool), command=command),
+        ),
+    )
+    killed = []
+    monkeypatch.setattr(
+        typescript_module.os,
+        "killpg",
+        lambda pid, sig: killed.append((pid, sig)),
+    )
+
+    stopped = sweep_orphan_watchers(tmp_path)
+
+    assert stopped == 1
+    assert killed == [(123, signal.SIGTERM)]
+    assert written_entries == [[]]
+
+
+def test_orphan_sweep_does_not_kill_when_registered_start_time_differs(
+    tmp_path,
+    monkeypatch,
+):
+    tool = tmp_path / "node_modules" / ".bin" / "tsc"
+    config = tmp_path / "tsconfig.json"
+    started_at = 1_800_000_000.0
+    entry = {
+        "pid": 123,
+        "tool_path": str(tool),
+        "config_path": str(config),
+        "command": [str(tool), "--watch", "--project", str(config)],
+        "started_at": started_at,
+    }
+    command = f"{tool} --noEmit --watch --project {config}"
+
+    monkeypatch.setattr(typescript_module, "_read_registry", lambda _project: [entry])
+    written_entries = []
+    monkeypatch.setattr(
+        typescript_module,
+        "_write_registry",
+        lambda _project, entries: written_entries.append(entries),
+    )
+    monkeypatch.setattr(typescript_module, "_is_process_running", lambda _pid: True)
+    monkeypatch.setattr(
+        typescript_module.subprocess,
+        "run",
+        lambda *_args, **_kwargs: _RunResult(
+            returncode=0,
+            stdout=_ps_stdout(
+                started_at=started_at + 60,
+                comm=str(tool),
+                command=command,
+            ),
+        ),
+    )
+    killed = []
+    monkeypatch.setattr(
+        typescript_module.os,
+        "killpg",
+        lambda pid, sig: killed.append((pid, sig)),
+    )
+
+    stopped = sweep_orphan_watchers(tmp_path)
+
+    assert stopped == 0
+    assert killed == []
+    assert written_entries == [[entry]]
+
+
+class _FakePopen:
+    def __init__(self, *, pid: int = 4321, stdout=None, returncode: int | None = None) -> None:
+        self.pid = pid
+        self.stdout = stdout
+        self._returncode = returncode
+
+    def poll(self) -> int | None:
+        return self._returncode
+
+
+def test_unhealthy_adapter_restarts_after_backoff(tmp_path, monkeypatch):
+    adapter = _adapter(tmp_path)
+    now = [100.0]
+    monkeypatch.setattr(typescript_module.time, "monotonic", lambda: now[0])
+    adapter._process = _FakePopen(stdout=[], returncode=9)
+    adapter._read_output()
+    assert adapter.health().status == "unhealthy"
+
+    monkeypatch.setattr(adapter, "_load_project_files", lambda _env: set())
+    monkeypatch.setattr(typescript_module, "_write_registry", lambda _project, _entries: None)
+    popen_calls = []
+
+    def fake_popen(*args, **kwargs):
+        popen_calls.append((args, kwargs))
+        return _FakePopen(pid=99, stdout=None)
+
+    monkeypatch.setattr(typescript_module.subprocess, "Popen", fake_popen)
+
+    now[0] = 104.9
+    adapter.start()
+    assert popen_calls == []
+
+    now[0] = 105.0
+    adapter.start()
+
+    assert len(popen_calls) == 1
+    assert adapter.health().status == "running"
+    assert adapter._unhealthy_reason is None
+
+
+def test_restart_backoff_escalates_after_failed_restart_attempts(tmp_path, monkeypatch):
+    adapter = _adapter(tmp_path)
+    now = [200.0]
+    monkeypatch.setattr(typescript_module.time, "monotonic", lambda: now[0])
+    adapter._process = _FakePopen(stdout=[], returncode=9)
+    adapter._read_output()
+    monkeypatch.setattr(adapter, "_load_project_files", lambda _env: set())
+    monkeypatch.setattr(typescript_module, "_write_registry", lambda _project, _entries: None)
+    attempts = []
+
+    def failing_popen(*_args, **_kwargs):
+        attempts.append(now[0])
+        raise OSError("boom")
+
+    monkeypatch.setattr(typescript_module.subprocess, "Popen", failing_popen)
+
+    now[0] = 205.0
+    adapter.start()
+    now[0] = 219.0
+    adapter.start()
+    now[0] = 220.0
+    adapter.start()
+
+    assert attempts == [205.0, 220.0]
+
+
+def test_load_project_files_returns_none_on_tsc_failure(tmp_path, monkeypatch, caplog):
+    adapter = _adapter(tmp_path)
+    monkeypatch.setattr(
+        typescript_module.subprocess,
+        "run",
+        lambda *_args, **_kwargs: _RunResult(
+            returncode=2,
+            stdout="",
+            stderr="tsconfig failed\n",
+        ),
+    )
+
+    with caplog.at_level("WARNING"):
+        project_files = adapter._load_project_files({})
+
+    assert project_files is None
+    assert "tsconfig failed" in caplog.text
+
+    source = tmp_path / "src" / "app.ts"
+    source.parent.mkdir()
+    source.write_text("const answer: number = 42;\n", encoding="utf-8")
+    version = file_version(source)
+    adapter._project_files = project_files
+    adapter.notify_edit(source, version)
+    adapter._complete_batch([], expected_errors=0)
+
+    response = adapter.query(source, version, budget_ms=0)
+
+    assert response.status == QueryStatus.FALLBACK_REQUIRED
+    assert response.fallback_reason == "not_in_project_config"
+
+
+def test_registry_write_is_atomic_when_replace_fails(tmp_path, monkeypatch):
+    registry_path = tmp_path / "registry.json"
+    monkeypatch.setattr(typescript_module, "_registry_path", lambda _project: registry_path)
+    old_entries = [{"pid": 1, "tool_path": "/bin/old"}]
+    new_entries = [{"pid": 2, "tool_path": "/bin/new"}]
+    _write_registry(tmp_path, old_entries)
+
+    def fail_replace(_src, _dst):
+        raise OSError("simulated interrupted replace")
+
+    monkeypatch.setattr(typescript_module.os, "replace", fail_replace)
+
+    _write_registry(tmp_path, new_entries)
+
+    assert _read_registry(tmp_path) == old_entries
+    assert registry_path.with_suffix(".tmp").exists()
+
+
+def test_recheck_telemetry_uses_completed_compile_batch_seq(tmp_path, monkeypatch):
+    source = tmp_path / "src" / "telemetry.ts"
+    source.parent.mkdir()
+    source.write_text("const answer: number = 42;\n", encoding="utf-8")
+    adapter = _adapter(tmp_path)
+    adapter._project_files = {source.resolve()}
+    events = []
+    monkeypatch.setattr(
+        "code_briefcase.telemetry.record_watch_diagnostics_event",
+        lambda **kwargs: events.append(kwargs),
+    )
+
+    adapter.notify_edit(source, FileVersion(mtime_ns=100))
+    with adapter._condition:
+        adapter._mark_batch_started_locked()
+        compile_batch_seq = adapter._batch_seq
+    adapter.notify_edit(source, FileVersion(mtime_ns=200))
+    adapter._complete_batch([], expected_errors=0)
+
+    assert events[-1]["action"] == "recheck_complete"
+    assert events[-1]["batch_seq"] == compile_batch_seq
+    assert events[-1]["queue_depth"] == 1

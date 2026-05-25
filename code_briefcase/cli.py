@@ -1243,7 +1243,24 @@ Semantic Search:
                         print("All diagnostic tools installed!")
 
         elif args.command == "daemon":
-            from .daemon import start_daemon, stop_daemon, query_daemon, query_or_start_daemon
+            from .daemon import (
+                DaemonResponse,
+                start_daemon,
+                stop_daemon,
+                query_daemon_response,
+                query_or_start_daemon,
+            )
+            from .daemon.protocol import DaemonResponseKind
+            from .daemon.startup import _daemon_failure_message
+
+            def _cli_daemon_error_message(response: DaemonResponse) -> str:
+                if response.kind == DaemonResponseKind.UNREACHABLE:
+                    return "Daemon not running"
+                if response.kind == DaemonResponseKind.TIMEOUT:
+                    return "Daemon timed out (busy or hung)"
+                if response.kind == DaemonResponseKind.PROTOCOL_MISMATCH:
+                    return "Daemon protocol mismatch — restart daemon"
+                return _daemon_failure_message(response)
 
             project_path = Path(args.project).resolve()
 
@@ -1261,32 +1278,39 @@ Semantic Search:
                     print("Daemon not running")
 
             elif args.action == "status":
-                try:
-                    result = query_daemon(project_path, {"cmd": "status"})
-                    print(f"Status: {result.get('status', 'unknown')}")
-                    if 'uptime' in result:
-                        uptime = int(result['uptime'])
-                        mins, secs = divmod(uptime, 60)
-                        hours, mins = divmod(mins, 60)
-                        print(f"Uptime: {hours}h {mins}m {secs}s")
-                except (ConnectionRefusedError, FileNotFoundError, RuntimeError):
-                    print("Daemon not running")
+                response = query_daemon_response(project_path, {"cmd": "status"})
+                if not response.ok:
+                    print(_cli_daemon_error_message(response), file=sys.stderr)
+                    sys.exit(1)
+                result = response.payload or {}
+                print(f"Status: {result.get('state', result.get('status', 'unknown'))}")
+                if 'uptime' in result:
+                    uptime = int(result['uptime'])
+                    mins, secs = divmod(uptime, 60)
+                    hours, mins = divmod(mins, 60)
+                    print(f"Uptime: {hours}h {mins}m {secs}s")
 
             elif args.action == "query":
-                try:
-                    result = query_daemon(project_path, {"cmd": args.cmd})
-                    print(json.dumps(result, indent=2))
-                except (ConnectionRefusedError, FileNotFoundError, RuntimeError):
-                    print("Error: Daemon not running", file=sys.stderr)
+                response = query_daemon_response(project_path, {"cmd": args.cmd})
+                if not response.ok:
+                    print(f"Error: {_cli_daemon_error_message(response)}", file=sys.stderr)
                     sys.exit(1)
+                print(json.dumps(response.payload, indent=2))
 
             elif args.action == "notify":
-                try:
-                    file_path = Path(args.file).resolve()
-                    result = query_daemon(project_path, {
-                        "cmd": "notify",
-                        "file": str(file_path)
-                    })
+                file_path = Path(args.file).resolve()
+                response = query_daemon_response(
+                    project_path,
+                    {"cmd": "notify", "file": str(file_path)},
+                )
+                if not response.ok:
+                    if os.environ.get("CODE_BRIEFCASE_DEBUG"):
+                        print(
+                            f"Debug: {_cli_daemon_error_message(response)}",
+                            file=sys.stderr,
+                        )
+                else:
+                    result = response.payload or {}
                     if result.get("status") == "ok":
                         dirty = result.get("dirty_count", 0)
                         threshold = result.get("threshold", 20)
@@ -1295,11 +1319,11 @@ Semantic Search:
                         else:
                             print(f"Tracked: {dirty}/{threshold} files")
                     else:
-                        print(f"Error: {result.get('message', 'Unknown error')}", file=sys.stderr)
+                        print(
+                            f"Error: {result.get('message', 'Unknown error')}",
+                            file=sys.stderr,
+                        )
                         sys.exit(1)
-                except (ConnectionRefusedError, FileNotFoundError, RuntimeError):
-                    # Daemon not running - silently ignore, file edits shouldn't fail
-                    pass
 
             elif args.action == "watchers":
                 command = {"cmd": "watchers", "action": args.watchers_action}
@@ -1312,19 +1336,16 @@ Semantic Search:
                         }
                     )
                     response = query_or_start_daemon(project_path, command)
-                    if not response.ok or response.payload is None:
-                        print(
-                            f"Error: {response.message or response.kind.value}",
-                            file=sys.stderr,
-                        )
-                        sys.exit(1)
-                    result = response.payload
                 else:
-                    try:
-                        result = query_daemon(project_path, command)
-                    except (ConnectionRefusedError, FileNotFoundError, RuntimeError):
-                        print("Error: Daemon not running", file=sys.stderr)
-                        sys.exit(1)
+                    response = query_daemon_response(project_path, command)
+
+                if not response.ok:
+                    print(
+                        f"Error: {_cli_daemon_error_message(response)}",
+                        file=sys.stderr,
+                    )
+                    sys.exit(1)
+                result = response.payload or {}
 
                 if getattr(args, "json", False):
                     print(json.dumps(result, indent=2))

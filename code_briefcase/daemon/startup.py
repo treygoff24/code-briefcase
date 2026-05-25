@@ -14,10 +14,11 @@ import socket
 import sys
 import tempfile
 import time
+from logging.handlers import RotatingFileHandler
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Optional, IO
+from typing import TYPE_CHECKING, Any, Optional, IO
 
 from .protocol import (
     PROTOCOL_VERSION,
@@ -48,7 +49,46 @@ class DaemonResponse:
 
     @property
     def ok(self) -> bool:
-        return self.kind == DaemonResponseKind.OK and self.payload is not None
+        if self.kind != DaemonResponseKind.OK or self.payload is None:
+            return False
+        status = self.payload.get("status")
+        return status is None or status == "ok"
+
+
+def _daemon_failure_message(response: DaemonResponse) -> str:
+    if response.payload:
+        message = response.payload.get("message")
+        if message:
+            return str(message)
+    if response.message:
+        return response.message
+    return response.kind.value
+
+
+def _get_daemon_log_path(project: Path) -> Path:
+    return Path(project).resolve() / ".code-briefcase" / "daemon.log"
+
+
+def _configure_daemon_file_logging(project: Path) -> Path:
+    log_path = _get_daemon_log_path(project)
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+
+    handler = RotatingFileHandler(
+        log_path,
+        maxBytes=5 * 1024 * 1024,
+        backupCount=3,
+        encoding="utf-8",
+    )
+    handler.setFormatter(
+        logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+    )
+
+    level = logging.DEBUG if os.environ.get("CODE_BRIEFCASE_DEBUG") else logging.INFO
+    root = logging.getLogger()
+    root.handlers.clear()
+    root.setLevel(level)
+    root.addHandler(handler)
+    return log_path
 
 
 def _get_lock_path(project: Path) -> Path:
@@ -303,7 +343,7 @@ def start_daemon(
     from .core import TLDRDaemon
     from ..tldrignore import ensure_tldrignore
 
-    def announce(*args, **kwargs) -> None:
+    def announce(*args: Any, **kwargs: Any) -> None:
         if not quiet:
             print(*args, **kwargs)
 
@@ -432,6 +472,7 @@ def start_daemon(
                 # Child process - we inherit the lock
                 os.setsid()
                 _redirect_standard_streams_to_devnull()
+                _configure_daemon_file_logging(project)
                 # Write our PID to the locked file
                 _write_pid_to_locked_file(pidfile, os.getpid())
                 daemon._pidfile = pidfile  # Keep reference to hold lock
@@ -630,7 +671,7 @@ def query_daemon(
     )
     if response.ok:
         return response.payload or {}
-    raise RuntimeError(response.message or response.kind.value)
+    raise RuntimeError(_daemon_failure_message(response))
 
 
 def main():

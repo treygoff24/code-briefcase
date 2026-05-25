@@ -36,6 +36,33 @@ class DaemonProtocolError(RuntimeError):
     """Raised when daemon bytes do not match the expected protocol."""
 
 
+class LineReader:
+    """Buffered newline reader that preserves bytes after the first line."""
+
+    def __init__(self) -> None:
+        self._buffer = bytearray()
+
+    def readline(self, sock: socket.socket, *, max_bytes: int = MAX_FRAME_BYTES) -> bytes | None:
+        while True:
+            newline_at = self._buffer.find(b"\n")
+            if newline_at >= 0:
+                line = bytes(self._buffer[:newline_at]).rstrip(b"\r")
+                del self._buffer[: newline_at + 1]
+                return line
+
+            chunk = sock.recv(4096)
+            if not chunk:
+                if not self._buffer:
+                    return None
+                line = bytes(self._buffer).rstrip(b"\r")
+                self._buffer.clear()
+                return line
+
+            self._buffer.extend(chunk)
+            if len(self._buffer) > max_bytes:
+                raise DaemonProtocolError("daemon request exceeded maximum size")
+
+
 def json_line(payload: dict[str, Any]) -> bytes:
     return json.dumps(payload).encode() + b"\n"
 
@@ -50,17 +77,7 @@ def send_framed_json(sock: socket.socket, payload: dict[str, Any]) -> None:
 
 
 def recv_json_line(sock: socket.socket, *, max_bytes: int = MAX_FRAME_BYTES) -> bytes | None:
-    data = bytearray()
-    while True:
-        chunk = sock.recv(4096)
-        if not chunk:
-            return bytes(data) if data else None
-        data.extend(chunk)
-        if len(data) > max_bytes:
-            raise DaemonProtocolError("daemon request exceeded maximum size")
-        newline_at = data.find(b"\n")
-        if newline_at >= 0:
-            return bytes(data[:newline_at]).rstrip(b"\r")
+    return LineReader().readline(sock, max_bytes=max_bytes)
 
 
 def recv_exact(sock: socket.socket, size: int) -> bytes:

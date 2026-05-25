@@ -1,16 +1,21 @@
 import json
 import socket
+import time
+
+import pytest
 
 from code_briefcase.daemon import startup
+from code_briefcase.daemon.core import TLDRDaemon
 from code_briefcase.daemon.protocol import (
     DaemonProtocolError,
     DaemonResponseKind,
+    LineReader,
     decode_response_bytes,
     recv_framed_json,
     recv_json_line,
     send_framed_json,
 )
-from code_briefcase.daemon.startup import DaemonResponse
+from code_briefcase.daemon.startup import DaemonResponse, query_daemon
 
 
 def test_framed_json_round_trips_over_socketpair():
@@ -79,6 +84,46 @@ def test_query_daemon_response_reports_timeout(monkeypatch, tmp_path):
     assert response.kind == DaemonResponseKind.TIMEOUT
 
 
+def test_daemon_response_ok_rejects_application_errors():
+    assert not DaemonResponse(
+        DaemonResponseKind.OK,
+        payload={"status": "error", "message": "bad command"},
+    ).ok
+    assert not DaemonResponse(
+        DaemonResponseKind.OK,
+        payload={"status": "shutting_down"},
+    ).ok
+    assert DaemonResponse(DaemonResponseKind.OK, payload={"status": "ok"}).ok
+    assert DaemonResponse(DaemonResponseKind.OK, payload={"result": "x"}).ok
+
+
+def test_query_daemon_raises_with_application_error_message(monkeypatch, tmp_path):
+    monkeypatch.setattr(
+        startup,
+        "query_daemon_response",
+        lambda *_args, **_kwargs: DaemonResponse(
+            DaemonResponseKind.OK,
+            payload={"status": "error", "message": "Unknown command: nope"},
+        ),
+    )
+
+    with pytest.raises(RuntimeError, match="Unknown command: nope"):
+        query_daemon(tmp_path, {"cmd": "nope"})
+
+
+def test_line_reader_handles_coalesced_messages():
+    left, right = socket.socketpair()
+    reader = LineReader()
+    try:
+        left.sendall(b'{"cmd":"hello"}\n{"cmd":"status"}\n')
+
+        assert reader.readline(right) == b'{"cmd":"hello"}'
+        assert reader.readline(right) == b'{"cmd":"status"}'
+    finally:
+        left.close()
+        right.close()
+
+
 def test_query_or_start_daemon_starts_once_when_unreachable(monkeypatch, tmp_path):
     responses = iter(
         [
@@ -100,3 +145,20 @@ def test_query_or_start_daemon_starts_once_when_unreachable(monkeypatch, tmp_pat
     assert response.kind == DaemonResponseKind.OK
     assert response.payload == {"status": "ok"}
     assert starts == [(tmp_path, {"quiet": True})]
+
+
+def test_shutdown_ack_returns_before_slow_supervisor_teardown(tmp_path, monkeypatch):
+    daemon = TLDRDaemon(tmp_path)
+
+    def slow_stop() -> None:
+        time.sleep(2.0)
+
+    monkeypatch.setattr(daemon, "_stop_watch_supervisor", slow_stop)
+
+    start = time.monotonic()
+    response = daemon.handle_command({"cmd": "shutdown"})
+    elapsed_ms = (time.monotonic() - start) * 1000
+
+    assert response["status"] == "shutting_down"
+    assert response["cleanup_in_progress"] is True
+    assert elapsed_ms < 500

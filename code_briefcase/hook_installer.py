@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -123,9 +124,21 @@ def _resolve_tldr_command(tldr_path: str | None = None) -> TldrCommand:
     raise RuntimeError("; ".join(errors))
 
 
+def _require_executable(path: Path) -> Path:
+    resolved = path.expanduser().resolve()
+    if not resolved.exists():
+        raise RuntimeError(f"Executable not found: {resolved}")
+    if not resolved.is_file():
+        raise RuntimeError(f"Executable is not a file: {resolved}")
+    if not os.access(resolved, os.X_OK):
+        raise RuntimeError(f"Executable is not executable: {resolved}")
+    return resolved
+
+
 def _candidate_tldr_commands(tldr_path: str | None = None) -> list[TldrCommand]:
     if tldr_path:
-        return [[str(Path(tldr_path).expanduser().resolve())]]
+        executable = _require_executable(Path(tldr_path))
+        return [[str(executable)]]
 
     path_tldr = shutil.which("code-briefcase")
     candidates = [
@@ -140,6 +153,8 @@ def _candidate_tldr_commands(tldr_path: str | None = None) -> list[TldrCommand]:
             continue
         executable = Path(candidate[0]).expanduser()
         if not executable.exists():
+            continue
+        if len(candidate) == 1 and not os.access(executable, os.X_OK):
             continue
         command = [str(executable.resolve()), *candidate[1:]]
         key = tuple(command)

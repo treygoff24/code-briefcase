@@ -57,8 +57,9 @@ vendor/
 # Development notes
 thoughts/
 
-# TLDR cache (per-project)
+# Per-project daemon/cache state
 .tldr/
+.code-briefcase/
 archive/
 
 # Local dogfood harness output

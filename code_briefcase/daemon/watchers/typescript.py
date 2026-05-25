@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import os
 from pathlib import Path
 import re
 import signal
+import shlex
 import subprocess
 import tempfile
 import threading
@@ -40,6 +42,10 @@ PROJECT_FILES_TIMEOUT_ENV = "CODE_BRIEFCASE_WATCH_PROJECT_FILES_TIMEOUT_MS"
 TRUST_REPO_BINARIES_ENV = "CODE_BRIEFCASE_WATCH_DIAGNOSTICS_TRUST_REPO_BINARIES"
 LEGACY_TRUST_REPO_BINARIES_ENV = "TLDR_WATCH_DIAGNOSTICS_TRUST_REPO_BINARIES"
 TRUE_VALUES = {"1", "true", "yes", "on"}
+RESTART_BACKOFF_SECONDS = (5.0, 15.0, 60.0, 300.0)
+PROCESS_START_TOLERANCE_SECONDS = 5.0
+MAX_LOGGED_STDERR_CHARS = 2000
+logger = logging.getLogger(__name__)
 
 
 def can_start_typescript(
@@ -106,7 +112,11 @@ class TypeScriptWatchAdapter(WatchAdapter):
         self._started_at: float | None = None
         self._stopping = False
         self._unhealthy_reason: str | None = None
+        self._last_unhealthy_at: float | None = None
+        self._restart_failures = 0
         self._batch_seq = 0
+        self._batch_pending_snapshot: dict[Path, FileVersion] | None = None
+        self._batch_snapshot_seq: int | None = None
         self._last_check_at: float | None = None
         self._diagnostics_by_file: dict[Path, list[dict[str, Any]]] = {}
         self._covered_mtime_by_file: dict[Path, int] = {}
@@ -116,9 +126,19 @@ class TypeScriptWatchAdapter(WatchAdapter):
         self._pid_registered = False
 
     def start(self) -> None:
-        with self._lock:
-            if self._process is not None or self._unhealthy_reason:
+        with self._condition:
+            if self._process is not None:
                 return
+            if self._unhealthy_reason:
+                if not self._restart_backoff_elapsed_locked():
+                    return
+                restart_reason = self._unhealthy_reason
+                self._unhealthy_reason = None
+                self._record_event(
+                    "restart_attempt",
+                    status="starting",
+                    error_kind=restart_reason.split(":", 1)[0],
+                )
             self._stopping = False
             env = os.environ.copy()
             env.update({"LC_ALL": "C", "LANG": "C", "TZ": "UTC"})
@@ -139,11 +159,13 @@ class TypeScriptWatchAdapter(WatchAdapter):
             try:
                 self._process = subprocess.Popen(expand_shebang_command(command), **kwargs)
             except OSError as exc:
-                self._unhealthy_reason = f"spawn_failed:{exc.__class__.__name__}"
+                self._mark_unhealthy_locked(f"spawn_failed:{exc.__class__.__name__}")
                 self._record_event("unhealthy", status="unhealthy", error_kind=exc.__class__.__name__)
                 self._condition.notify_all()
                 return
             self._started_at = time.time()
+            self._last_unhealthy_at = None
+            self._restart_failures = 0
             self._register_process(command)
             self._record_event("start", status="running")
             self._reader = threading.Thread(
@@ -290,6 +312,14 @@ class TypeScriptWatchAdapter(WatchAdapter):
             )
         except (OSError, subprocess.TimeoutExpired):
             return None
+        if result.returncode != 0:
+            logger.warning(
+                "Unable to load TypeScript project files from %s: tsc exited %s: %s",
+                self.key.config_path,
+                result.returncode,
+                _truncate_for_log(result.stderr),
+            )
+            return None
 
         files: set[Path] = set()
         for raw in result.stdout.splitlines():
@@ -315,7 +345,7 @@ class TypeScriptWatchAdapter(WatchAdapter):
                 line = raw_line.rstrip("\n")
                 if CHANGE_RE.search(line):
                     with self._condition:
-                        self._batch_seq += 1
+                        self._mark_batch_started_locked()
                     buffer = []
                     continue
                 match = WATCH_END_RE.search(line)
@@ -328,7 +358,7 @@ class TypeScriptWatchAdapter(WatchAdapter):
             return_code = process.poll()
             with self._condition:
                 if not self._stopping and return_code not in (None, 0):
-                    self._unhealthy_reason = f"tsc_exited:{return_code}"
+                    self._mark_unhealthy_locked(f"tsc_exited:{return_code}")
                     self._record_event(
                         "exit",
                         status="unhealthy",
@@ -343,7 +373,7 @@ class TypeScriptWatchAdapter(WatchAdapter):
         diagnostics = _parse_tsc_output(output)
         if expected_errors != len(diagnostics):
             with self._condition:
-                self._unhealthy_reason = (
+                self._mark_unhealthy_locked(
                     f"parser_mismatch:expected_{expected_errors}_parsed_{len(diagnostics)}"
                 )
                 self._record_event(
@@ -371,44 +401,124 @@ class TypeScriptWatchAdapter(WatchAdapter):
 
         now = time.time()
         with self._condition:
+            batch_snapshot, completed_batch_seq, snapshot_recorded = (
+                self._consume_batch_snapshot_locked()
+            )
             self._last_check_at = now
             previous_paths = set(self._diagnostics_by_file)
+            batch_paths: set[Path] = set()
             for path in set(by_file):
+                batch_paths.add(path)
                 self._diagnostics_by_file[path] = by_file.get(path, [])
-                pending = self._pending_versions.pop(path, None)
-                if pending is not None:
-                    self._covered_mtime_by_file[path] = pending.mtime_ns
-                else:
-                    try:
-                        self._covered_mtime_by_file[path] = path.stat().st_mtime_ns
-                    except OSError:
-                        self._covered_mtime_by_file[path] = time.time_ns()
+                self._mark_path_covered_by_batch_locked(
+                    path,
+                    batch_snapshot=batch_snapshot,
+                    snapshot_recorded=snapshot_recorded,
+                )
                 self._uncovered_versions.pop(path, None)
 
             for path in previous_paths - set(by_file):
+                batch_paths.add(path)
                 self._diagnostics_by_file[path] = []
-                try:
-                    self._covered_mtime_by_file[path] = path.stat().st_mtime_ns
-                except OSError:
-                    self._covered_mtime_by_file[path] = time.time_ns()
+                self._mark_path_covered_by_batch_locked(
+                    path,
+                    batch_snapshot=batch_snapshot,
+                    snapshot_recorded=snapshot_recorded,
+                )
                 self._uncovered_versions.pop(path, None)
 
             for path, pending in list(self._pending_versions.items()):
+                if path in batch_paths and self._is_known_project_file_locked(path):
+                    continue
                 if self._is_known_project_file_locked(path):
                     self._diagnostics_by_file[path] = []
-                    self._covered_mtime_by_file[path] = pending.mtime_ns
-                    self._pending_versions.pop(path, None)
-                    self._uncovered_versions.pop(path, None)
+                    self._mark_clean_pending_path_covered_locked(
+                        path,
+                        pending,
+                        batch_snapshot=batch_snapshot,
+                        snapshot_recorded=snapshot_recorded,
+                    )
                 else:
                     self._uncovered_versions[path] = pending
+                    self._pending_versions.pop(path, None)
             self._condition.notify_all()
+            queue_depth = len(self._pending_versions)
         self._record_event(
             "recheck_complete",
             duration_ms=0,
             status="fresh",
-            batch_seq=self._batch_seq,
-            queue_depth=len(self._pending_versions),
+            batch_seq=completed_batch_seq,
+            queue_depth=queue_depth,
         )
+
+    def _mark_batch_started_locked(self) -> None:
+        self._batch_seq += 1
+        self._batch_pending_snapshot = dict(self._pending_versions)
+        self._batch_snapshot_seq = self._batch_seq
+
+    def _consume_batch_snapshot_locked(self) -> tuple[dict[Path, FileVersion], int, bool]:
+        snapshot_recorded = self._batch_pending_snapshot is not None
+        if self._batch_pending_snapshot is None:
+            batch_snapshot = dict(self._pending_versions)
+        else:
+            batch_snapshot = self._batch_pending_snapshot
+        completed_batch_seq = self._batch_snapshot_seq or self._batch_seq
+        self._batch_pending_snapshot = None
+        self._batch_snapshot_seq = None
+        return batch_snapshot, completed_batch_seq, snapshot_recorded
+
+    def _mark_path_covered_by_batch_locked(
+        self,
+        path: Path,
+        *,
+        batch_snapshot: dict[Path, FileVersion],
+        snapshot_recorded: bool,
+    ) -> None:
+        snapshot_version = batch_snapshot.get(path)
+        live_pending = self._pending_versions.get(path)
+        if snapshot_version is not None:
+            self._covered_mtime_by_file[path] = snapshot_version.mtime_ns
+            if live_pending is not None and live_pending.mtime_ns <= snapshot_version.mtime_ns:
+                self._pending_versions.pop(path, None)
+            return
+        if snapshot_recorded and live_pending is not None:
+            return
+        if live_pending is not None:
+            self._covered_mtime_by_file[path] = live_pending.mtime_ns
+            self._pending_versions.pop(path, None)
+            return
+        self._covered_mtime_by_file[path] = _safe_mtime_ns(path)
+
+    def _mark_clean_pending_path_covered_locked(
+        self,
+        path: Path,
+        pending: FileVersion,
+        *,
+        batch_snapshot: dict[Path, FileVersion],
+        snapshot_recorded: bool,
+    ) -> None:
+        snapshot_version = batch_snapshot.get(path)
+        if snapshot_version is None and snapshot_recorded:
+            return
+        covered_version = snapshot_version or pending
+        self._covered_mtime_by_file[path] = covered_version.mtime_ns
+        if pending.mtime_ns <= covered_version.mtime_ns:
+            self._pending_versions.pop(path, None)
+        self._uncovered_versions.pop(path, None)
+
+    def _mark_unhealthy_locked(self, reason: str) -> None:
+        self._unhealthy_reason = reason
+        self._last_unhealthy_at = time.monotonic()
+        self._restart_failures += 1
+
+    def _restart_backoff_elapsed_locked(self) -> bool:
+        if self._last_unhealthy_at is None:
+            return False
+        return time.monotonic() - self._last_unhealthy_at >= self._restart_backoff_seconds_locked()
+
+    def _restart_backoff_seconds_locked(self) -> float:
+        index = max(0, self._restart_failures - 1)
+        return RESTART_BACKOFF_SECONDS[min(index, len(RESTART_BACKOFF_SECONDS) - 1)]
 
     def _is_fresh_locked(self, target: Path, version: FileVersion) -> bool:
         covered = self._covered_mtime_by_file.get(target)
@@ -546,6 +656,20 @@ def _project_files_timeout_seconds() -> float:
         return 0.75
 
 
+def _safe_mtime_ns(path: Path) -> int:
+    try:
+        return path.stat().st_mtime_ns
+    except OSError:
+        return time.time_ns()
+
+
+def _truncate_for_log(value: str | None) -> str:
+    text = (value or "").strip()
+    if len(text) <= MAX_LOGGED_STDERR_CHARS:
+        return text
+    return text[:MAX_LOGGED_STDERR_CHARS] + "...<truncated>"
+
+
 def _registry_path(project: Path) -> Path:
     digest = hashlib.md5(str(project.resolve()).encode()).hexdigest()[:8]
     return Path(tempfile.gettempdir()) / f"code-briefcase-tsc-watch-{digest}.json"
@@ -563,11 +687,18 @@ def _read_registry(project: Path) -> list[dict[str, Any]]:
 
 def _write_registry(project: Path, entries: list[dict[str, Any]]) -> None:
     path = _registry_path(project)
+    tmp_path = path.with_suffix(".tmp")
     try:
         if entries:
-            path.write_text(json.dumps({"watchers": entries}, indent=2) + "\n", encoding="utf-8")
+            tmp_path.write_text(
+                json.dumps({"watchers": entries}, indent=2) + "\n",
+                encoding="utf-8",
+            )
+            os.replace(tmp_path, path)
         elif path.exists():
             path.unlink()
+            if tmp_path.exists():
+                tmp_path.unlink()
     except OSError:
         return
 
@@ -587,12 +718,12 @@ def _is_process_running(pid: int) -> bool:
         return False
 
 
-def _process_command(pid: int) -> str | None:
+def _process_identity(pid: int) -> dict[str, Any] | None:
     if os.name == "nt":  # pragma: no cover - best-effort POSIX sweep only for now
         return None
     try:
         result = subprocess.run(
-            ["ps", "-p", str(pid), "-o", "command="],
+            ["ps", "-p", str(pid), "-o", "lstart=", "-o", "comm=", "-o", "command="],
             capture_output=True,
             text=True,
             timeout=1,
@@ -601,15 +732,113 @@ def _process_command(pid: int) -> str | None:
         return None
     if result.returncode != 0:
         return None
-    return result.stdout.strip()
+    return _parse_process_identity(result.stdout)
+
+
+def _parse_process_identity(stdout: str) -> dict[str, Any] | None:
+    line = next((raw.rstrip() for raw in stdout.splitlines() if raw.strip()), "")
+    if len(line) < 24:
+        return None
+    started_at = _parse_lstart(line[:24])
+    if started_at is None:
+        return None
+    rest = line[24:].strip()
+    if not rest:
+        return None
+    parts = rest.split(None, 1)
+    comm = parts[0]
+    command = parts[1] if len(parts) == 2 else ""
+    argv = _split_command(command)
+    return {
+        "started_at": started_at,
+        "comm": comm,
+        "command": command,
+        "argv": argv,
+    }
+
+
+def _parse_lstart(value: str) -> float | None:
+    try:
+        return time.mktime(time.strptime(value.strip(), "%a %b %d %H:%M:%S %Y"))
+    except ValueError:
+        return None
+
+
+def _split_command(command: str) -> list[str]:
+    try:
+        return shlex.split(command)
+    except ValueError:
+        return command.split()
 
 
 def _looks_like_registered_watcher(pid: int, entry: dict[str, Any]) -> bool:
-    command = _process_command(pid)
-    config_path = str(entry.get("config_path") or "")
-    if not command or not config_path:
+    identity = _process_identity(pid)
+    if identity is None:
+        logger.warning(
+            "Skipping orphan watcher cleanup for pid %s: unable to verify process identity",
+            pid,
+        )
         return False
-    return "--watch" in command and config_path in command
+    entry_started_at = _entry_started_at(entry)
+    if entry_started_at is None:
+        logger.warning(
+            "Skipping orphan watcher cleanup for pid %s: registry lacks process start time",
+            pid,
+        )
+        return False
+    if abs(identity["started_at"] - entry_started_at) > PROCESS_START_TOLERANCE_SECONDS:
+        return False
+    if not _process_tool_matches_entry(identity, entry):
+        return False
+    return _process_args_match_entry(identity, entry)
+
+
+def _entry_started_at(entry: dict[str, Any]) -> float | None:
+    try:
+        return float(entry.get("started_at"))
+    except (TypeError, ValueError):
+        return None
+
+
+def _process_tool_matches_entry(identity: dict[str, Any], entry: dict[str, Any]) -> bool:
+    tool_path = entry.get("tool_path")
+    if not tool_path:
+        return False
+    expected = _resolved_absolute_path(str(tool_path))
+    if expected is None:
+        return False
+    argv = identity.get("argv") or []
+    candidates = [identity.get("comm")]
+    if argv:
+        candidates.append(argv[0])
+    if len(argv) > 1:
+        candidates.append(argv[1])
+    return any(_candidate_matches_expected_path(candidate, expected) for candidate in candidates)
+
+
+def _process_args_match_entry(identity: dict[str, Any], entry: dict[str, Any]) -> bool:
+    argv = identity.get("argv") or []
+    config_path = str(entry.get("config_path") or "")
+    if not argv or not config_path:
+        return False
+    return "--watch" in argv and config_path in argv
+
+
+def _candidate_matches_expected_path(candidate: object, expected: Path) -> bool:
+    if not isinstance(candidate, str) or not candidate:
+        return False
+    resolved = _resolved_absolute_path(candidate)
+    return resolved == expected
+
+
+def _resolved_absolute_path(value: str) -> Path | None:
+    path = Path(value).expanduser()
+    if not path.is_absolute():
+        return None
+    try:
+        return path.resolve()
+    except OSError:
+        return path
 
 
 def _terminate_process_group(pid: int) -> None:

@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from code_briefcase.daemon import startup
 
 
@@ -90,3 +92,47 @@ def test_daemon_child_stdio_redirects_to_devnull(monkeypatch):
     assert ("dup2", 99, 1) in calls
     assert ("dup2", 99, 2) in calls
     assert ("close", 99) in calls
+
+
+def test_configure_daemon_file_logging_writes_errors(tmp_path):
+    log_path = startup._get_daemon_log_path(tmp_path)
+    startup._configure_daemon_file_logging(tmp_path)
+    import logging
+
+    logging.getLogger("code_briefcase.daemon.test").error("daemon child failure")
+    logging.shutdown()
+
+    assert log_path.exists()
+    assert "daemon child failure" in log_path.read_text()
+
+
+def test_fork_child_configures_file_logging(monkeypatch, tmp_path):
+    pidfile = FakePidFile()
+    configured = []
+
+    class FakeDaemon:
+        def __init__(self, project: Path) -> None:
+            self.project = project
+            self._pidfile = None
+
+        def run(self) -> None:
+            startup.sys.exit(0)
+
+    monkeypatch.setattr(startup, "_try_acquire_pidfile_lock", lambda _path: pidfile)
+    monkeypatch.setattr(startup, "_is_socket_connectable", lambda *_args, **_kwargs: False)
+    monkeypatch.setattr("code_briefcase.tldrignore.ensure_tldrignore", lambda _project: (False, ""))
+    monkeypatch.setattr("code_briefcase.daemon.core.TLDRDaemon", FakeDaemon)
+    monkeypatch.setattr(
+        startup,
+        "_configure_daemon_file_logging",
+        lambda project: configured.append(project),
+    )
+    monkeypatch.setattr(startup.os, "fork", lambda: 0)
+    monkeypatch.setattr(startup.os, "setsid", lambda: None)
+    monkeypatch.setattr(startup, "_redirect_standard_streams_to_devnull", lambda: None)
+    monkeypatch.setattr(startup.sys, "exit", lambda _code: (_ for _ in ()).throw(SystemExit(0)))
+
+    with pytest.raises(SystemExit):
+        startup.start_daemon(tmp_path)
+
+    assert configured == [tmp_path.resolve()]

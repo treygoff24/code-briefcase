@@ -1,6 +1,16 @@
+import logging
 from pathlib import Path
 
-from code_briefcase.hooks.post_edit import build_post_edit_response, extract_edited_files
+import pytest
+
+from code_briefcase.daemon.protocol import DaemonResponseKind
+from code_briefcase.daemon.startup import DaemonResponse
+from code_briefcase.hooks.post_edit import (
+    WATCH_ENV,
+    _watch_diagnostics_enabled,
+    build_post_edit_response,
+    extract_edited_files,
+)
 from code_briefcase.hooks.runtime import parse_hook_event
 
 
@@ -447,3 +457,70 @@ def test_clean_confirmation_lists_multiple_files(tmp_path, monkeypatch):
     assert response.noop_reason == "clean_no_diagnostics"
     assert "a.py" in response.additional_context
     assert "b.py" in response.additional_context
+
+
+@pytest.mark.parametrize(
+    "value",
+    ("1", "true", "yes", "on", "enabled", "enable", "y", "t", " Yes ", "ENABLED"),
+)
+def test_watch_diagnostics_truthy_values_enable(monkeypatch, value):
+    monkeypatch.setenv(WATCH_ENV, value)
+    monkeypatch.delenv("TLDR_WATCH_DIAGNOSTICS", raising=False)
+    assert _watch_diagnostics_enabled() is True
+
+
+@pytest.mark.parametrize(
+    "value",
+    ("0", "false", "no", "off", "disabled", "disable", "n", "f", "", " FALSE "),
+)
+def test_watch_diagnostics_falsey_values_disable(monkeypatch, value):
+    monkeypatch.setenv(WATCH_ENV, value)
+    monkeypatch.setenv("TLDR_WATCH_DIAGNOSTICS", "1")
+    assert _watch_diagnostics_enabled() is False
+
+
+def test_watch_diagnostics_unrecognized_value_warns_and_disables(monkeypatch, caplog):
+    monkeypatch.setenv(WATCH_ENV, "maybe")
+    monkeypatch.delenv("TLDR_WATCH_DIAGNOSTICS", raising=False)
+
+    with caplog.at_level(logging.WARNING):
+        assert _watch_diagnostics_enabled() is False
+
+    assert len(caplog.records) == 1
+    assert "Unrecognized" in caplog.records[0].message
+    assert "maybe" in caplog.records[0].message
+    assert WATCH_ENV in caplog.records[0].message
+
+
+def test_post_edit_pending_watcher_surfaces_notice_not_diagnostic(tmp_path, monkeypatch):
+    source = tmp_path / "app.ts"
+    source.write_text("const answer: string = 42;\n", encoding="utf-8")
+    monkeypatch.setenv("CODE_BRIEFCASE_WATCH_DIAGNOSTICS", "1")
+    monkeypatch.setattr("code_briefcase.hooks.post_edit.notify_daemon", lambda *a, **k: None)
+    monkeypatch.setattr(
+        "code_briefcase.hooks.post_edit.get_diagnostics",
+        lambda *a, **k: (_ for _ in ()).throw(AssertionError("pending must not block on sync")),
+    )
+    monkeypatch.setattr(
+        "code_briefcase.daemon.query_or_start_daemon",
+        lambda *_args, **_kwargs: DaemonResponse(
+            DaemonResponseKind.OK,
+            payload={
+                "status": "ok",
+                "watcher_status": "pending",
+                "diagnostics": [],
+                "error_count": 0,
+                "warning_count": 0,
+                "wait_ms": 150,
+                "backend": "tsc-watch",
+            },
+        ),
+    )
+
+    response = build_post_edit_response(_event(tmp_path, {"toolInput": {"file_path": "app.ts"}}))
+
+    assert response.diagnostics_count == 0
+    assert response.watch_diagnostics_status == "pending"
+    assert "[Code Briefcase watcher]" in (response.additional_context or "")
+    assert "fresh results are still pending" in (response.additional_context or "")
+    assert "Code Briefcase diagnostics for" not in (response.additional_context or "")
