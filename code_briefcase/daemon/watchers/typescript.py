@@ -36,8 +36,12 @@ from .base import (
     WatchAdapter,
 )
 
-WATCH_END_RE = re.compile(r"Found\s+(\d+)\s+errors?\. Watching for file changes\.", re.I)
-CHANGE_RE = re.compile(r"(File change detected|Starting compilation in watch mode)", re.I)
+WATCH_END_RE = re.compile(
+    r"Found\s+(\d+)\s+errors?\. Watching for file changes\.", re.I
+)
+CHANGE_RE = re.compile(
+    r"(File change detected|Starting compilation in watch mode)", re.I
+)
 PROJECT_FILES_TIMEOUT_ENV = "CODE_BRIEFCASE_WATCH_PROJECT_FILES_TIMEOUT_MS"
 TRUST_REPO_BINARIES_ENV = "CODE_BRIEFCASE_WATCH_DIAGNOSTICS_TRUST_REPO_BINARIES"
 LEGACY_TRUST_REPO_BINARIES_ENV = "TLDR_WATCH_DIAGNOSTICS_TRUST_REPO_BINARIES"
@@ -59,7 +63,11 @@ def can_start_typescript(
         return CanStartResult(ok=False, reason="tsc_not_found")
 
     tsc_path = Path(tsc).resolve()
-    if project is not None and _is_repo_local_node_binary(tsc_path, project) and not _trust_repo_binaries():
+    if (
+        project is not None
+        and _is_repo_local_node_binary(tsc_path, project)
+        and not _trust_repo_binaries()
+    ):
         return CanStartResult(ok=False, reason="untrusted_repo_binary")
 
     config = _find_js_ts_project_config(file_path)
@@ -123,6 +131,8 @@ class TypeScriptWatchAdapter(WatchAdapter):
         self._pending_versions: dict[Path, FileVersion] = {}
         self._uncovered_versions: dict[Path, FileVersion] = {}
         self._project_files: set[Path] | None = None
+        self._batch_started_at: float | None = None
+        self._batch_started_mtime_cutoff_ns: int | None = None
         self._pid_registered = False
 
     def start(self) -> None:
@@ -140,6 +150,8 @@ class TypeScriptWatchAdapter(WatchAdapter):
                     error_kind=restart_reason.split(":", 1)[0],
                 )
             self._stopping = False
+            self._batch_started_at = None
+            self._batch_started_mtime_cutoff_ns = None
             env = os.environ.copy()
             env.update({"LC_ALL": "C", "LANG": "C", "TZ": "UTC"})
             self._project_files = self._load_project_files(env)
@@ -157,10 +169,14 @@ class TypeScriptWatchAdapter(WatchAdapter):
             else:
                 kwargs["start_new_session"] = True
             try:
-                self._process = subprocess.Popen(expand_shebang_command(command), **kwargs)
+                self._process = subprocess.Popen(
+                    expand_shebang_command(command), **kwargs
+                )
             except OSError as exc:
                 self._mark_unhealthy_locked(f"spawn_failed:{exc.__class__.__name__}")
-                self._record_event("unhealthy", status="unhealthy", error_kind=exc.__class__.__name__)
+                self._record_event(
+                    "unhealthy", status="unhealthy", error_kind=exc.__class__.__name__
+                )
                 self._condition.notify_all()
                 return
             self._started_at = time.time()
@@ -212,6 +228,11 @@ class TypeScriptWatchAdapter(WatchAdapter):
                     )
                 if self._is_fresh_locked(target, version):
                     return self._response(QueryStatus.FRESH, target, started)
+                if target in self._diagnostics_by_file and (
+                    target not in self._pending_versions
+                    or self._project_file_status_locked(target) == "unknown"
+                ):
+                    return self._response(QueryStatus.STALE, target, started)
 
                 remaining = deadline - time.monotonic()
                 if remaining <= 0:
@@ -227,6 +248,8 @@ class TypeScriptWatchAdapter(WatchAdapter):
         process: subprocess.Popen[str] | None
         with self._condition:
             self._stopping = True
+            self._batch_started_at = None
+            self._batch_started_mtime_cutoff_ns = None
             process = self._process
             self._process = None
             self._condition.notify_all()
@@ -373,6 +396,8 @@ class TypeScriptWatchAdapter(WatchAdapter):
         diagnostics = _parse_tsc_output(output)
         if expected_errors != len(diagnostics):
             with self._condition:
+                self._batch_started_at = None
+                self._batch_started_mtime_cutoff_ns = None
                 self._mark_unhealthy_locked(
                     f"parser_mismatch:expected_{expected_errors}_parsed_{len(diagnostics)}"
                 )
@@ -399,53 +424,78 @@ class TypeScriptWatchAdapter(WatchAdapter):
             normalized["file"] = str(resolved)
             by_file.setdefault(resolved, []).append(normalized)
 
+        completed_at = time.perf_counter()
         now = time.time()
         with self._condition:
-            batch_snapshot, completed_batch_seq, snapshot_recorded = (
-                self._consume_batch_snapshot_locked()
-            )
+            batch_started_at = self._batch_started_at
+            (
+                batch_snapshot,
+                completed_batch_seq,
+                snapshot_recorded,
+                batch_mtime_cutoff_ns,
+            ) = self._consume_batch_snapshot_locked()
             self._last_check_at = now
             previous_paths = set(self._diagnostics_by_file)
+            diagnostic_paths = set(by_file)
             batch_paths: set[Path] = set()
-            for path in set(by_file):
+            for path in diagnostic_paths:
                 batch_paths.add(path)
                 self._diagnostics_by_file[path] = by_file.get(path, [])
                 self._mark_path_covered_by_batch_locked(
                     path,
                     batch_snapshot=batch_snapshot,
                     snapshot_recorded=snapshot_recorded,
+                    batch_mtime_cutoff_ns=batch_mtime_cutoff_ns,
                 )
                 self._uncovered_versions.pop(path, None)
 
-            for path in previous_paths - set(by_file):
+            for path in previous_paths - diagnostic_paths:
                 batch_paths.add(path)
                 self._diagnostics_by_file[path] = []
-                self._mark_path_covered_by_batch_locked(
-                    path,
-                    batch_snapshot=batch_snapshot,
-                    snapshot_recorded=snapshot_recorded,
-                )
+                if self._project_file_status_locked(path) != "unknown":
+                    self._mark_path_covered_by_batch_locked(
+                        path,
+                        batch_snapshot=batch_snapshot,
+                        snapshot_recorded=snapshot_recorded,
+                        batch_mtime_cutoff_ns=batch_mtime_cutoff_ns,
+                    )
                 self._uncovered_versions.pop(path, None)
 
             for path, pending in list(self._pending_versions.items()):
-                if path in batch_paths and self._is_known_project_file_locked(path):
+                status = self._project_file_status_locked(path)
+                if path in diagnostic_paths and status != "excluded":
                     continue
-                if self._is_known_project_file_locked(path):
+                if path in batch_paths and status == "included":
+                    continue
+                if status == "included":
                     self._diagnostics_by_file[path] = []
                     self._mark_clean_pending_path_covered_locked(
                         path,
                         pending,
                         batch_snapshot=batch_snapshot,
                         snapshot_recorded=snapshot_recorded,
+                        batch_mtime_cutoff_ns=batch_mtime_cutoff_ns,
+                    )
+                elif status == "unknown":
+                    self._diagnostics_by_file[path] = []
+                    self._mark_unknown_pending_path_seen_locked(
+                        path,
+                        pending,
+                        batch_snapshot=batch_snapshot,
+                        snapshot_recorded=snapshot_recorded,
+                        batch_mtime_cutoff_ns=batch_mtime_cutoff_ns,
                     )
                 else:
                     self._uncovered_versions[path] = pending
                     self._pending_versions.pop(path, None)
             self._condition.notify_all()
             queue_depth = len(self._pending_versions)
+        batch_duration_ms = None
+        if batch_started_at is not None:
+            batch_duration_ms = max(0, int((completed_at - batch_started_at) * 1000))
         self._record_event(
             "recheck_complete",
-            duration_ms=0,
+            duration_ms=batch_duration_ms,
             status="fresh",
             batch_seq=completed_batch_seq,
             queue_depth=queue_depth,
@@ -453,19 +503,31 @@ class TypeScriptWatchAdapter(WatchAdapter):
 
     def _mark_batch_started_locked(self) -> None:
         self._batch_seq += 1
+        self._batch_started_at = time.perf_counter()
+        self._batch_started_mtime_cutoff_ns = time.time_ns()
         self._batch_pending_snapshot = dict(self._pending_versions)
         self._batch_snapshot_seq = self._batch_seq
 
-    def _consume_batch_snapshot_locked(self) -> tuple[dict[Path, FileVersion], int, bool]:
+    def _consume_batch_snapshot_locked(
+        self,
+    ) -> tuple[dict[Path, FileVersion], int, bool, int | None]:
         snapshot_recorded = self._batch_pending_snapshot is not None
         if self._batch_pending_snapshot is None:
             batch_snapshot = dict(self._pending_versions)
         else:
             batch_snapshot = self._batch_pending_snapshot
         completed_batch_seq = self._batch_snapshot_seq or self._batch_seq
+        batch_mtime_cutoff_ns = self._batch_started_mtime_cutoff_ns
         self._batch_pending_snapshot = None
         self._batch_snapshot_seq = None
-        return batch_snapshot, completed_batch_seq, snapshot_recorded
+        self._batch_started_at = None
+        self._batch_started_mtime_cutoff_ns = None
+        return (
+            batch_snapshot,
+            completed_batch_seq,
+            snapshot_recorded,
+            batch_mtime_cutoff_ns,
+        )
 
     def _mark_path_covered_by_batch_locked(
         self,
@@ -473,15 +535,22 @@ class TypeScriptWatchAdapter(WatchAdapter):
         *,
         batch_snapshot: dict[Path, FileVersion],
         snapshot_recorded: bool,
+        batch_mtime_cutoff_ns: int | None,
     ) -> None:
         snapshot_version = batch_snapshot.get(path)
         live_pending = self._pending_versions.get(path)
         if snapshot_version is not None:
             self._covered_mtime_by_file[path] = snapshot_version.mtime_ns
-            if live_pending is not None and live_pending.mtime_ns <= snapshot_version.mtime_ns:
+            if (
+                live_pending is not None
+                and live_pending.mtime_ns <= snapshot_version.mtime_ns
+            ):
                 self._pending_versions.pop(path, None)
             return
         if snapshot_recorded and live_pending is not None:
+            if _version_is_not_newer_than_batch(live_pending, batch_mtime_cutoff_ns):
+                self._covered_mtime_by_file[path] = live_pending.mtime_ns
+                self._pending_versions.pop(path, None)
             return
         if live_pending is not None:
             self._covered_mtime_by_file[path] = live_pending.mtime_ns
@@ -496,15 +565,41 @@ class TypeScriptWatchAdapter(WatchAdapter):
         *,
         batch_snapshot: dict[Path, FileVersion],
         snapshot_recorded: bool,
+        batch_mtime_cutoff_ns: int | None,
     ) -> None:
         snapshot_version = batch_snapshot.get(path)
         if snapshot_version is None and snapshot_recorded:
-            return
+            if not _version_is_not_newer_than_batch(pending, batch_mtime_cutoff_ns):
+                return
         covered_version = snapshot_version or pending
         self._covered_mtime_by_file[path] = covered_version.mtime_ns
         if pending.mtime_ns <= covered_version.mtime_ns:
             self._pending_versions.pop(path, None)
         self._uncovered_versions.pop(path, None)
+
+    def _mark_unknown_pending_path_seen_locked(
+        self,
+        path: Path,
+        pending: FileVersion,
+        *,
+        batch_snapshot: dict[Path, FileVersion],
+        snapshot_recorded: bool,
+        batch_mtime_cutoff_ns: int | None,
+    ) -> None:
+        snapshot_version = batch_snapshot.get(path)
+        if snapshot_version is None and snapshot_recorded:
+            if not _version_is_not_newer_than_batch(pending, batch_mtime_cutoff_ns):
+                return
+        covered_version = snapshot_version or pending
+        if pending.mtime_ns <= covered_version.mtime_ns:
+            self._pending_versions.pop(path, None)
+
+    def _project_file_status_locked(self, target: Path) -> str:
+        if self._project_files is None:
+            return "unknown"
+        if target.resolve() in self._project_files:
+            return "included"
+        return "excluded"
 
     def _mark_unhealthy_locked(self, reason: str) -> None:
         self._unhealthy_reason = reason
@@ -514,7 +609,10 @@ class TypeScriptWatchAdapter(WatchAdapter):
     def _restart_backoff_elapsed_locked(self) -> bool:
         if self._last_unhealthy_at is None:
             return False
-        return time.monotonic() - self._last_unhealthy_at >= self._restart_backoff_seconds_locked()
+        return (
+            time.monotonic() - self._last_unhealthy_at
+            >= self._restart_backoff_seconds_locked()
+        )
 
     def _restart_backoff_seconds_locked(self) -> float:
         index = max(0, self._restart_failures - 1)
@@ -524,15 +622,12 @@ class TypeScriptWatchAdapter(WatchAdapter):
         covered = self._covered_mtime_by_file.get(target)
         return covered is not None and covered >= version.mtime_ns
 
-    def _is_known_project_file_locked(self, target: Path) -> bool:
-        return self._project_files is not None and target.resolve() in self._project_files
-
     def _coverage_fallback_reason_locked(
         self,
         target: Path,
         version: FileVersion,
     ) -> str | None:
-        if self._project_files is not None and target.resolve() not in self._project_files:
+        if self._project_file_status_locked(target) == "excluded":
             return "not_in_project_config"
         uncovered = self._uncovered_versions.get(target)
         if uncovered is not None and uncovered.mtime_ns >= version.mtime_ns:
@@ -621,9 +716,7 @@ class TypeScriptWatchAdapter(WatchAdapter):
         if not self._pid_registered:
             return
         entries = [
-            entry
-            for entry in _read_registry(self.project)
-            if _entry_pid(entry) != pid
+            entry for entry in _read_registry(self.project) if _entry_pid(entry) != pid
         ]
         _write_registry(self.project, entries)
         self._pid_registered = False
@@ -663,6 +756,14 @@ def _safe_mtime_ns(path: Path) -> int:
         return time.time_ns()
 
 
+def _version_is_not_newer_than_batch(
+    version: FileVersion, batch_mtime_cutoff_ns: int | None
+) -> bool:
+    return (
+        batch_mtime_cutoff_ns is not None and version.mtime_ns <= batch_mtime_cutoff_ns
+    )
+
+
 def _truncate_for_log(value: str | None) -> str:
     text = (value or "").strip()
     if len(text) <= MAX_LOGGED_STDERR_CHARS:
@@ -682,7 +783,11 @@ def _read_registry(project: Path) -> list[dict[str, Any]]:
     except (OSError, json.JSONDecodeError):
         return []
     entries = payload.get("watchers") if isinstance(payload, dict) else None
-    return [entry for entry in entries if isinstance(entry, dict)] if isinstance(entries, list) else []
+    return (
+        [entry for entry in entries if isinstance(entry, dict)]
+        if isinstance(entries, list)
+        else []
+    )
 
 
 def _write_registry(project: Path, entries: list[dict[str, Any]]) -> None:
@@ -800,7 +905,9 @@ def _entry_started_at(entry: dict[str, Any]) -> float | None:
         return None
 
 
-def _process_tool_matches_entry(identity: dict[str, Any], entry: dict[str, Any]) -> bool:
+def _process_tool_matches_entry(
+    identity: dict[str, Any], entry: dict[str, Any]
+) -> bool:
     tool_path = entry.get("tool_path")
     if not tool_path:
         return False
@@ -813,7 +920,10 @@ def _process_tool_matches_entry(identity: dict[str, Any], entry: dict[str, Any])
         candidates.append(argv[0])
     if len(argv) > 1:
         candidates.append(argv[1])
-    return any(_candidate_matches_expected_path(candidate, expected) for candidate in candidates)
+    return any(
+        _candidate_matches_expected_path(candidate, expected)
+        for candidate in candidates
+    )
 
 
 def _process_args_match_entry(identity: dict[str, Any], entry: dict[str, Any]) -> bool:

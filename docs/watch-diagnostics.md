@@ -60,19 +60,27 @@ Daemon watcher lifecycle events are emitted as `event: "watch-diagnostics-event"
 
 The checkpoint script is read-only unless `--exercise-edits` is passed, refuses dirty repos unless `--allow-dirty` is passed, and writes isolated telemetry instead of appending to the default telemetry file.
 
+During an exercise run the script stops the target project daemon before baseline, again between baseline and watch phases, and once more in final cleanup. That avoids stale daemon environment (watch/trust flags, adapter state) leaking between phases. Expect brief disruption to any daemon watchers already running on those repos.
+
+Use explicit probe files for the known real-repo fixtures so coverage discovery does not pick an unrepresentative file:
+
 ```bash
 mkdir -p reports
 RUN_ID="$(date +%Y%m%d-%H%M%S)"
 REPO_ARGS=()
+PROBE_ARGS=()
 
 [ -d /Users/treygoff/Code/atlasos ] && \
-  REPO_ARGS+=(--repo atlasos=/Users/treygoff/Code/atlasos)
+  REPO_ARGS+=(--repo atlasos=/Users/treygoff/Code/atlasos) && \
+  PROBE_ARGS+=(--probe-file atlasos=src/lib/assistant/default-tool-policy.ts)
 
 [ -d /Users/treygoff/Code/llm-council ] && \
-  REPO_ARGS+=(--repo llm-council=/Users/treygoff/Code/llm-council)
+  REPO_ARGS+=(--repo llm-council=/Users/treygoff/Code/llm-council) && \
+  PROBE_ARGS+=(--probe-file llm-council=apps/web/app/council-runtime.transport.ts)
 
 python3 scripts/watch_diagnostics_checkpoint.py \
   "${REPO_ARGS[@]}" \
+  "${PROBE_ARGS[@]}" \
   --exercise-edits \
   --baseline-iterations 5 \
   --watch-iterations 10 \
@@ -82,11 +90,23 @@ python3 scripts/watch_diagnostics_checkpoint.py \
   --fail-on-threshold
 ```
 
+### Metrics interpretation
+
+**Hook response latency** (`watch_hook_ms`): measured from post-edit hook samples where `watch_diagnostics_used` is true and status is `fresh`, `stale`, or `pending`. A fast `pending` hook response counts toward hook thresholds; it is not proof the watcher has settled. Do not mix these with sync baseline samples.
+
+**Fresh-settle latency** (`fresh_settle_ms`): measured from current-run `watch-diagnostics-event` records with `action == recheck_complete` and numeric `duration_ms`, scoped to the measured watch phase (after warmups). Historical JSONL lines and warmup settle events do not satisfy `--min-settle-events`.
+
+Telemetry summary fields count the current run only: `fresh_records`, `stale_records`, `pending_records`, `fallback_records`, `watch_used_records`, `settle_event_records`, `runtime_errors`.
+
 Threshold defaults:
 
 - hook p50: 200 ms
 - hook p95: 500 ms
 - watcher settle p50: 600 ms
 - watcher settle p95: 2000 ms
+- minimum measured hook samples: 5 (`--min-watch-samples`)
+- minimum measured settle events: 1 (`--min-settle-events`)
 
-Interpret results conservatively: do not mix sync samples with watcher-used samples, and do not treat `pending`, `fallback_required`, or `unhealthy` as warm success.
+Failure reasons include `insufficient_watch_hook_samples`, `insufficient_settle_events`, and `watcher_runtime_errors` when telemetry reports watcher `error_kind` during the run.
+
+Interpret results conservatively: do not mix sync samples with watcher-used hook samples, and do not treat `fallback_required` or `unhealthy` as warm success.

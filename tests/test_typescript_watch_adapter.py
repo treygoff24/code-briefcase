@@ -99,7 +99,7 @@ def _fake_tsc(path: Path) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
         "#!/bin/sh\n"
-        "if [ \"$1\" = \"--version\" ]; then\n"
+        'if [ "$1" = "--version" ]; then\n'
         "  echo 'Version 5.0.0'\n"
         "  exit 0\n"
         "fi\n"
@@ -116,7 +116,9 @@ def test_repo_local_tsc_watch_requires_explicit_trust(tmp_path, monkeypatch):
     source.write_text("const answer: number = 42;\n", encoding="utf-8")
     (tmp_path / "tsconfig.json").write_text("{}", encoding="utf-8")
     _fake_tsc(tmp_path / "node_modules" / ".bin" / "tsc")
-    monkeypatch.delenv("CODE_BRIEFCASE_WATCH_DIAGNOSTICS_TRUST_REPO_BINARIES", raising=False)
+    monkeypatch.delenv(
+        "CODE_BRIEFCASE_WATCH_DIAGNOSTICS_TRUST_REPO_BINARIES", raising=False
+    )
     monkeypatch.delenv("TLDR_WATCH_DIAGNOSTICS_TRUST_REPO_BINARIES", raising=False)
 
     untrusted = can_start_typescript(source, allow_js=False, project=tmp_path)
@@ -138,7 +140,9 @@ def test_repo_local_tsc_symlink_target_requires_explicit_trust(tmp_path, monkeyp
     bin_dir = tmp_path / "node_modules" / ".bin"
     bin_dir.mkdir(parents=True, exist_ok=True)
     (bin_dir / "tsc").symlink_to(real_tsc)
-    monkeypatch.delenv("CODE_BRIEFCASE_WATCH_DIAGNOSTICS_TRUST_REPO_BINARIES", raising=False)
+    monkeypatch.delenv(
+        "CODE_BRIEFCASE_WATCH_DIAGNOSTICS_TRUST_REPO_BINARIES", raising=False
+    )
     monkeypatch.delenv("TLDR_WATCH_DIAGNOSTICS_TRUST_REPO_BINARIES", raising=False)
 
     untrusted = can_start_typescript(source, allow_js=False, project=tmp_path)
@@ -178,7 +182,9 @@ def test_supervisor_refuses_new_adapter_after_cap(tmp_path, monkeypatch):
     assert second.fallback_reason == "watcher_limit_exceeded"
 
 
-def test_unknown_project_coverage_never_reports_clean_fresh(tmp_path):
+def test_unknown_project_coverage_clean_batch_becomes_stale_not_not_in_project(
+    tmp_path,
+):
     source = tmp_path / "src" / "unknown.ts"
     source.parent.mkdir()
     source.write_text("const answer: number = 42;\n", encoding="utf-8")
@@ -188,6 +194,189 @@ def test_unknown_project_coverage_never_reports_clean_fresh(tmp_path):
 
     adapter.notify_edit(source, version)
     adapter._complete_batch([], expected_errors=0)
+
+    response = adapter.query(source, version, budget_ms=0)
+
+    assert response.status == QueryStatus.STALE
+    assert response.diagnostics == []
+    assert source.resolve() not in adapter._uncovered_versions
+
+
+def test_unknown_project_clean_stale_result_returns_without_waiting(
+    tmp_path, monkeypatch
+):
+    source = tmp_path / "src" / "unknown-fast-stale.ts"
+    source.parent.mkdir()
+    source.write_text("const answer: number = 42;\n", encoding="utf-8")
+    adapter = _adapter(tmp_path)
+    adapter._project_files = None
+    version = file_version(source)
+
+    adapter.notify_edit(source, version)
+    adapter._complete_batch([], expected_errors=0)
+    monkeypatch.setattr(
+        adapter._condition,
+        "wait",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            AssertionError(
+                "stale known-clean result should not wait for the query budget"
+            )
+        ),
+    )
+
+    response = adapter.query(source, version, budget_ms=1000)
+
+    assert response.status == QueryStatus.STALE
+
+
+def test_known_excluded_project_file_requires_sync_fallback(tmp_path):
+    source = tmp_path / "src" / "excluded.ts"
+    source.parent.mkdir()
+    source.write_text("const answer: number = 42;\n", encoding="utf-8")
+    adapter = _adapter(tmp_path)
+    adapter._project_files = set()
+    version = file_version(source)
+
+    adapter.notify_edit(source, version)
+    adapter._complete_batch([], expected_errors=0)
+
+    response = adapter.query(source, version, budget_ms=0)
+
+    assert response.status == QueryStatus.FALLBACK_REQUIRED
+    assert response.fallback_reason == "not_in_project_config"
+
+
+def test_unknown_project_coverage_does_not_cover_newer_edit_than_batch_snapshot(
+    tmp_path, monkeypatch
+):
+    source = tmp_path / "src" / "racy-unknown.ts"
+    source.parent.mkdir()
+    source.write_text("const answer: number = 42;\n", encoding="utf-8")
+    adapter = _adapter(tmp_path)
+    adapter._project_files = None
+    first = FileVersion(mtime_ns=100)
+    second = FileVersion(mtime_ns=200)
+
+    adapter.notify_edit(source, first)
+    monkeypatch.setattr(typescript_module.time, "time_ns", lambda: 150)
+    with adapter._condition:
+        adapter._mark_batch_started_locked()
+    adapter.notify_edit(source, second)
+    adapter._complete_batch([], expected_errors=0)
+
+    response = adapter.query(source, second, budget_ms=0)
+
+    assert response.status != QueryStatus.FRESH
+    assert response.status != QueryStatus.FALLBACK_REQUIRED
+    assert source.resolve() not in adapter._covered_mtime_by_file
+    assert adapter._pending_versions[source.resolve()] == second
+
+
+def test_unknown_project_batch_started_before_notify_clears_older_pending(
+    tmp_path, monkeypatch
+):
+    source = tmp_path / "src" / "notify-race-unknown.ts"
+    source.parent.mkdir()
+    source.write_text("const answer: number = 42;\n", encoding="utf-8")
+    adapter = _adapter(tmp_path)
+    adapter._project_files = None
+    version = FileVersion(mtime_ns=100)
+
+    monkeypatch.setattr(typescript_module.time, "time_ns", lambda: 150)
+    with adapter._condition:
+        adapter._mark_batch_started_locked()
+    adapter.notify_edit(source, version)
+    adapter._complete_batch([], expected_errors=0)
+
+    response = adapter.query(source, version, budget_ms=1000)
+
+    assert response.status == QueryStatus.STALE
+    assert source.resolve() not in adapter._pending_versions
+    assert source.resolve() not in adapter._covered_mtime_by_file
+
+
+def test_unknown_project_clean_batch_clears_pending_for_previous_diagnostics(
+    tmp_path, monkeypatch
+):
+    source = tmp_path / "src" / "previous-error-now-clean.ts"
+    source.parent.mkdir()
+    source.write_text("const answer: number = 42;\n", encoding="utf-8")
+    adapter = _adapter(tmp_path)
+    adapter._project_files = None
+    adapter._diagnostics_by_file[source.resolve()] = [
+        {"file": str(source), "message": "old error"}
+    ]
+    version = FileVersion(mtime_ns=100)
+
+    monkeypatch.setattr(typescript_module.time, "time_ns", lambda: 150)
+    with adapter._condition:
+        adapter._mark_batch_started_locked()
+    adapter.notify_edit(source, version)
+    adapter._complete_batch([], expected_errors=0)
+    monkeypatch.setattr(
+        adapter._condition,
+        "wait",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            AssertionError("cleared unknown stale result should not wait")
+        ),
+    )
+
+    response = adapter.query(source, version, budget_ms=1000)
+
+    assert response.status == QueryStatus.STALE
+    assert response.diagnostics == []
+    assert source.resolve() not in adapter._pending_versions
+
+
+def test_unknown_project_previous_diagnostics_return_stale_while_pending(
+    tmp_path, monkeypatch
+):
+    source = tmp_path / "src" / "previous-known-pending.ts"
+    source.parent.mkdir()
+    source.write_text("const answer: number = 42;\n", encoding="utf-8")
+    adapter = _adapter(tmp_path)
+    adapter._project_files = None
+    adapter._diagnostics_by_file[source.resolve()] = []
+    version = file_version(source)
+
+    adapter.notify_edit(source, version)
+    monkeypatch.setattr(
+        adapter._condition,
+        "wait",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            AssertionError("unknown stale diagnostics should not wait for freshness")
+        ),
+    )
+
+    response = adapter.query(source, version, budget_ms=1000)
+
+    assert response.status == QueryStatus.STALE
+    assert source.resolve() in adapter._pending_versions
+
+
+def test_unknown_project_coverage_before_batch_completion_stays_pending(tmp_path):
+    source = tmp_path / "src" / "warming.ts"
+    source.parent.mkdir()
+    source.write_text("const answer: number = 42;\n", encoding="utf-8")
+    adapter = _adapter(tmp_path)
+    adapter._project_files = None
+    version = file_version(source)
+
+    adapter.notify_edit(source, version)
+    response = adapter.query(source, version, budget_ms=0)
+
+    assert response.status == QueryStatus.PENDING
+    assert response.fallback_reason is None
+
+
+def test_explicit_uncovered_marker_still_requires_sync_fallback(tmp_path):
+    source = tmp_path / "src" / "uncovered.ts"
+    source.parent.mkdir()
+    source.write_text("const answer: number = 42;\n", encoding="utf-8")
+    adapter = _adapter(tmp_path)
+    adapter._project_files = None
+    version = file_version(source)
+    adapter._uncovered_versions[source.resolve()] = version
 
     response = adapter.query(source, version, budget_ms=0)
 
@@ -341,7 +530,9 @@ def test_orphan_sweep_does_not_kill_when_registered_start_time_differs(
 
 
 class _FakePopen:
-    def __init__(self, *, pid: int = 4321, stdout=None, returncode: int | None = None) -> None:
+    def __init__(
+        self, *, pid: int = 4321, stdout=None, returncode: int | None = None
+    ) -> None:
         self.pid = pid
         self.stdout = stdout
         self._returncode = returncode
@@ -359,7 +550,9 @@ def test_unhealthy_adapter_restarts_after_backoff(tmp_path, monkeypatch):
     assert adapter.health().status == "unhealthy"
 
     monkeypatch.setattr(adapter, "_load_project_files", lambda _env: set())
-    monkeypatch.setattr(typescript_module, "_write_registry", lambda _project, _entries: None)
+    monkeypatch.setattr(
+        typescript_module, "_write_registry", lambda _project, _entries: None
+    )
     popen_calls = []
 
     def fake_popen(*args, **kwargs):
@@ -387,7 +580,9 @@ def test_restart_backoff_escalates_after_failed_restart_attempts(tmp_path, monke
     adapter._process = _FakePopen(stdout=[], returncode=9)
     adapter._read_output()
     monkeypatch.setattr(adapter, "_load_project_files", lambda _env: set())
-    monkeypatch.setattr(typescript_module, "_write_registry", lambda _project, _entries: None)
+    monkeypatch.setattr(
+        typescript_module, "_write_registry", lambda _project, _entries: None
+    )
     attempts = []
 
     def failing_popen(*_args, **_kwargs):
@@ -434,13 +629,39 @@ def test_load_project_files_returns_none_on_tsc_failure(tmp_path, monkeypatch, c
 
     response = adapter.query(source, version, budget_ms=0)
 
-    assert response.status == QueryStatus.FALLBACK_REQUIRED
-    assert response.fallback_reason == "not_in_project_config"
+    assert response.status == QueryStatus.STALE
+    assert response.fallback_reason is None
+
+
+def test_recheck_complete_telemetry_records_real_batch_duration(tmp_path, monkeypatch):
+    source = tmp_path / "src" / "duration.ts"
+    source.parent.mkdir()
+    source.write_text("const answer: number = 42;\n", encoding="utf-8")
+    adapter = _adapter(tmp_path)
+    adapter._project_files = {source.resolve()}
+    events = []
+    monotonic = [100.0]
+    monkeypatch.setattr(typescript_module.time, "perf_counter", lambda: monotonic[0])
+    monkeypatch.setattr(
+        "code_briefcase.telemetry.record_watch_diagnostics_event",
+        lambda **kwargs: events.append(kwargs),
+    )
+
+    adapter.notify_edit(source, FileVersion(mtime_ns=100))
+    with adapter._condition:
+        adapter._mark_batch_started_locked()
+    monotonic[0] = 101.25
+    adapter._complete_batch([], expected_errors=0)
+
+    assert events[-1]["action"] == "recheck_complete"
+    assert events[-1]["duration_ms"] == 1250
 
 
 def test_registry_write_is_atomic_when_replace_fails(tmp_path, monkeypatch):
     registry_path = tmp_path / "registry.json"
-    monkeypatch.setattr(typescript_module, "_registry_path", lambda _project: registry_path)
+    monkeypatch.setattr(
+        typescript_module, "_registry_path", lambda _project: registry_path
+    )
     old_entries = [{"pid": 1, "tool_path": "/bin/old"}]
     new_entries = [{"pid": 2, "tool_path": "/bin/new"}]
     _write_registry(tmp_path, old_entries)

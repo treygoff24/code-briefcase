@@ -26,6 +26,8 @@ except PackageNotFoundError:
 
 ROOT = Path(__file__).resolve().parents[1]
 
+WATCH_HOOK_STATUSES = {"fresh", "stale", "pending"}
+
 CODE_SUFFIXES = {".ts", ".tsx", ".js", ".jsx"}
 EXCLUDED_PARTS = {
     "node_modules",
@@ -39,6 +41,8 @@ EXCLUDED_PARTS = {
 
 def project_hash(project: Path) -> str:
     return hashlib.sha256(str(project).encode("utf-8")).hexdigest()[:8]
+
+
 @dataclass(frozen=True)
 class RepoSpec:
     label: str
@@ -62,6 +66,65 @@ def metric_summary(values: list[int]) -> dict[str, int | None]:
     }
 
 
+def watch_hook_samples(samples: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [
+        sample
+        for sample in samples
+        if sample.get("watch_diagnostics_used")
+        and sample.get("watch_diagnostics_status") in WATCH_HOOK_STATUSES
+    ]
+
+
+def settle_durations(
+    records: list[dict[str, Any]], project_digest: str | None
+) -> list[int]:
+    return [
+        int(record["duration_ms"])
+        for record in records
+        if record.get("project_hash") == project_digest
+        and record.get("event") == "watch-diagnostics-event"
+        and record.get("action") == "recheck_complete"
+        and isinstance(record.get("duration_ms"), int)
+    ]
+
+
+def summarize_repo_telemetry(
+    records: list[dict[str, Any]], project_digest: str | None
+) -> dict[str, int]:
+    repo_records = [r for r in records if r.get("project_hash") == project_digest]
+    return {
+        "post_edit_records": sum(
+            1 for r in repo_records if r.get("event") == "post-edit"
+        ),
+        "watch_event_records": sum(
+            1 for r in repo_records if r.get("event") == "watch-diagnostics-event"
+        ),
+        "watch_used_records": sum(
+            1 for r in repo_records if r.get("watch_diagnostics_used")
+        ),
+        "fresh_records": sum(
+            1 for r in repo_records if r.get("watch_diagnostics_status") == "fresh"
+        ),
+        "stale_records": sum(
+            1 for r in repo_records if r.get("watch_diagnostics_status") == "stale"
+        ),
+        "pending_records": sum(
+            1 for r in repo_records if r.get("watch_diagnostics_status") == "pending"
+        ),
+        "fallback_records": sum(
+            1
+            for r in repo_records
+            if r.get("watch_diagnostics_status") in {"fallback_required", "unhealthy"}
+        ),
+        "settle_event_records": len(settle_durations(repo_records, project_digest)),
+        "runtime_errors": sum(
+            1
+            for r in repo_records
+            if r.get("event") == "watch-diagnostics-event" and r.get("error_kind")
+        ),
+    }
+
+
 def load_jsonl(path: Path) -> tuple[list[dict[str, Any]], int]:
     if not path.exists():
         return [], 0
@@ -78,6 +141,23 @@ def load_jsonl(path: Path) -> tuple[list[dict[str, Any]], int]:
         if isinstance(value, dict):
             records.append(value)
     return records, parse_errors
+
+
+def wait_for_settle_event_since(
+    telemetry_path: Path,
+    project_digest: str | None,
+    start_len: int,
+    *,
+    timeout_ms: int,
+) -> bool:
+    deadline = time.monotonic() + max(0, timeout_ms) / 1000
+    while True:
+        records, _errors = load_jsonl(telemetry_path)
+        if settle_durations(records[start_len:], project_digest):
+            return True
+        if time.monotonic() >= deadline:
+            return False
+        time.sleep(0.05)
 
 
 def choose_probe_file(repo: Path) -> Path | None:
@@ -99,7 +179,9 @@ def choose_probe_file(repo: Path) -> Path | None:
         candidates.append(path)
     if not candidates:
         return None
-    return sorted(candidates, key=lambda item: (len(item.relative_to(repo).parts), str(item)))[0]
+    return sorted(
+        candidates, key=lambda item: (len(item.relative_to(repo).parts), str(item))
+    )[0]
 
 
 def parse_repo(value: str) -> RepoSpec:
@@ -200,7 +282,9 @@ def run_post_edit_hook(
             "CODE_BRIEFCASE_TELEMETRY": "1",
             "CODE_BRIEFCASE_TELEMETRY_PATH": str(telemetry_path),
             "CODE_BRIEFCASE_WATCH_DIAGNOSTICS": "1" if watch_enabled else "0",
-            "CODE_BRIEFCASE_WATCH_DIAGNOSTICS_TRUST_REPO_BINARIES": "1" if watch_enabled else "0",
+            "CODE_BRIEFCASE_WATCH_DIAGNOSTICS_TRUST_REPO_BINARIES": (
+                "1" if watch_enabled else "0"
+            ),
             "TLDR_WATCH_DIAGNOSTICS": "1" if watch_enabled else "0",
         }
     )
@@ -236,19 +320,33 @@ def run_post_edit_hook(
         raise RuntimeError(result.stderr.strip() or f"hook exited {result.returncode}")
     after, errors = load_jsonl(telemetry_path)
     new_records = after[len(before) :]
-    post_edit = next((r for r in reversed(new_records) if r.get("event") == "post-edit"), None)
+    post_edit = next(
+        (r for r in reversed(new_records) if r.get("event") == "post-edit"), None
+    )
     return elapsed_ms, post_edit, errors
 
 
-def sample_from_record(phase: str, iteration: int, elapsed_ms: int, record: dict[str, Any] | None) -> dict[str, Any]:
+def sample_from_record(
+    phase: str, iteration: int, elapsed_ms: int, record: dict[str, Any] | None
+) -> dict[str, Any]:
     return {
         "phase": phase,
         "iteration": iteration,
-        "hook_duration_ms": int(record.get("duration_ms", elapsed_ms)) if record else elapsed_ms,
-        "watch_diagnostics_used": bool(record.get("watch_diagnostics_used")) if record else False,
-        "watch_diagnostics_status": record.get("watch_diagnostics_status") if record else None,
-        "watch_diagnostics_age_ms": record.get("watch_diagnostics_age_ms") if record else None,
-        "watch_diagnostics_wait_ms": record.get("watch_diagnostics_wait_ms") if record else None,
+        "hook_duration_ms": (
+            int(record.get("duration_ms", elapsed_ms)) if record else elapsed_ms
+        ),
+        "watch_diagnostics_used": (
+            bool(record.get("watch_diagnostics_used")) if record else False
+        ),
+        "watch_diagnostics_status": (
+            record.get("watch_diagnostics_status") if record else None
+        ),
+        "watch_diagnostics_age_ms": (
+            record.get("watch_diagnostics_age_ms") if record else None
+        ),
+        "watch_diagnostics_wait_ms": (
+            record.get("watch_diagnostics_wait_ms") if record else None
+        ),
         "status": record.get("status") if record else "unknown",
         "error_kind": record.get("error_kind") if record else None,
     }
@@ -266,16 +364,22 @@ def repo_report(
     report: dict[str, Any] = {
         "label": spec.label,
         "project_hash": digest,
-        "path": redacted_path(repo, repo, local_rich=args.local_rich) if repo.exists() else str(repo),
+        "path": (
+            redacted_path(repo, repo, local_rich=args.local_rich)
+            if repo.exists()
+            else str(repo)
+        ),
         "present": repo.exists(),
         "skipped_reason": None,
         "probe": None,
         "git": {"clean_before": None, "clean_after": None},
         "metrics": {},
         "telemetry": {
-            "path": str(telemetry_path)
-            if args.local_rich
-            else f"<redacted>/{digest or 'unknown'}/{telemetry_path.name}",
+            "path": (
+                str(telemetry_path)
+                if args.local_rich
+                else f"<redacted>/{digest or 'unknown'}/{telemetry_path.name}"
+            ),
             "post_edit_records": 0,
             "watch_event_records": 0,
         },
@@ -306,7 +410,9 @@ def repo_report(
     }
     report["probe"] = {
         "file": redacted_path(repo, probe, local_rich=args.local_rich),
-        "language": "typescript" if probe.suffix.lower() in {".ts", ".tsx"} else "javascript",
+        "language": (
+            "typescript" if probe.suffix.lower() in {".ts", ".tsx"} else "javascript"
+        ),
     }
     if not args.exercise_edits:
         report["skipped_reason"] = "exercise_edits_required"
@@ -315,7 +421,11 @@ def repo_report(
     baseline_samples: list[dict[str, Any]] = []
     watch_samples: list[dict[str, Any]] = []
     original = probe.read_bytes()
+    records_before_run, _ = load_jsonl(telemetry_path)
+    current_run_start_len = len(records_before_run)
+    watch_measurement_start_len = current_run_start_len
     try:
+        stop_project_daemon(repo)
         for index in range(args.baseline_iterations):
             saved = append_reversible_edit(probe, f"baseline-{index}")
             try:
@@ -328,20 +438,32 @@ def repo_report(
             finally:
                 probe.write_bytes(saved)
             report["telemetry"]["parse_errors"] = errors
-            baseline_samples.append(sample_from_record("baseline", index + 1, elapsed, record))
+            baseline_samples.append(
+                sample_from_record("baseline", index + 1, elapsed, record)
+            )
 
+        stop_project_daemon(repo)
+        records_after_baseline, _ = load_jsonl(telemetry_path)
+        watch_measurement_start_len = len(records_after_baseline)
         total_watch = args.warmups + args.watch_iterations
         for index in range(total_watch):
-            saved = append_reversible_edit(probe, f"watch-{index}")
-            try:
-                elapsed, record, errors = run_post_edit_hook(
-                    repo=repo,
-                    probe=probe,
-                    telemetry_path=telemetry_path,
-                    watch_enabled=True,
-                )
-            finally:
-                probe.write_bytes(saved)
+            if index == args.warmups:
+                if args.warmups:
+                    wait_for_settle_event_since(
+                        telemetry_path,
+                        digest,
+                        watch_measurement_start_len,
+                        timeout_ms=args.warmup_settle_timeout_ms,
+                    )
+                records_before_measured_watch, _ = load_jsonl(telemetry_path)
+                watch_measurement_start_len = len(records_before_measured_watch)
+            append_reversible_edit(probe, f"watch-{index}")
+            elapsed, record, errors = run_post_edit_hook(
+                repo=repo,
+                probe=probe,
+                telemetry_path=telemetry_path,
+                watch_enabled=True,
+            )
             report["telemetry"]["parse_errors"] = errors
             sample = sample_from_record("watch", index + 1, elapsed, record)
             if index >= args.warmups:
@@ -357,21 +479,19 @@ def repo_report(
 
     samples = baseline_samples + watch_samples
     report["samples"] = samples
-    watch_used_samples = [
-        s
-        for s in watch_samples
-        if s["watch_diagnostics_used"] and s.get("watch_diagnostics_status") == "fresh"
-    ]
+    watch_used_samples = watch_hook_samples(watch_samples)
+    records, _errors = load_jsonl(telemetry_path)
+    current_records = records[current_run_start_len:]
+    measured_watch_records = records[watch_measurement_start_len:]
+    settle_ms = settle_durations(measured_watch_records, digest)
     report["metrics"] = {
-        "sync_hook_ms": metric_summary([int(s["hook_duration_ms"]) for s in baseline_samples]),
-        "watch_hook_ms": metric_summary([int(s["hook_duration_ms"]) for s in watch_used_samples]),
-        "fresh_settle_ms": metric_summary(
-            [
-                int(s["watch_diagnostics_wait_ms"])
-                for s in watch_used_samples
-                if isinstance(s.get("watch_diagnostics_wait_ms"), int)
-            ]
+        "sync_hook_ms": metric_summary(
+            [int(s["hook_duration_ms"]) for s in baseline_samples]
         ),
+        "watch_hook_ms": metric_summary(
+            [int(s["hook_duration_ms"]) for s in watch_used_samples]
+        ),
+        "fresh_settle_ms": metric_summary(settle_ms),
     }
     report["metrics"]["delta"] = {
         "hook_p50_ms": _delta(
@@ -383,26 +503,7 @@ def repo_report(
             report["metrics"]["sync_hook_ms"]["p95"],
         ),
     }
-    records, _errors = load_jsonl(telemetry_path)
-    repo_records = [r for r in records if r.get("project_hash") == digest]
-    report["telemetry"].update(
-        {
-            "post_edit_records": sum(1 for r in repo_records if r.get("event") == "post-edit"),
-            "watch_event_records": sum(
-                1 for r in repo_records if r.get("event") == "watch-diagnostics-event"
-            ),
-            "watch_used_records": sum(1 for r in repo_records if r.get("watch_diagnostics_used")),
-            "fallback_records": sum(
-                1
-                for r in repo_records
-                if r.get("watch_diagnostics_status") in {"fallback_required", "unhealthy"}
-            ),
-            "pending_records": sum(
-                1 for r in repo_records if r.get("watch_diagnostics_status") == "pending"
-            ),
-            "runtime_errors": sum(1 for r in repo_records if r.get("error_kind")),
-        }
-    )
+    report["telemetry"].update(summarize_repo_telemetry(current_records, digest))
     _apply_thresholds(report, args)
     return report
 
@@ -423,14 +524,24 @@ def _apply_thresholds(report: dict[str, Any], args: argparse.Namespace) -> None:
     watch_metrics = report["metrics"].get("watch_hook_ms", {})
     settle_metrics = report["metrics"].get("fresh_settle_ms", {})
     if watch_metrics.get("count", 0) < args.min_watch_samples:
-        failures.append("insufficient_watch_samples")
+        failures.append("insufficient_watch_hook_samples")
+    if settle_metrics.get("count", 0) < args.min_settle_events:
+        failures.append("insufficient_settle_events")
+    if report.get("telemetry", {}).get("runtime_errors", 0) > 0:
+        failures.append("watcher_runtime_errors")
     if watch_metrics.get("p50") is not None and watch_metrics["p50"] > args.hook_p50_ms:
         failures.append(f"watch_hook_p50>{args.hook_p50_ms}")
     if watch_metrics.get("p95") is not None and watch_metrics["p95"] > args.hook_p95_ms:
         failures.append(f"watch_hook_p95>{args.hook_p95_ms}")
-    if settle_metrics.get("p50") is not None and settle_metrics["p50"] > args.settle_p50_ms:
+    if (
+        settle_metrics.get("p50") is not None
+        and settle_metrics["p50"] > args.settle_p50_ms
+    ):
         failures.append(f"settle_p50>{args.settle_p50_ms}")
-    if settle_metrics.get("p95") is not None and settle_metrics["p95"] > args.settle_p95_ms:
+    if (
+        settle_metrics.get("p95") is not None
+        and settle_metrics["p95"] > args.settle_p95_ms
+    ):
         failures.append(f"settle_p95>{args.settle_p95_ms}")
     report["passed"] = not failures
 
@@ -443,7 +554,12 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--baseline-iterations", type=int, default=5)
     parser.add_argument("--watch-iterations", type=int, default=10)
     parser.add_argument("--warmups", type=int, default=2)
-    parser.add_argument("--telemetry-path", type=Path, default=Path("reports/watch-diagnostics-telemetry.jsonl"))
+    parser.add_argument("--warmup-settle-timeout-ms", type=int, default=15000)
+    parser.add_argument(
+        "--telemetry-path",
+        type=Path,
+        default=Path("reports/watch-diagnostics-telemetry.jsonl"),
+    )
     parser.add_argument("--json-out", type=Path)
     parser.add_argument("--local-rich", action="store_true")
     parser.add_argument("--allow-dirty", action="store_true")
@@ -453,6 +569,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--settle-p50-ms", type=int, default=600)
     parser.add_argument("--settle-p95-ms", type=int, default=2000)
     parser.add_argument("--min-watch-samples", type=int, default=5)
+    parser.add_argument("--min-settle-events", type=int, default=1)
     return parser
 
 
@@ -460,7 +577,7 @@ def build_report(args: argparse.Namespace) -> dict[str, Any]:
     telemetry_path = args.telemetry_path.expanduser().resolve()
     probe_overrides = {label: path for label, path in args.probe_file}
     repos = args.repo or []
-    report = {
+    report: dict[str, Any] = {
         "schema_version": 1,
         "generated_at": datetime.now(timezone.utc).astimezone().isoformat(),
         "tool": "watch_diagnostics_checkpoint",
@@ -469,6 +586,7 @@ def build_report(args: argparse.Namespace) -> dict[str, Any]:
             "baseline_iterations": args.baseline_iterations,
             "watch_iterations": args.watch_iterations,
             "warmups": args.warmups,
+            "warmup_settle_timeout_ms": args.warmup_settle_timeout_ms,
             "exercise_edits": bool(args.exercise_edits),
             "redacted": not args.local_rich,
         },
@@ -477,8 +595,15 @@ def build_report(args: argparse.Namespace) -> dict[str, Any]:
             "hook_response_p95_ms": args.hook_p95_ms,
             "fresh_settle_p50_ms": args.settle_p50_ms,
             "fresh_settle_p95_ms": args.settle_p95_ms,
+            "min_watch_samples": args.min_watch_samples,
+            "min_settle_events": args.min_settle_events,
         },
-        "summary": {"passed": True, "repos_present": 0, "repos_checked": 0, "failures": []},
+        "summary": {
+            "passed": True,
+            "repos_present": 0,
+            "repos_checked": 0,
+            "failures": [],
+        },
         "repos": [],
     }
     for spec in repos:
@@ -489,8 +614,12 @@ def build_report(args: argparse.Namespace) -> dict[str, Any]:
             probe_override=probe_overrides.get(spec.label),
         )
         report["repos"].append(item)
-    report["summary"]["repos_present"] = sum(1 for item in report["repos"] if item["present"])
-    report["summary"]["repos_checked"] = sum(1 for item in report["repos"] if not item["skipped_reason"])
+    report["summary"]["repos_present"] = sum(
+        1 for item in report["repos"] if item["present"]
+    )
+    report["summary"]["repos_checked"] = sum(
+        1 for item in report["repos"] if not item["skipped_reason"]
+    )
     failures = [
         f"{item['label']}:{failure}"
         for item in report["repos"]

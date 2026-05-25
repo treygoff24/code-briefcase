@@ -56,6 +56,7 @@ vendor/
 
 # Development notes
 thoughts/
+docs/plans/
 
 # Per-project daemon/cache state
 .tldr/
@@ -68,6 +69,7 @@ dogfood-output/
 # Efficacy evaluation artifacts
 reports/*.md
 reports/*.json
+reports/*.jsonl
 reports/*.html
 !reports/.gitkeep
 **/telemetry.jsonl

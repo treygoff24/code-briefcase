@@ -94,7 +94,9 @@ def test_daemon_status_cli_reports_timeout(tmp_path, monkeypatch):
 
     monkeypatch.setattr(
         "code_briefcase.daemon.query_daemon_response",
-        lambda *_args, **_kwargs: DaemonResponse(DaemonResponseKind.TIMEOUT, message="slow"),
+        lambda *_args, **_kwargs: DaemonResponse(
+            DaemonResponseKind.TIMEOUT, message="slow"
+        ),
     )
     monkeypatch.setattr(
         sys,
@@ -108,6 +110,53 @@ def test_daemon_status_cli_reports_timeout(tmp_path, monkeypatch):
 
     assert exc.value.code == 1
     assert "timed out" in stderr.getvalue().lower()
+
+
+def test_daemon_watchers_start_cli_resolves_relative_file_against_project(
+    tmp_path, monkeypatch
+):
+    from code_briefcase import cli
+
+    project = tmp_path / "project"
+    project.mkdir()
+    source = project / "app.ts"
+    source.write_text("const answer = 42;\n", encoding="utf-8")
+    other_cwd = tmp_path / "other"
+    other_cwd.mkdir()
+    seen = {}
+
+    def fake_query(project, command, **_kwargs):
+        seen["project"] = project
+        seen["command"] = command
+        return DaemonResponse(
+            DaemonResponseKind.OK,
+            payload={"status": "ok", "watcher_status": "pending"},
+        )
+
+    monkeypatch.setattr("code_briefcase.daemon.query_or_start_daemon", fake_query)
+    monkeypatch.chdir(other_cwd)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "code-briefcase",
+            "daemon",
+            "watchers",
+            "start",
+            "app.ts",
+            "--project",
+            str(project),
+            "--json",
+        ],
+    )
+
+    stdout = io.StringIO()
+    with redirect_stdout(stdout):
+        cli.main()
+
+    assert seen["project"] == project.resolve()
+    assert seen["command"]["file"] == str(source.resolve())
+    assert json.loads(stdout.getvalue())["watcher_status"] == "pending"
 
 
 def test_daemon_watchers_start_cli_surfaces_application_error(tmp_path, monkeypatch):

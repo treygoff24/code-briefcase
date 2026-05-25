@@ -22,7 +22,7 @@ from pathlib import Path
 
 # Fix for Windows: Explicitly import tree-sitter bindings early to prevent
 # silent DLL loading failures when running as a console script entry point.
-if os.name == 'nt':
+if os.name == "nt":
     for module_name in (
         "tree_sitter",
         "tree_sitter_python",
@@ -40,41 +40,42 @@ from . import __version__
 def _get_subprocess_detach_kwargs():
     """Get platform-specific kwargs for detaching subprocess."""
     import subprocess
-    if os.name == 'nt':  # Windows
-        return {'creationflags': subprocess.CREATE_NEW_PROCESS_GROUP}
+
+    if os.name == "nt":  # Windows
+        return {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP}
     else:  # Unix (Mac/Linux)
-        return {'start_new_session': True}
+        return {"start_new_session": True}
 
 
 # Extension to language mapping for auto-detection
 EXTENSION_TO_LANGUAGE = {
-    '.java': 'java',
-    '.py': 'python',
-    '.ts': 'typescript',
-    '.tsx': 'typescript',
-    '.js': 'javascript',
-    '.jsx': 'javascript',
-    '.go': 'go',
-    '.rs': 'rust',
-    '.c': 'c',
-    '.h': 'c',
-    '.cpp': 'cpp',
-    '.hpp': 'cpp',
-    '.cc': 'cpp',
-    '.cxx': 'cpp',
-    '.hh': 'cpp',
-    '.rb': 'ruby',
-    '.php': 'php',
-    '.swift': 'swift',
-    '.cs': 'csharp',
-    '.kt': 'kotlin',
-    '.kts': 'kotlin',
-    '.scala': 'scala',
-    '.sc': 'scala',
-    '.lua': 'lua',
-    '.luau': 'luau',
-    '.ex': 'elixir',
-    '.exs': 'elixir',
+    ".java": "java",
+    ".py": "python",
+    ".ts": "typescript",
+    ".tsx": "typescript",
+    ".js": "javascript",
+    ".jsx": "javascript",
+    ".go": "go",
+    ".rs": "rust",
+    ".c": "c",
+    ".h": "c",
+    ".cpp": "cpp",
+    ".hpp": "cpp",
+    ".cc": "cpp",
+    ".cxx": "cpp",
+    ".hh": "cpp",
+    ".rb": "ruby",
+    ".php": "php",
+    ".swift": "swift",
+    ".cs": "csharp",
+    ".kt": "kotlin",
+    ".kts": "kotlin",
+    ".scala": "scala",
+    ".sc": "scala",
+    ".lua": "lua",
+    ".luau": "luau",
+    ".ex": "elixir",
+    ".exs": "elixir",
 }
 
 
@@ -88,7 +89,7 @@ def detect_language_from_extension(file_path: str) -> str:
         Language name (defaults to 'python' if unknown)
     """
     ext = Path(file_path).suffix.lower()
-    return EXTENSION_TO_LANGUAGE.get(ext, 'python')
+    return EXTENSION_TO_LANGUAGE.get(ext, "python")
 
 
 def _show_first_run_tip():
@@ -103,7 +104,11 @@ def _show_first_run_tip():
 
     # Show tip
     import sys
-    print("Tip: For Swift support, run: python -m code_briefcase.install_swift", file=sys.stderr)
+
+    print(
+        "Tip: For Swift support, run: python -m code_briefcase.install_swift",
+        file=sys.stderr,
+    )
     print("     (This message appears once)", file=sys.stderr)
     print(file=sys.stderr)
 
@@ -117,7 +122,9 @@ def main():
         description="Token-efficient code analysis for LLMs",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
-Version: %(prog)s """ + __version__ + """
+Version: %(prog)s """
+        + __version__
+        + """
 
 Examples:
     code-briefcase tree src/                      # File tree for src/
@@ -153,7 +160,8 @@ Semantic Search:
 
     # Global flags
     parser.add_argument(
-        "-v", "--version",
+        "-v",
+        "--version",
         action="version",
         version=f"%(prog)s {__version__}",
     )
@@ -172,6 +180,7 @@ Semantic Search:
     # Shell completion support
     try:
         import shtab
+
         shtab.add_argument_to(parser, ["--print-completion", "-s"])
     except ImportError:
         pass  # shtab is optional
@@ -194,8 +203,27 @@ Semantic Search:
     struct_p.add_argument(
         "--lang",
         default="auto",
-        choices=["auto", "all", "python", "typescript", "javascript", "go", "rust", "java", "c",
-                 "cpp", "ruby", "php", "kotlin", "swift", "csharp", "scala", "lua", "luau", "elixir"],
+        choices=[
+            "auto",
+            "all",
+            "python",
+            "typescript",
+            "javascript",
+            "go",
+            "rust",
+            "java",
+            "c",
+            "cpp",
+            "ruby",
+            "php",
+            "kotlin",
+            "swift",
+            "csharp",
+            "scala",
+            "lua",
+            "luau",
+            "elixir",
+        ],
         help="Language to analyze (auto=use cached, all=detect all)",
     )
     struct_p.add_argument(
@@ -214,17 +242,37 @@ Semantic Search:
         "--max", type=int, default=100, help="Max results (default: 100, 0=unlimited)"
     )
     search_p.add_argument(
-        "--max-files", type=int, default=10000, help="Max files to scan (default: 10000)"
+        "--max-files",
+        type=int,
+        default=10000,
+        help="Max files to scan (default: 10000)",
     )
 
     # code-briefcase extract <file> [--class X] [--function Y] [--method Class.method]
     extract_p = subparsers.add_parser("extract", help="Extract full file info")
     extract_p.add_argument("file", help="File to analyze")
-    extract_p.add_argument("--class", dest="filter_class", help="Filter to specific class")
-    extract_p.add_argument("--function", dest="filter_function", help="Filter to specific function")
-    extract_p.add_argument("--method", dest="filter_method", help="Filter to specific method (Class.method)")
-    extract_p.add_argument("--lang", default=None, help="Language (auto-detected from extension if not specified)")
-    extract_p.add_argument("--format", choices=["json"], default="json", help="Output format (currently only json supported)")
+    extract_p.add_argument(
+        "--class", dest="filter_class", help="Filter to specific class"
+    )
+    extract_p.add_argument(
+        "--function", dest="filter_function", help="Filter to specific function"
+    )
+    extract_p.add_argument(
+        "--method",
+        dest="filter_method",
+        help="Filter to specific method (Class.method)",
+    )
+    extract_p.add_argument(
+        "--lang",
+        default=None,
+        help="Language (auto-detected from extension if not specified)",
+    )
+    extract_p.add_argument(
+        "--format",
+        choices=["json"],
+        default="json",
+        help="Output format (currently only json supported)",
+    )
 
     # code-briefcase context <entry>
     ctx_p = subparsers.add_parser("context", help="Get relevant context for LLM")
@@ -234,8 +282,25 @@ Semantic Search:
     ctx_p.add_argument(
         "--lang",
         default="python",
-        choices=["python", "typescript", "javascript", "go", "rust", "java", "c",
-                 "cpp", "ruby", "php", "kotlin", "swift", "csharp", "scala", "lua", "luau", "elixir"],
+        choices=[
+            "python",
+            "typescript",
+            "javascript",
+            "go",
+            "rust",
+            "java",
+            "c",
+            "cpp",
+            "ruby",
+            "php",
+            "kotlin",
+            "swift",
+            "csharp",
+            "scala",
+            "lua",
+            "luau",
+            "elixir",
+        ],
         help="Language",
     )
 
@@ -243,13 +308,21 @@ Semantic Search:
     cfg_p = subparsers.add_parser("cfg", help="Control flow graph")
     cfg_p.add_argument("file", help="Source file")
     cfg_p.add_argument("function", help="Function name")
-    cfg_p.add_argument("--lang", default=None, help="Language (auto-detected from extension if not specified)")
+    cfg_p.add_argument(
+        "--lang",
+        default=None,
+        help="Language (auto-detected from extension if not specified)",
+    )
 
     # code-briefcase dfg <file> <function>
     dfg_p = subparsers.add_parser("dfg", help="Data flow graph")
     dfg_p.add_argument("file", help="Source file")
     dfg_p.add_argument("function", help="Function name")
-    dfg_p.add_argument("--lang", default=None, help="Language (auto-detected from extension if not specified)")
+    dfg_p.add_argument(
+        "--lang",
+        default=None,
+        help="Language (auto-detected from extension if not specified)",
+    )
 
     # code-briefcase slice <file> <function> <line>
     slice_p = subparsers.add_parser("slice", help="Program slice")
@@ -263,12 +336,18 @@ Semantic Search:
         help="Slice direction",
     )
     slice_p.add_argument("--var", help="Variable to track (optional)")
-    slice_p.add_argument("--lang", default=None, help="Language (auto-detected from extension if not specified)")
+    slice_p.add_argument(
+        "--lang",
+        default=None,
+        help="Language (auto-detected from extension if not specified)",
+    )
 
     # code-briefcase calls <path>
     calls_p = subparsers.add_parser("calls", help="Build cross-file call graph")
     calls_p.add_argument("path", nargs="?", default=".", help="Project root")
-    calls_p.add_argument("--lang", default="auto", help="Language (auto=cached, all=detect)")
+    calls_p.add_argument(
+        "--lang", default="auto", help="Language (auto=cached, all=detect)"
+    )
 
     # code-briefcase impact <func> [path]
     impact_p = subparsers.add_parser(
@@ -276,10 +355,17 @@ Semantic Search:
     )
     impact_p.add_argument("func", help="Function name to find callers of")
     impact_p.add_argument("path", nargs="?", default=None, help="Project root")
-    impact_p.add_argument("--project", dest="project_path", default=".", help="Project root (alternative to positional path)")
+    impact_p.add_argument(
+        "--project",
+        dest="project_path",
+        default=".",
+        help="Project root (alternative to positional path)",
+    )
     impact_p.add_argument("--depth", type=int, default=3, help="Max depth (default: 3)")
     impact_p.add_argument("--file", help="Filter by file containing this string")
-    impact_p.add_argument("--lang", default="auto", help="Language (auto=cached, all=detect)")
+    impact_p.add_argument(
+        "--lang", default="auto", help="Language (auto=cached, all=detect)"
+    )
 
     # code-briefcase dead [path]
     dead_p = subparsers.add_parser("dead", help="Find unreachable (dead) code")
@@ -287,21 +373,29 @@ Semantic Search:
     dead_p.add_argument(
         "--entry", nargs="*", default=[], help="Additional entry point patterns"
     )
-    dead_p.add_argument("--lang", default="auto", help="Language (auto=cached, all=detect)")
+    dead_p.add_argument(
+        "--lang", default="auto", help="Language (auto=cached, all=detect)"
+    )
 
     # code-briefcase arch [path]
     arch_p = subparsers.add_parser(
         "arch", help="Detect architectural layers from call patterns"
     )
     arch_p.add_argument("path", nargs="?", default=".", help="Project root")
-    arch_p.add_argument("--lang", default="auto", help="Language (auto=cached, all=detect)")
+    arch_p.add_argument(
+        "--lang", default="auto", help="Language (auto=cached, all=detect)"
+    )
 
     # code-briefcase imports <file>
     imports_p = subparsers.add_parser(
         "imports", help="Parse imports from a source file"
     )
     imports_p.add_argument("file", help="Source file to analyze")
-    imports_p.add_argument("--lang", default=None, help="Language (auto-detected from extension if not specified)")
+    imports_p.add_argument(
+        "--lang",
+        default=None,
+        help="Language (auto-detected from extension if not specified)",
+    )
 
     # code-briefcase importers <module> [path]
     importers_p = subparsers.add_parser(
@@ -316,7 +410,9 @@ Semantic Search:
         "change-impact", help="Find tests affected by changed files"
     )
     impact_p.add_argument(
-        "files", nargs="*", help="Files to analyze (default: auto-detect from session/git)"
+        "files",
+        nargs="*",
+        help="Files to analyze (default: auto-detect from session/git)",
     )
     impact_p.add_argument(
         "--session", action="store_true", help="Use session-modified files (dirty_flag)"
@@ -336,12 +432,12 @@ Semantic Search:
     )
 
     # code-briefcase diagnostics <file|path>
-    diag_p = subparsers.add_parser(
-        "diagnostics", help="Get type and lint diagnostics"
-    )
+    diag_p = subparsers.add_parser("diagnostics", help="Get type and lint diagnostics")
     diag_p.add_argument("target", help="File or project directory to check")
     diag_p.add_argument(
-        "--project", action="store_true", help="Check entire project (default: single file)"
+        "--project",
+        action="store_true",
+        help="Check entire project (default: single file)",
     )
     diag_p.add_argument(
         "--no-lint", action="store_true", help="Skip linter, only run type checker"
@@ -357,13 +453,26 @@ Semantic Search:
         help="Build a budgeted context pack",
         description="Build a budgeted context pack",
     )
-    pack_p.add_argument("query", nargs="?", default="", help="Task or question to pack context for")
+    pack_p.add_argument(
+        "query", nargs="?", default="", help="Task or question to pack context for"
+    )
     pack_p.add_argument("--project", default=".", help="Project root directory")
-    pack_p.add_argument("--budget", type=int, default=3000, help="Approximate token budget")
-    pack_p.add_argument("--file", action="append", dest="files", help="Explicit file to include (repeatable)")
+    pack_p.add_argument(
+        "--budget", type=int, default=3000, help="Approximate token budget"
+    )
+    pack_p.add_argument(
+        "--file",
+        action="append",
+        dest="files",
+        help="Explicit file to include (repeatable)",
+    )
     pack_p.add_argument("--changed", action="store_true", help="Pack changed files")
-    pack_p.add_argument("--no-semantic", action="store_true", help="Do not use semantic search results")
-    pack_p.add_argument("--json", action="store_true", help="Output JSON instead of markdown")
+    pack_p.add_argument(
+        "--no-semantic", action="store_true", help="Do not use semantic search results"
+    )
+    pack_p.add_argument(
+        "--json", action="store_true", help="Output JSON instead of markdown"
+    )
 
     # code-briefcase warm <path>
     warm_p = subparsers.add_parser(
@@ -376,7 +485,26 @@ Semantic Search:
     warm_p.add_argument(
         "--lang",
         default="all",
-        choices=["python", "typescript", "javascript", "go", "rust", "java", "c", "cpp", "ruby", "php", "kotlin", "swift", "csharp", "scala", "lua", "luau", "elixir", "all"],
+        choices=[
+            "python",
+            "typescript",
+            "javascript",
+            "go",
+            "rust",
+            "java",
+            "c",
+            "cpp",
+            "ruby",
+            "php",
+            "kotlin",
+            "swift",
+            "csharp",
+            "scala",
+            "lua",
+            "luau",
+            "elixir",
+            "all",
+        ],
         help="Language (default: auto-detect all)",
     )
 
@@ -392,7 +520,26 @@ Semantic Search:
     index_p.add_argument(
         "--lang",
         default="python",
-        choices=["python", "typescript", "javascript", "go", "rust", "java", "c", "cpp", "ruby", "php", "kotlin", "swift", "csharp", "scala", "lua", "luau", "elixir", "all"],
+        choices=[
+            "python",
+            "typescript",
+            "javascript",
+            "go",
+            "rust",
+            "java",
+            "c",
+            "cpp",
+            "ruby",
+            "php",
+            "kotlin",
+            "swift",
+            "csharp",
+            "scala",
+            "lua",
+            "luau",
+            "elixir",
+            "all",
+        ],
         help="Language (use 'all' for multi-language)",
     )
     index_p.add_argument(
@@ -406,7 +553,9 @@ Semantic Search:
     search_p.add_argument("query", help="Natural language query")
     search_p.add_argument("--path", default=".", help="Project root")
     search_p.add_argument("--k", type=int, default=5, help="Number of results")
-    search_p.add_argument("--expand", action="store_true", help="Include call graph expansion")
+    search_p.add_argument(
+        "--expand", action="store_true", help="Include call graph expansion"
+    )
     search_p.add_argument("--lang", default="python", help="Language")
     search_p.add_argument(
         "--model",
@@ -428,70 +577,130 @@ Semantic Search:
     cache_clean_p.add_argument("--json", action="store_true", help="Output JSON")
 
     # code-briefcase daemon start/stop/status/query
-    daemon_p = subparsers.add_parser(
-        "daemon", help="Daemon management subcommands"
-    )
+    daemon_p = subparsers.add_parser("daemon", help="Daemon management subcommands")
     daemon_sub = daemon_p.add_subparsers(dest="action", required=True)
 
     # code-briefcase daemon start [--project PATH]
-    daemon_start_p = daemon_sub.add_parser("start", help="Start daemon for project (background)")
-    daemon_start_p.add_argument("--project", "-p", default=".", help="Project path (default: current directory)")
+    daemon_start_p = daemon_sub.add_parser(
+        "start", help="Start daemon for project (background)"
+    )
+    daemon_start_p.add_argument(
+        "--project", "-p", default=".", help="Project path (default: current directory)"
+    )
 
     # code-briefcase daemon stop [--project PATH]
     daemon_stop_p = daemon_sub.add_parser("stop", help="Stop daemon gracefully")
-    daemon_stop_p.add_argument("--project", "-p", default=".", help="Project path (default: current directory)")
+    daemon_stop_p.add_argument(
+        "--project", "-p", default=".", help="Project path (default: current directory)"
+    )
 
     # code-briefcase daemon status [--project PATH]
     daemon_status_p = daemon_sub.add_parser("status", help="Check if daemon running")
-    daemon_status_p.add_argument("--project", "-p", default=".", help="Project path (default: current directory)")
+    daemon_status_p.add_argument(
+        "--project", "-p", default=".", help="Project path (default: current directory)"
+    )
 
     # code-briefcase daemon query CMD [--project PATH]
-    daemon_query_p = daemon_sub.add_parser("query", help="Send raw JSON command to daemon")
-    daemon_query_p.add_argument("cmd", help="Command to send (e.g., ping, status, search)")
-    daemon_query_p.add_argument("--project", "-p", default=".", help="Project path (default: current directory)")
+    daemon_query_p = daemon_sub.add_parser(
+        "query", help="Send raw JSON command to daemon"
+    )
+    daemon_query_p.add_argument(
+        "cmd", help="Command to send (e.g., ping, status, search)"
+    )
+    daemon_query_p.add_argument(
+        "--project", "-p", default=".", help="Project path (default: current directory)"
+    )
 
     # code-briefcase daemon notify FILE [--project PATH]
-    daemon_notify_p = daemon_sub.add_parser("notify", help="Notify daemon of file change (triggers reindex at threshold)")
+    daemon_notify_p = daemon_sub.add_parser(
+        "notify", help="Notify daemon of file change (triggers reindex at threshold)"
+    )
     daemon_notify_p.add_argument("file", help="Path to changed file")
-    daemon_notify_p.add_argument("--project", "-p", default=".", help="Project path (default: current directory)")
+    daemon_notify_p.add_argument(
+        "--project", "-p", default=".", help="Project path (default: current directory)"
+    )
 
     # code-briefcase daemon watchers status/start/stop
-    daemon_watchers_p = daemon_sub.add_parser("watchers", help="Manage diagnostics watchers")
-    daemon_watchers_sub = daemon_watchers_p.add_subparsers(dest="watchers_action", required=True)
+    daemon_watchers_p = daemon_sub.add_parser(
+        "watchers", help="Manage diagnostics watchers"
+    )
+    daemon_watchers_sub = daemon_watchers_p.add_subparsers(
+        dest="watchers_action", required=True
+    )
 
-    daemon_watchers_status_p = daemon_watchers_sub.add_parser("status", help="Show watcher status")
-    daemon_watchers_status_p.add_argument("--project", "-p", default=".", help="Project path (default: current directory)")
-    daemon_watchers_status_p.add_argument("--json", action="store_true", help="Emit JSON")
+    daemon_watchers_status_p = daemon_watchers_sub.add_parser(
+        "status", help="Show watcher status"
+    )
+    daemon_watchers_status_p.add_argument(
+        "--project", "-p", default=".", help="Project path (default: current directory)"
+    )
+    daemon_watchers_status_p.add_argument(
+        "--json", action="store_true", help="Emit JSON"
+    )
 
-    daemon_watchers_start_p = daemon_watchers_sub.add_parser("start", help="Start/query a watcher for a file")
-    daemon_watchers_start_p.add_argument("file", help="File whose language/config should be watched")
-    daemon_watchers_start_p.add_argument("--project", "-p", default=".", help="Project path (default: current directory)")
-    daemon_watchers_start_p.add_argument("--lang", "--language", dest="language", default=None, help="Language override")
-    daemon_watchers_start_p.add_argument("--budget-ms", type=int, default=0, help="Initial query wait budget")
-    daemon_watchers_start_p.add_argument("--json", action="store_true", help="Emit JSON")
+    daemon_watchers_start_p = daemon_watchers_sub.add_parser(
+        "start", help="Start/query a watcher for a file"
+    )
+    daemon_watchers_start_p.add_argument(
+        "file", help="File whose language/config should be watched"
+    )
+    daemon_watchers_start_p.add_argument(
+        "--project", "-p", default=".", help="Project path (default: current directory)"
+    )
+    daemon_watchers_start_p.add_argument(
+        "--lang", "--language", dest="language", default=None, help="Language override"
+    )
+    daemon_watchers_start_p.add_argument(
+        "--budget-ms", type=int, default=0, help="Initial query wait budget"
+    )
+    daemon_watchers_start_p.add_argument(
+        "--json", action="store_true", help="Emit JSON"
+    )
 
-    daemon_watchers_stop_p = daemon_watchers_sub.add_parser("stop", help="Stop all watchers for a project")
-    daemon_watchers_stop_p.add_argument("--project", "-p", default=".", help="Project path (default: current directory)")
+    daemon_watchers_stop_p = daemon_watchers_sub.add_parser(
+        "stop", help="Stop all watchers for a project"
+    )
+    daemon_watchers_stop_p.add_argument(
+        "--project", "-p", default=".", help="Project path (default: current directory)"
+    )
     daemon_watchers_stop_p.add_argument("--json", action="store_true", help="Emit JSON")
 
     # code-briefcase hooks run/install/doctor
     hooks_p = subparsers.add_parser("hooks", help="Agent hook runtime and installer")
     hooks_sub = hooks_p.add_subparsers(dest="hooks_action", required=True)
 
-    hooks_run_p = hooks_sub.add_parser("run", help="Run a Code Briefcase hook from stdin JSON")
+    hooks_run_p = hooks_sub.add_parser(
+        "run", help="Run a Code Briefcase hook from stdin JSON"
+    )
     hooks_run_p.add_argument(
         "event_name",
         choices=[
-            "session-start", "pre-read", "pre-edit", "post-edit",
-            "user-prompt-submit", "permission-request", "pre-tool",
-            "post-tool", "stop", "session-end", "notification",
-            "subagent-start", "subagent-stop", "pre-compact",
+            "session-start",
+            "pre-read",
+            "pre-edit",
+            "post-edit",
+            "user-prompt-submit",
+            "permission-request",
+            "pre-tool",
+            "post-tool",
+            "stop",
+            "session-end",
+            "notification",
+            "subagent-start",
+            "subagent-stop",
+            "pre-compact",
         ],
         help="Hook event to run",
     )
-    hooks_run_p.add_argument("--client", default="generic", choices=["claude", "codex", "droid", "factory", "opencode", "generic"])
+    hooks_run_p.add_argument(
+        "--client",
+        default="generic",
+        choices=["claude", "codex", "droid", "factory", "opencode", "generic"],
+    )
 
-    hooks_install_p = hooks_sub.add_parser("install", help="Install Code Briefcase hooks into an agent config")
+    hooks_install_p = hooks_sub.add_parser(
+        "install", help="Install Code Briefcase hooks into an agent config"
+    )
     hooks_install_p.add_argument(
         "client",
         choices=[
@@ -519,7 +728,9 @@ Semantic Search:
     hooks_install_p.add_argument("--enable-tool-guard", action="store_true")
     hooks_install_p.add_argument("--enable-compact-context", action="store_true")
 
-    hooks_doctor_p = hooks_sub.add_parser("doctor", help="Check Code Briefcase hook installation health")
+    hooks_doctor_p = hooks_sub.add_parser(
+        "doctor", help="Check Code Briefcase hook installation health"
+    )
     hooks_doctor_p.add_argument(
         "--client",
         action="append",
@@ -540,14 +751,15 @@ Semantic Search:
 
     # code-briefcase doctor [--install LANG]
     doctor_p = subparsers.add_parser(
-        "doctor", help="Check and install diagnostic tools (type checkers, linters, formatters)"
+        "doctor",
+        help="Check and install diagnostic tools (type checkers, linters, formatters)",
     )
     doctor_p.add_argument(
-        "--install", metavar="LANG", help="Install missing tools for language (e.g., python, go)"
+        "--install",
+        metavar="LANG",
+        help="Install missing tools for language (e.g., python, go)",
     )
-    doctor_p.add_argument(
-        "--json", action="store_true", help="Output as JSON"
-    )
+    doctor_p.add_argument("--json", action="store_true", help="Output as JSON")
 
     args = parser.parse_args()
 
@@ -651,6 +863,7 @@ Semantic Search:
         3. If cache exists with dirty files, patch incrementally
         """
         import time
+
         project = Path(project_path).resolve()
         cache_dir = project / ".code-briefcase" / "cache"
         cache_file = cache_dir / "call_graph.json"
@@ -659,17 +872,19 @@ Semantic Search:
         if cache_file.exists():
             try:
                 cache_data = json.loads(cache_file.read_text())
-                
+
                 # Validate cache language compatibility
                 cache_langs = cache_data.get("languages", [])
                 if cache_langs and lang not in cache_langs and lang != "all":
                     # Cache was built with different languages; rebuild
                     raise ValueError("Cache language mismatch")
-                
+
                 # Reconstruct graph from cache
                 graph = ProjectCallGraph()
                 for e in cache_data.get("edges", []):
-                    graph.add_edge(e["from_file"], e["from_func"], e["to_file"], e["to_func"])
+                    graph.add_edge(
+                        e["from_file"], e["from_func"], e["to_file"], e["to_func"]
+                    )
 
                 # Check for dirty files
                 if is_dirty(project):
@@ -678,12 +893,19 @@ Semantic Search:
                     for rel_file in dirty_files:
                         abs_file = project / rel_file
                         if abs_file.exists():
-                            graph = patch_call_graph(graph, str(abs_file), str(project), lang=lang)
+                            graph = patch_call_graph(
+                                graph, str(abs_file), str(project), lang=lang
+                            )
 
                     # Update cache with patched graph
                     cache_data = {
                         "edges": [
-                            {"from_file": e[0], "from_func": e[1], "to_file": e[2], "to_func": e[3]}
+                            {
+                                "from_file": e[0],
+                                "from_func": e[1],
+                                "to_file": e[2],
+                                "to_func": e[3],
+                            }
                             for e in graph.edges
                         ],
                         "languages": cache_langs if cache_langs else [lang],
@@ -722,12 +944,12 @@ Semantic Search:
     # Helper to load ignore patterns from .tldrignore + CLI --ignore flags + .gitignore
     def get_ignore_spec(project_path: str | Path):
         """Load ignore patterns, combining .code-briefcaseignore, .gitignore, and CLI --ignore flags."""
-        if getattr(args, 'no_ignore', False):
+        if getattr(args, "no_ignore", False):
             return None
 
         from .tldrignore import IgnoreSpec
 
-        cli_patterns = getattr(args, 'ignore', None) or []
+        cli_patterns = getattr(args, "ignore", None) or []
         return IgnoreSpec(
             project_dir=project_path,
             use_gitignore=True,
@@ -755,13 +977,19 @@ Semantic Search:
                 return cached[0]
             # No cache - detect languages
             from .semantic import _detect_project_languages
-            respect_ignore = not getattr(args, 'no_ignore', False)
-            langs = _detect_project_languages(project_path, respect_ignore=respect_ignore)
+
+            respect_ignore = not getattr(args, "no_ignore", False)
+            langs = _detect_project_languages(
+                project_path, respect_ignore=respect_ignore
+            )
             return langs[0] if langs else "python"
         elif lang_arg == "all":
             from .semantic import _detect_project_languages
-            respect_ignore = not getattr(args, 'no_ignore', False)
-            langs = _detect_project_languages(project_path, respect_ignore=respect_ignore)
+
+            respect_ignore = not getattr(args, "no_ignore", False)
+            langs = _detect_project_languages(
+                project_path, respect_ignore=respect_ignore
+            )
             return langs[0] if langs else "python"
         return lang_arg
 
@@ -770,8 +998,10 @@ Semantic Search:
             ext = set(args.ext) if args.ext else None
             ignore_spec = get_ignore_spec(args.path)
             result = get_file_tree(
-                args.path, extensions=ext, exclude_hidden=not args.show_hidden,
-                ignore_spec=ignore_spec
+                args.path,
+                extensions=ext,
+                exclude_hidden=not args.show_hidden,
+                ignore_spec=ignore_spec,
             )
             print(json.dumps(result, indent=2))
 
@@ -787,15 +1017,21 @@ Semantic Search:
                     languages = cached
                 else:
                     from .semantic import _detect_project_languages
-                    respect_ignore = not getattr(args, 'no_ignore', False)
-                    languages = _detect_project_languages(project_path, respect_ignore=respect_ignore)
+
+                    respect_ignore = not getattr(args, "no_ignore", False)
+                    languages = _detect_project_languages(
+                        project_path, respect_ignore=respect_ignore
+                    )
                     if not languages:
                         languages = ["python"]
             elif args.lang == "all":
                 # Detect all languages in project
                 from .semantic import _detect_project_languages
-                respect_ignore = not getattr(args, 'no_ignore', False)
-                languages = _detect_project_languages(project_path, respect_ignore=respect_ignore)
+
+                respect_ignore = not getattr(args, "no_ignore", False)
+                languages = _detect_project_languages(
+                    project_path, respect_ignore=respect_ignore
+                )
                 if not languages:
                     languages = ["python"]
             else:
@@ -805,15 +1041,17 @@ Semantic Search:
             all_files = []
             for lang in languages:
                 result = get_code_structure(
-                    args.path, language=lang, max_results=args.max,
-                    ignore_spec=ignore_spec
+                    args.path,
+                    language=lang,
+                    max_results=args.max,
+                    ignore_spec=ignore_spec,
                 )
                 all_files.extend(result.get("files", []))
 
             combined_result = {
                 "root": str(project_path),
                 "languages": languages,
-                "files": all_files[:args.max],  # Respect max across all languages
+                "files": all_files[: args.max],  # Respect max across all languages
             }
             print(json.dumps(combined_result, indent=2))
 
@@ -821,7 +1059,8 @@ Semantic Search:
             ext = set(args.ext) if args.ext else None
             ignore_spec = get_ignore_spec(args.path)
             result = api_search(
-                args.pattern, args.path,
+                args.pattern,
+                args.path,
                 extensions=ext,
                 context_lines=args.context,
                 max_results=args.max,
@@ -842,7 +1081,8 @@ Semantic Search:
                 # Filter classes
                 if filter_class:
                     result["classes"] = [
-                        c for c in result.get("classes", [])
+                        c
+                        for c in result.get("classes", [])
                         if c.get("name") == filter_class
                     ]
                 elif filter_method:
@@ -856,7 +1096,8 @@ Semantic Search:
                                 # Filter to only the requested method
                                 c_copy = dict(c)
                                 c_copy["methods"] = [
-                                    m for m in c.get("methods", [])
+                                    m
+                                    for m in c.get("methods", [])
                                     if m.get("name") == method_name
                                 ]
                                 filtered_classes.append(c_copy)
@@ -868,7 +1109,8 @@ Semantic Search:
                 # Filter functions
                 if filter_function:
                     result["functions"] = [
-                        f for f in result.get("functions", [])
+                        f
+                        for f in result.get("functions", [])
                         if f.get("name") == filter_function
                     ]
                 elif not filter_method:
@@ -970,8 +1212,10 @@ Semantic Search:
                 sys.exit(1)
 
             # Scan all source files and check their imports
-            respect_ignore = not getattr(args, 'no_ignore', False)
-            files = scan_project_files(str(project), language=args.lang, respect_ignore=respect_ignore)
+            respect_ignore = not getattr(args, "no_ignore", False)
+            files = scan_project_files(
+                str(project), language=args.lang, respect_ignore=respect_ignore
+            )
             importers = []
             for file_path in files:
                 try:
@@ -981,10 +1225,12 @@ Semantic Search:
                         names = imp.get("names", [])
                         # Check if module matches or if any imported name matches
                         if args.module in module or args.module in names:
-                            importers.append({
-                                "file": str(Path(file_path).relative_to(project)),
-                                "import": imp,
-                            })
+                            importers.append(
+                                {
+                                    "file": str(Path(file_path).relative_to(project)),
+                                    "import": imp,
+                                }
+                            )
                 except Exception:
                     # Skip files that can't be parsed
                     pass
@@ -1008,6 +1254,7 @@ Semantic Search:
                 # Actually run the tests (test_command is a list to avoid shell injection)
                 import shlex
                 import subprocess as sp
+
                 cmd = result["test_command"]
                 print(f"Running: {shlex.join(cmd)}", file=sys.stderr)
                 sp.run(cmd)  # No shell=True - safe from injection
@@ -1059,7 +1306,15 @@ Semantic Search:
             if args.background:
                 # Spawn background process (cross-platform)
                 subprocess.Popen(
-                    [sys.executable, "-m", "code_briefcase.cli", "warm", str(project_path), "--lang", args.lang],
+                    [
+                        sys.executable,
+                        "-m",
+                        "code_briefcase.cli",
+                        "warm",
+                        str(project_path),
+                        "--lang",
+                        args.lang,
+                    ],
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL,
                     **_get_subprocess_detach_kwargs(),
@@ -1075,46 +1330,69 @@ Semantic Search:
                 if created:
                     print(msg)
 
-                respect_ignore = not getattr(args, 'no_ignore', False)
-                
+                respect_ignore = not getattr(args, "no_ignore", False)
+
                 # Determine languages to process
                 if args.lang == "all":
                     try:
                         from .semantic import _detect_project_languages
-                        target_languages = _detect_project_languages(project_path, respect_ignore=respect_ignore)
+
+                        target_languages = _detect_project_languages(
+                            project_path, respect_ignore=respect_ignore
+                        )
                         print(f"Detected languages: {', '.join(target_languages)}")
                     except ImportError:
                         # Fallback if semantic module issue
-                        target_languages = ["python", "typescript", "javascript", "go", "rust"]
+                        target_languages = [
+                            "python",
+                            "typescript",
+                            "javascript",
+                            "go",
+                            "rust",
+                        ]
                 else:
                     target_languages = [args.lang]
 
                 all_files = set()
                 combined_edges = []
                 processed_languages = []
-                
+
                 for lang in target_languages:
                     try:
                         # Scan files
-                        files = scan_project(project_path, language=lang, respect_ignore=respect_ignore)
+                        files = scan_project(
+                            project_path, language=lang, respect_ignore=respect_ignore
+                        )
                         all_files.update(files)
-                        
+
                         # Build graph
                         graph = build_project_call_graph(project_path, language=lang)
-                        combined_edges.extend([
-                            {"from_file": e[0], "from_func": e[1], "to_file": e[2], "to_func": e[3]}
-                            for e in graph.edges
-                        ])
-                        print(f"Processed {lang}: {len(files)} files, {len(graph.edges)} edges")
+                        combined_edges.extend(
+                            [
+                                {
+                                    "from_file": e[0],
+                                    "from_func": e[1],
+                                    "to_file": e[2],
+                                    "to_func": e[3],
+                                }
+                                for e in graph.edges
+                            ]
+                        )
+                        print(
+                            f"Processed {lang}: {len(files)} files, {len(graph.edges)} edges"
+                        )
                         processed_languages.append(lang)
                     except ValueError as e:
                         # Expected for unsupported languages
                         print(f"Warning: {lang}: {e}", file=sys.stderr)
                     except Exception as e:
                         # Unexpected error - show traceback if debug enabled
-                        print(f"Warning: Failed to process {lang}: {e}", file=sys.stderr)
+                        print(
+                            f"Warning: Failed to process {lang}: {e}", file=sys.stderr
+                        )
                         if os.environ.get("CODE_BRIEFCASE_DEBUG"):
                             import traceback
+
                             traceback.print_exc()
 
                 # Create cache directory
@@ -1124,31 +1402,54 @@ Semantic Search:
                 # Save cache file
                 cache_file = cache_dir / "call_graph.json"
                 # Deduplicate edges
-                unique_edges = list({(e["from_file"], e["from_func"], e["to_file"], e["to_func"]): e for e in combined_edges}.values())
-                
+                unique_edges = list(
+                    {
+                        (e["from_file"], e["from_func"], e["to_file"], e["to_func"]): e
+                        for e in combined_edges
+                    }.values()
+                )
+
                 cache_data = {
                     "edges": unique_edges,
-                    "languages": processed_languages if processed_languages else target_languages,
+                    "languages": (
+                        processed_languages if processed_languages else target_languages
+                    ),
                     "timestamp": time.time(),
                 }
                 cache_file.write_text(json.dumps(cache_data, indent=2))
 
                 # Also save quick-access language cache for structure/search auto-detect
                 lang_cache_file = project_path / ".code-briefcase" / "languages.json"
-                lang_cache_file.write_text(json.dumps({
-                    "languages": processed_languages if processed_languages else target_languages,
-                    "timestamp": time.time(),
-                }, indent=2))
+                lang_cache_file.write_text(
+                    json.dumps(
+                        {
+                            "languages": (
+                                processed_languages
+                                if processed_languages
+                                else target_languages
+                            ),
+                            "timestamp": time.time(),
+                        },
+                        indent=2,
+                    )
+                )
 
                 # Print stats
-                print(f"Total: Indexed {len(all_files)} files, found {len(unique_edges)} edges")
+                print(
+                    f"Total: Indexed {len(all_files)} files, found {len(unique_edges)} edges"
+                )
 
         elif args.command == "semantic":
             from .semantic import build_semantic_index, semantic_search
 
             if args.action == "index":
-                respect_ignore = not getattr(args, 'no_ignore', False)
-                count = build_semantic_index(args.path, lang=args.lang, model=args.model, respect_ignore=respect_ignore)
+                respect_ignore = not getattr(args, "no_ignore", False)
+                count = build_semantic_index(
+                    args.path,
+                    lang=args.lang,
+                    model=args.model,
+                    respect_ignore=respect_ignore,
+                )
                 print(f"Indexed {count} code units")
 
             elif args.action == "search":
@@ -1176,8 +1477,14 @@ Semantic Search:
             if args.install:
                 lang = args.install.lower()
                 if lang not in install_commands:
-                    print(f"Error: No auto-install available for '{lang}'", file=sys.stderr)
-                    print(f"Available: {', '.join(sorted(install_commands.keys()))}", file=sys.stderr)
+                    print(
+                        f"Error: No auto-install available for '{lang}'",
+                        file=sys.stderr,
+                    )
+                    print(
+                        f"Available: {', '.join(sorted(install_commands.keys()))}",
+                        file=sys.stderr,
+                    )
                     sys.exit(1)
 
                 cmd = install_commands[lang]
@@ -1200,13 +1507,15 @@ Semantic Search:
                         for tool in config.get(slot, []):
                             executable = tool["executable"]
                             path = shutil.which(executable)
-                            lang_result[slot].append({
-                                "name": tool["name"],
-                                "executable": executable,
-                                "installed": path is not None,
-                                "path": path,
-                                "install": tool["install"] if not path else None,
-                            })
+                            lang_result[slot].append(
+                                {
+                                    "name": tool["name"],
+                                    "executable": executable,
+                                    "installed": path is not None,
+                                    "path": path,
+                                    "install": tool["install"] if not path else None,
+                                }
+                            )
 
                     results[lang] = lang_result
 
@@ -1238,7 +1547,9 @@ Semantic Search:
                             print()
 
                     if missing_count > 0:
-                        print(f"Missing {missing_count} tool(s). Run: code-briefcase doctor --install <lang>")
+                        print(
+                            f"Missing {missing_count} tool(s). Run: code-briefcase doctor --install <lang>"
+                        )
                     else:
                         print("All diagnostic tools installed!")
 
@@ -1284,8 +1595,8 @@ Semantic Search:
                     sys.exit(1)
                 result = response.payload or {}
                 print(f"Status: {result.get('state', result.get('status', 'unknown'))}")
-                if 'uptime' in result:
-                    uptime = int(result['uptime'])
+                if "uptime" in result:
+                    uptime = int(result["uptime"])
                     mins, secs = divmod(uptime, 60)
                     hours, mins = divmod(mins, 60)
                     print(f"Uptime: {hours}h {mins}m {secs}s")
@@ -1293,7 +1604,9 @@ Semantic Search:
             elif args.action == "query":
                 response = query_daemon_response(project_path, {"cmd": args.cmd})
                 if not response.ok:
-                    print(f"Error: {_cli_daemon_error_message(response)}", file=sys.stderr)
+                    print(
+                        f"Error: {_cli_daemon_error_message(response)}", file=sys.stderr
+                    )
                     sys.exit(1)
                 print(json.dumps(response.payload, indent=2))
 
@@ -1328,9 +1641,12 @@ Semantic Search:
             elif args.action == "watchers":
                 command = {"cmd": "watchers", "action": args.watchers_action}
                 if args.watchers_action == "start":
+                    file_path = Path(args.file).expanduser()
+                    if not file_path.is_absolute():
+                        file_path = project_path / file_path
                     command.update(
                         {
-                            "file": str(Path(args.file).resolve()),
+                            "file": str(file_path.resolve()),
                             "language": args.language,
                             "budget_ms": args.budget_ms,
                         }
