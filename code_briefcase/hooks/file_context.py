@@ -20,12 +20,15 @@ from code_briefcase.hooks.signature_render import render_signature
 
 NAV_CONTEXT_STATE_FILE = ".code-briefcase/cache/nav-context.json"
 LEGACY_TARGETED_READ_STATE_FILE = ".code-briefcase/cache/targeted-read-context.json"
-TARGETED_READ_STATE_FILE = LEGACY_TARGETED_READ_STATE_FILE
 MIN_CONTEXT_FILE_BYTES = 1500
 TARGETED_READ_MIN_BYTES = MIN_CONTEXT_FILE_BYTES
 TARGETED_READ_BUDGET = 500
 TARGETED_READ_MAX_SESSIONS = 64
 TARGETED_READ_MAX_FILES_PER_SESSION = 256
+
+READ_NAV_MAP_KIND = "read_nav_map"
+EDIT_STRUCTURE_KIND = "edit_structure"
+TARGETED_READ_KIND = "targeted_read_orientation"
 
 
 def should_bypass_read(file_path: Path, tool_input: dict[str, Any]) -> bool:
@@ -184,6 +187,19 @@ class FileContextResult:
     candidate_files: list[dict[str, object]]
 
 
+def _skipped_context_result(trigger: list[str], reason: str) -> FileContextResult:
+    return FileContextResult(
+        status="skipped",
+        reason=reason,
+        context=None,
+        context_kind=None,
+        trigger_files=trigger,
+        recommended_files=[],
+        surfaced_files=[],
+        candidate_files=[],
+    )
+
+
 def _truncate(text: str, budget: int) -> str:
     max_chars = max(500, budget * 4)
     if len(text) <= max_chars:
@@ -256,7 +272,7 @@ def _migrate_legacy_targeted_state(
             path = project / rel
             file_entries[rel] = {
                 "mtime": _file_mtime(path),
-                "kinds": {"targeted_read_orientation": True},
+                "kinds": {TARGETED_READ_KIND: True},
             }
         new_sessions[session_id] = {
             "updated_at": session.get("updated_at", _now_iso()),
@@ -389,16 +405,6 @@ def mark_nav_context_surfaced(event: HookEvent, path: Path, kind: str) -> None:
     session["updated_at"] = _now_iso()
     _prune_nav_state(data)
     _write_nav_state(event.cwd, data)
-
-
-def targeted_read_recently_surfaced(event: HookEvent, path: Path) -> bool:
-    """Return True when this session already received targeted context for path."""
-    return nav_context_recently_surfaced(event, path, "targeted_read_orientation")
-
-
-def mark_targeted_read_surfaced(event: HookEvent, path: Path) -> None:
-    """Remember that targeted context was actually emitted for a session/file."""
-    mark_nav_context_surfaced(event, path, "targeted_read_orientation")
 
 
 def _targeted_read_file_size_ok(path: Path) -> bool:
@@ -592,141 +598,67 @@ def build_file_context_for_path(
     trigger = [trigger_path] if trigger_path is not None else []
     decision = classify_context_path(event.cwd, path)
     if not decision.allowed:
-        return FileContextResult(
-            status="skipped",
-            reason=decision.reason,
-            context=None,
-            context_kind=None,
-            trigger_files=trigger,
-            recommended_files=[],
-            surfaced_files=[],
-            candidate_files=[],
-        )
+        return _skipped_context_result(trigger, decision.reason)
 
     if decision.file_kind in {"code", "test"} or path.suffix.lower() in CODE_EXTENSIONS:
         targeted_read = mode == "read" and is_targeted_read(tool_input)
         if targeted_read and not _targeted_read_file_size_ok(path):
-            return FileContextResult(
-                status="skipped",
-                reason="targeted_read_small_file",
-                context=None,
-                context_kind=None,
-                trigger_files=trigger,
-                recommended_files=[],
-                surfaced_files=[],
-                candidate_files=[],
-            )
-        if targeted_read and targeted_read_recently_surfaced(event, path):
-            return FileContextResult(
-                status="skipped",
-                reason="targeted_read_recently_surfaced",
-                context=None,
-                context_kind=None,
-                trigger_files=trigger,
-                recommended_files=[],
-                surfaced_files=[],
-                candidate_files=[],
-            )
-        read_nav_kind = "read_nav_map"
-        edit_nav_kind = "edit_structure"
-        if mode == "read" and not targeted_read:
-            if nav_context_recently_surfaced(event, path, read_nav_kind):
-                return FileContextResult(
-                    status="skipped",
-                    reason="read_nav_map_recently_surfaced",
-                    context=None,
-                    context_kind=None,
-                    trigger_files=trigger,
-                    recommended_files=[],
-                    surfaced_files=[],
-                    candidate_files=[],
-                )
+            return _skipped_context_result(trigger, "targeted_read_small_file")
+        if targeted_read and nav_context_recently_surfaced(
+            event, path, TARGETED_READ_KIND
+        ):
+            return _skipped_context_result(trigger, "targeted_read_recently_surfaced")
+        if (
+            mode == "read"
+            and not targeted_read
+            and nav_context_recently_surfaced(event, path, READ_NAV_MAP_KIND)
+        ):
+            return _skipped_context_result(trigger, "read_nav_map_recently_surfaced")
         if mode == "edit":
-            if nav_context_recently_surfaced(event, path, edit_nav_kind):
-                return FileContextResult(
-                    status="skipped",
-                    reason="edit_structure_recently_surfaced",
-                    context=None,
-                    context_kind=None,
-                    trigger_files=trigger,
-                    recommended_files=[],
-                    surfaced_files=[],
-                    candidate_files=[],
+            if nav_context_recently_surfaced(event, path, EDIT_STRUCTURE_KIND):
+                return _skipped_context_result(
+                    trigger, "edit_structure_recently_surfaced"
                 )
-            if nav_context_recently_surfaced(event, path, read_nav_kind):
-                return FileContextResult(
-                    status="skipped",
-                    reason="read_nav_map_recently_surfaced",
-                    context=None,
-                    context_kind=None,
-                    trigger_files=trigger,
-                    recommended_files=[],
-                    surfaced_files=[],
-                    candidate_files=[],
+            if nav_context_recently_surfaced(event, path, READ_NAV_MAP_KIND):
+                return _skipped_context_result(
+                    trigger, "read_nav_map_recently_surfaced"
                 )
         if (
             mode == "read"
             and tool_input is not None
             and should_bypass_read(path, tool_input)
         ):
-            return FileContextResult(
-                status="skipped",
-                reason="bypass",
-                context=None,
-                context_kind=None,
-                trigger_files=trigger,
-                recommended_files=[],
-                surfaced_files=[],
-                candidate_files=[],
-            )
+            return _skipped_context_result(trigger, "bypass")
         try:
             info = extract_file(str(path), base_path=str(event.cwd))
         except Exception:
-            return FileContextResult(
-                status="skipped",
-                reason="extract_failed",
-                context=None,
-                context_kind=None,
-                trigger_files=trigger,
-                recommended_files=[],
-                surfaced_files=[],
-                candidate_files=[],
-            )
+            return _skipped_context_result(trigger, "extract_failed")
         if targeted_read:
             context = format_targeted_read_orientation(
                 path, info, tool_input, budget=budget
             )
-            context_kind = "targeted_read_orientation"
-            mark_targeted_read_surfaced(event, path)
+            mark_nav_context_surfaced(event, path, TARGETED_READ_KIND)
             return FileContextResult(
                 status="ok",
                 reason=None,
                 context=context,
-                context_kind=context_kind,
+                context_kind=TARGETED_READ_KIND,
                 trigger_files=trigger,
                 recommended_files=[],
                 surfaced_files=[],
                 candidate_files=[],
             )
 
+        context_kind = READ_NAV_MAP_KIND if mode == "read" else EDIT_STRUCTURE_KIND
         candidate_files, recommended_files, surfaced_files = (
-            discover_related_candidates(
-                event,
-                path,
-                info,
-                context_kind="read_nav_map" if mode == "read" else "edit_structure",
-            )
+            discover_related_candidates(event, path, info, context_kind=context_kind)
         )
         if mode == "read":
             context = format_nav_map(path, info, budget=budget)
-            context += format_related_files_section(surfaced_files)
-            context_kind = read_nav_kind
-            mark_nav_context_surfaced(event, path, read_nav_kind)
         else:
             context = _format_edit_structure(path, info, budget)
-            context += format_related_files_section(surfaced_files)
-            context_kind = edit_nav_kind
-            mark_nav_context_surfaced(event, path, edit_nav_kind)
+        context += format_related_files_section(surfaced_files)
+        mark_nav_context_surfaced(event, path, context_kind)
         return FileContextResult(
             status="ok",
             reason=None,
