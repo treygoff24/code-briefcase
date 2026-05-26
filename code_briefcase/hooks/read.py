@@ -1,7 +1,12 @@
 from __future__ import annotations
 
 from code_briefcase.hooks.file_context import build_file_context_for_path
-from code_briefcase.hooks.outcome import HookExecutionResult, event_relative_path, ok, skipped
+from code_briefcase.hooks.outcome import (
+    HookExecutionResult,
+    event_relative_path,
+    ok,
+    skipped,
+)
 from code_briefcase.hooks.path_policy import resolve_event_path
 from code_briefcase.hooks.runtime import HookEvent, HookResponse
 
@@ -25,7 +30,9 @@ def build_read_response(event: HookEvent, budget: int = 1200) -> HookExecutionRe
         tool_input=event.tool_input,
     )
     if result.status != "ok":
-        return skipped(reason=result.reason or "bypass", trigger_files=result.trigger_files)
+        return skipped(
+            reason=result.reason or "bypass", trigger_files=result.trigger_files
+        )
 
     context = result.context or ""
     if event.client == "claude":
@@ -48,7 +55,9 @@ def build_read_response(event: HookEvent, budget: int = 1200) -> HookExecutionRe
         )
 
     return ok(
-        HookResponse(message=context, additional_context=context, suppress_output=False),
+        HookResponse(
+            message=context, additional_context=context, suppress_output=False
+        ),
         trigger_files=result.trigger_files,
         recommended_files=result.recommended_files,
         surfaced_files=result.surfaced_files,

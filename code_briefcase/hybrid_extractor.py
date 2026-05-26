@@ -14,9 +14,16 @@ import json
 import logging
 import os
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
-from .ast_extractor import extract_python, ModuleInfo, FunctionInfo, ClassInfo, ImportInfo, CallGraphInfo
+from .ast_extractor import (
+    extract_python,
+    ModuleInfo,
+    FunctionInfo,
+    ClassInfo,
+    ImportInfo,
+    CallGraphInfo,
+)
 from .signature_extractor_pygments import SignatureExtractor
 
 logger = logging.getLogger(__name__)
@@ -24,12 +31,15 @@ logger = logging.getLogger(__name__)
 # File size limit - tree-sitter memory usage is ~10-200x file size
 # 5MB matches mcp-server-tree-sitter default; override with CODE_BRIEFCASE_MAX_FILE_SIZE
 DEFAULT_MAX_FILE_SIZE = 5_000_000  # 5MB
-MAX_FILE_SIZE = int(os.environ.get("CODE_BRIEFCASE_MAX_FILE_SIZE", DEFAULT_MAX_FILE_SIZE))
+MAX_FILE_SIZE = int(
+    os.environ.get("CODE_BRIEFCASE_MAX_FILE_SIZE", DEFAULT_MAX_FILE_SIZE)
+)
 
 
 class FileTooLargeError(Exception):
     """Raised when a file exceeds MAX_FILE_SIZE."""
-    def __init__(self, file_path: Path, size: int, limit: int):
+
+    def __init__(self, file_path: Path, size: int, limit: int) -> None:
         self.file_path = file_path
         self.size = size
         self.limit = limit
@@ -41,11 +51,13 @@ class FileTooLargeError(Exception):
 
 class ParseError(Exception):
     """Raised when tree-sitter parsing fails."""
-    def __init__(self, file_path: Path, language: str, error: Exception):
+
+    def __init__(self, file_path: Path, language: str, error: Exception) -> None:
         self.file_path = file_path
         self.language = language
         self.original_error = error
         super().__init__(f"Failed to parse {file_path} as {language}: {error}")
+
 
 # Check tree-sitter availability
 TREE_SITTER_AVAILABLE = False
@@ -55,24 +67,28 @@ try:
     from tree_sitter import Language, Parser
     import tree_sitter_typescript
     import tree_sitter_javascript
+
     TREE_SITTER_AVAILABLE = True
 except ImportError:
     pass
 
 try:
     import tree_sitter_go
+
     TREE_SITTER_GO_AVAILABLE = True
 except ImportError:
     pass
 
 try:
     import tree_sitter_rust
+
     TREE_SITTER_RUST_AVAILABLE = True
 except ImportError:
     pass
 
 try:
     import tree_sitter_java
+
     TREE_SITTER_JAVA_AVAILABLE = True
 except ImportError:
     TREE_SITTER_JAVA_AVAILABLE = False
@@ -81,6 +97,7 @@ TREE_SITTER_C_AVAILABLE = False
 try:
     from tree_sitter import Language, Parser
     import tree_sitter_c
+
     TREE_SITTER_C_AVAILABLE = True
 except ImportError:
     pass
@@ -89,6 +106,7 @@ TREE_SITTER_CPP_AVAILABLE = False
 try:
     from tree_sitter import Language, Parser
     import tree_sitter_cpp
+
     TREE_SITTER_CPP_AVAILABLE = True
 except ImportError:
     pass
@@ -97,6 +115,7 @@ TREE_SITTER_RUBY_AVAILABLE = False
 try:
     from tree_sitter import Language, Parser
     import tree_sitter_ruby
+
     TREE_SITTER_RUBY_AVAILABLE = True
 except ImportError:
     pass
@@ -105,6 +124,7 @@ TREE_SITTER_KOTLIN_AVAILABLE = False
 try:
     from tree_sitter import Language, Parser
     import tree_sitter_kotlin
+
     TREE_SITTER_KOTLIN_AVAILABLE = True
 except ImportError:
     pass
@@ -113,6 +133,7 @@ TREE_SITTER_SWIFT_AVAILABLE = False
 try:
     from tree_sitter import Language, Parser
     import tree_sitter_swift
+
     TREE_SITTER_SWIFT_AVAILABLE = True
 except ImportError:
     pass
@@ -121,6 +142,7 @@ TREE_SITTER_CSHARP_AVAILABLE = False
 try:
     from tree_sitter import Language, Parser
     import tree_sitter_c_sharp
+
     TREE_SITTER_CSHARP_AVAILABLE = True
 except ImportError:
     pass
@@ -129,6 +151,7 @@ TREE_SITTER_SCALA_AVAILABLE = False
 try:
     from tree_sitter import Language, Parser
     import tree_sitter_scala
+
     TREE_SITTER_SCALA_AVAILABLE = True
 except ImportError:
     pass
@@ -137,6 +160,7 @@ TREE_SITTER_LUA_AVAILABLE = False
 try:
     from tree_sitter import Language, Parser
     import tree_sitter_lua
+
     TREE_SITTER_LUA_AVAILABLE = True
 except ImportError:
     pass
@@ -145,6 +169,7 @@ TREE_SITTER_LUAU_AVAILABLE = False
 try:
     from tree_sitter import Language, Parser
     import tree_sitter_luau
+
     TREE_SITTER_LUAU_AVAILABLE = True
 except ImportError:
     pass
@@ -153,6 +178,7 @@ TREE_SITTER_ELIXIR_AVAILABLE = False
 try:
     from tree_sitter import Language, Parser
     import tree_sitter_elixir
+
     TREE_SITTER_ELIXIR_AVAILABLE = True
 except ImportError:
     pass
@@ -185,7 +211,7 @@ class HybridExtractor:
     LUAU_EXTENSIONS = {".luau"}
     ELIXIR_EXTENSIONS = {".ex", ".exs"}
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._pygments_extractor = SignatureExtractor()
         self._ts_parsers: dict[str, Any] = {}
 
@@ -200,7 +226,9 @@ class HybridExtractor:
         except UnicodeDecodeError:
             return data.decode("utf-8", errors="replace")
 
-    def extract(self, file_path: str | Path, base_path: str | None = None) -> ModuleInfo:
+    def extract(
+        self, file_path: str | Path, base_path: str | None = None
+    ) -> ModuleInfo:
         """Extract from any supported file.
 
         Args:
@@ -212,6 +240,7 @@ class HybridExtractor:
         """
         # Security: Import and validate path containment
         from .api import _validate_path_containment
+
         _validate_path_containment(str(file_path), base_path)
         file_path = Path(file_path)
 
@@ -233,10 +262,16 @@ class HybridExtractor:
         # JS/TS - use tree-sitter if available
         if suffix in self.TREE_SITTER_EXTENSIONS:
             if TREE_SITTER_AVAILABLE:
-                result = self._try_tree_sitter(lambda fp: self._extract_tree_sitter(fp, suffix), file_path, "typescript")
+                result = self._try_tree_sitter(
+                    lambda fp: self._extract_tree_sitter(fp, suffix),
+                    file_path,
+                    "typescript",
+                )
                 if result:
                     return result
-            logger.debug(f"Tree-sitter not available or failed, using Pygments for {suffix}")
+            logger.debug(
+                f"Tree-sitter not available or failed, using Pygments for {suffix}"
+            )
 
         # Go - use tree-sitter-go if available
         if suffix in self.GO_EXTENSIONS:
@@ -244,7 +279,9 @@ class HybridExtractor:
                 result = self._try_tree_sitter(self._extract_go, file_path, "go")
                 if result:
                     return result
-            logger.debug(f"Tree-sitter-go not available or failed, using Pygments for {suffix}")
+            logger.debug(
+                f"Tree-sitter-go not available or failed, using Pygments for {suffix}"
+            )
 
         # Rust - use tree-sitter-rust if available
         if suffix in self.RUST_EXTENSIONS:
@@ -252,7 +289,9 @@ class HybridExtractor:
                 result = self._try_tree_sitter(self._extract_rust, file_path, "rust")
                 if result:
                     return result
-            logger.debug(f"Tree-sitter-rust not available or failed, using Pygments for {suffix}")
+            logger.debug(
+                f"Tree-sitter-rust not available or failed, using Pygments for {suffix}"
+            )
 
         # Java - use tree-sitter-java if available
         if suffix in self.JAVA_EXTENSIONS:
@@ -260,7 +299,9 @@ class HybridExtractor:
                 result = self._try_tree_sitter(self._extract_java, file_path, "java")
                 if result:
                     return result
-            logger.debug(f"Tree-sitter-java not available or failed, using Pygments for {suffix}")
+            logger.debug(
+                f"Tree-sitter-java not available or failed, using Pygments for {suffix}"
+            )
 
         # C - use tree-sitter-c if available
         if suffix in self.C_EXTENSIONS:
@@ -268,7 +309,9 @@ class HybridExtractor:
                 result = self._try_tree_sitter(self._extract_c, file_path, "c")
                 if result:
                     return result
-            logger.debug(f"Tree-sitter-c not available or failed, using Pygments for {suffix}")
+            logger.debug(
+                f"Tree-sitter-c not available or failed, using Pygments for {suffix}"
+            )
 
         # C++ - use tree-sitter-cpp if available
         if suffix in self.CPP_EXTENSIONS:
@@ -276,7 +319,9 @@ class HybridExtractor:
                 result = self._try_tree_sitter(self._extract_cpp, file_path, "cpp")
                 if result:
                     return result
-            logger.debug(f"Tree-sitter-cpp not available or failed, using Pygments for {suffix}")
+            logger.debug(
+                f"Tree-sitter-cpp not available or failed, using Pygments for {suffix}"
+            )
 
         # Ruby - use tree-sitter-ruby if available
         if suffix in self.RUBY_EXTENSIONS:
@@ -284,15 +329,21 @@ class HybridExtractor:
                 result = self._try_tree_sitter(self._extract_ruby, file_path, "ruby")
                 if result:
                     return result
-            logger.debug(f"Tree-sitter-ruby not available or failed, using Pygments for {suffix}")
+            logger.debug(
+                f"Tree-sitter-ruby not available or failed, using Pygments for {suffix}"
+            )
 
         # Kotlin - use tree-sitter-kotlin if available
         if suffix in self.KOTLIN_EXTENSIONS:
             if TREE_SITTER_KOTLIN_AVAILABLE:
-                result = self._try_tree_sitter(self._extract_kotlin, file_path, "kotlin")
+                result = self._try_tree_sitter(
+                    self._extract_kotlin, file_path, "kotlin"
+                )
                 if result:
                     return result
-            logger.debug(f"Tree-sitter-kotlin not available or failed, using Pygments for {suffix}")
+            logger.debug(
+                f"Tree-sitter-kotlin not available or failed, using Pygments for {suffix}"
+            )
 
         # Swift - use tree-sitter-swift if available
         if suffix in self.SWIFT_EXTENSIONS:
@@ -300,15 +351,21 @@ class HybridExtractor:
                 result = self._try_tree_sitter(self._extract_swift, file_path, "swift")
                 if result:
                     return result
-            logger.debug(f"Tree-sitter-swift not available or failed, using Pygments for {suffix}")
+            logger.debug(
+                f"Tree-sitter-swift not available or failed, using Pygments for {suffix}"
+            )
 
         # C# - use tree-sitter-c-sharp if available
         if suffix in self.CSHARP_EXTENSIONS:
             if TREE_SITTER_CSHARP_AVAILABLE:
-                result = self._try_tree_sitter(self._extract_csharp, file_path, "csharp")
+                result = self._try_tree_sitter(
+                    self._extract_csharp, file_path, "csharp"
+                )
                 if result:
                     return result
-            logger.debug(f"Tree-sitter-c-sharp not available or failed, using Pygments for {suffix}")
+            logger.debug(
+                f"Tree-sitter-c-sharp not available or failed, using Pygments for {suffix}"
+            )
 
         # Scala - use tree-sitter-scala if available
         if suffix in self.SCALA_EXTENSIONS:
@@ -316,7 +373,9 @@ class HybridExtractor:
                 result = self._try_tree_sitter(self._extract_scala, file_path, "scala")
                 if result:
                     return result
-            logger.debug(f"Tree-sitter-scala not available or failed, using Pygments for {suffix}")
+            logger.debug(
+                f"Tree-sitter-scala not available or failed, using Pygments for {suffix}"
+            )
 
         # Lua - use tree-sitter-lua if available
         if suffix in self.LUA_EXTENSIONS:
@@ -324,7 +383,9 @@ class HybridExtractor:
                 result = self._try_tree_sitter(self._extract_lua, file_path, "lua")
                 if result:
                     return result
-            logger.debug(f"Tree-sitter-lua not available or failed, using Pygments for {suffix}")
+            logger.debug(
+                f"Tree-sitter-lua not available or failed, using Pygments for {suffix}"
+            )
 
         # Luau - use tree-sitter-luau if available
         if suffix in self.LUAU_EXTENSIONS:
@@ -332,15 +393,21 @@ class HybridExtractor:
                 result = self._try_tree_sitter(self._extract_luau, file_path, "luau")
                 if result:
                     return result
-            logger.debug(f"Tree-sitter-luau not available or failed, using Pygments for {suffix}")
+            logger.debug(
+                f"Tree-sitter-luau not available or failed, using Pygments for {suffix}"
+            )
 
         # Elixir - use tree-sitter-elixir if available
         if suffix in self.ELIXIR_EXTENSIONS:
             if TREE_SITTER_ELIXIR_AVAILABLE:
-                result = self._try_tree_sitter(self._extract_elixir, file_path, "elixir")
+                result = self._try_tree_sitter(
+                    self._extract_elixir, file_path, "elixir"
+                )
                 if result:
                     return result
-            logger.debug(f"Tree-sitter-elixir not available or failed, using Pygments for {suffix}")
+            logger.debug(
+                f"Tree-sitter-elixir not available or failed, using Pygments for {suffix}"
+            )
 
         # Fallback to Pygments
         return self._extract_pygments(file_path)
@@ -404,14 +471,14 @@ class HybridExtractor:
         self._extract_ts_nodes(tree.root_node, source, module_info, defined_names)
         return module_info
 
-    def _collect_ts_definitions(self, node, source: bytes) -> set[str]:
+    def _collect_ts_definitions(self, node: Any, source: bytes) -> set[str]:
         """Collect all defined function/method names."""
         names: set[str] = set()
         for child in node.children:
             if child.type == "function_declaration":
                 for c in child.children:
                     if c.type == "identifier":
-                        names.add(self._safe_decode(source[c.start_byte:c.end_byte]))
+                        names.add(self._safe_decode(source[c.start_byte : c.end_byte]))
                         break
             elif child.type == "class_declaration":
                 for c in child.children:
@@ -422,7 +489,11 @@ class HybridExtractor:
                             if method.type == "method_definition":
                                 for m in method.children:
                                     if m.type == "property_identifier":
-                                        names.add(self._safe_decode(source[m.start_byte:m.end_byte]))
+                                        names.add(
+                                            self._safe_decode(
+                                                source[m.start_byte : m.end_byte]
+                                            )
+                                        )
                                         break
             # Recurse
             if child.type in ("program", "export_statement"):
@@ -437,13 +508,17 @@ class HybridExtractor:
                 if language == "tsx":
                     parser.language = Language(tree_sitter_typescript.language_tsx())
                 else:
-                    parser.language = Language(tree_sitter_typescript.language_typescript())
+                    parser.language = Language(
+                        tree_sitter_typescript.language_typescript()
+                    )
             else:
                 parser.language = Language(tree_sitter_javascript.language())
             self._ts_parsers[language] = parser
         return self._ts_parsers[language]
 
-    def _safe_parse(self, parser: Any, source: bytes, file_path: Path, language: str) -> Any:
+    def _safe_parse(
+        self, parser: Any, source: bytes, file_path: Path, language: str
+    ) -> Any:
         """Safely parse source code, catching tree-sitter errors."""
         try:
             return parser.parse(source)
@@ -451,19 +526,31 @@ class HybridExtractor:
             logger.error(f"Tree-sitter parse failed for {file_path} ({language}): {e}")
             raise ParseError(file_path, language, e)
 
-    def _try_tree_sitter(self, extractor_method, file_path: Path, language: str) -> ModuleInfo | None:
+    def _try_tree_sitter(
+        self, extractor_method: Any, file_path: Path, language: str
+    ) -> ModuleInfo | None:
         """Try tree-sitter extraction, return None on failure to allow Pygments fallback."""
         try:
-            return extractor_method(file_path)
+            return cast(ModuleInfo, extractor_method(file_path))
         except (ParseError, OSError, ValueError, RuntimeError) as e:
-            logger.warning(f"Tree-sitter extraction failed for {file_path} ({language}), falling back to Pygments: {e}")
+            logger.warning(
+                f"Tree-sitter extraction failed for {file_path} ({language}), falling back to Pygments: {e}"
+            )
             return None
         except Exception as e:
             # Catch-all for unexpected errors (corrupted grammars, etc.)
-            logger.warning(f"Unexpected error during tree-sitter extraction for {file_path} ({language}): {e}")
+            logger.warning(
+                f"Unexpected error during tree-sitter extraction for {file_path} ({language}): {e}"
+            )
             return None
 
-    def _extract_ts_nodes(self, node, source: bytes, module_info: ModuleInfo, defined_names: set[str] | None = None):
+    def _extract_ts_nodes(
+        self,
+        node: Any,
+        source: bytes,
+        module_info: ModuleInfo,
+        defined_names: set[str] | None = None,
+    ) -> None:
         """Recursively extract from tree-sitter nodes."""
         prev_comment = None  # Track JSDoc comments
 
@@ -472,27 +559,38 @@ class HybridExtractor:
 
             # Track JSDoc comments (/** ... */)
             if node_type == "comment":
-                comment_text = self._safe_decode(source[child.start_byte:child.end_byte])
+                comment_text = self._safe_decode(
+                    source[child.start_byte : child.end_byte]
+                )
                 if comment_text.startswith("/**"):
                     prev_comment = self._parse_jsdoc(comment_text)
                 continue
 
             # Imports
             if node_type == "import_statement":
-                text = self._safe_decode(source[child.start_byte:child.end_byte]).rstrip(";")
+                text = self._safe_decode(
+                    source[child.start_byte : child.end_byte]
+                ).rstrip(";")
                 # Strip "import " prefix since statement() will add it back
                 if text.startswith("import "):
                     text = text[7:]
-                module_info.imports.append(ImportInfo(
-                    module=text,
-                    names=[],
-                    is_from=False,
-                    line_number=child.start_point[0] + 1,
-                ))
+                module_info.imports.append(
+                    ImportInfo(
+                        module=text,
+                        names=[],
+                        is_from=False,
+                        line_number=child.start_point[0] + 1,
+                    )
+                )
                 prev_comment = None
 
             # Functions (including CommonJS function_expression: exports.foo = function() {})
-            elif node_type in ("function_declaration", "arrow_function", "method_definition", "function_expression"):
+            elif node_type in (
+                "function_declaration",
+                "arrow_function",
+                "method_definition",
+                "function_expression",
+            ):
                 func = self._extract_ts_function(child, source)
                 if func:
                     if prev_comment:
@@ -500,7 +598,13 @@ class HybridExtractor:
                     module_info.functions.append(func)
                     # Extract calls
                     if defined_names:
-                        self._extract_ts_calls(child, func.name, source, module_info.call_graph, defined_names)
+                        self._extract_ts_calls(
+                            child,
+                            func.name,
+                            source,
+                            module_info.call_graph,
+                            defined_names,
+                        )
                 else:
                     # Anonymous function - try to get name from parent context
                     # First try pair (object literal), then assignment (CommonJS exports)
@@ -509,30 +613,46 @@ class HybridExtractor:
                         parent_name = self._get_assignment_name(child, source)
                     if parent_name:
                         # Create function info with parent property name
-                        text = self._safe_decode(source[child.start_byte:child.end_byte])
+                        text = self._safe_decode(
+                            source[child.start_byte : child.end_byte]
+                        )
                         is_async = text.strip().startswith("async")
                         params = []
                         for p_child in child.children:
                             if p_child.type == "formal_parameters":
                                 for p in p_child.children:
                                     if p.type not in ("(", ")", ","):
-                                        params.append(self._safe_decode(source[p.start_byte:p.end_byte]))
-                        module_info.functions.append(FunctionInfo(
-                            name=parent_name,
-                            params=params,
-                            return_type=None,
-                            docstring=prev_comment,
-                            is_async=is_async,
-                            line_number=child.start_point[0] + 1,
-                        ))
+                                        params.append(
+                                            self._safe_decode(
+                                                source[p.start_byte : p.end_byte]
+                                            )
+                                        )
+                        module_info.functions.append(
+                            FunctionInfo(
+                                name=parent_name,
+                                params=params,
+                                return_type=None,
+                                docstring=prev_comment,
+                                is_async=is_async,
+                                line_number=child.start_point[0] + 1,
+                            )
+                        )
                         # Extract calls for inferred-name functions (CommonJS exports, object literals)
                         if defined_names:
-                            self._extract_ts_calls(child, parent_name, source, module_info.call_graph, defined_names)
+                            self._extract_ts_calls(
+                                child,
+                                parent_name,
+                                source,
+                                module_info.call_graph,
+                                defined_names,
+                            )
                 prev_comment = None
 
             # Classes
             elif node_type == "class_declaration":
-                cls = self._extract_ts_class(child, source, prev_comment, defined_names, module_info.call_graph)
+                cls = self._extract_ts_class(
+                    child, source, prev_comment, defined_names, module_info.call_graph
+                )
                 if cls:
                     module_info.classes.append(cls)
                 prev_comment = None
@@ -544,17 +664,39 @@ class HybridExtractor:
             # This enables extraction of arrow functions inside object literals (e.g., oRPC routers)
             # CommonJS: exports.foo = function() {} requires traversing expression_statement → assignment_expression
             # Control flow: if_statement, try_statement, catch_clause for conditionally exported functions
-            elif node_type in ("export_statement", "lexical_declaration", "program",
-                            "variable_declaration", "variable_declarator", "statement_block",
-                            "export_clause", "object", "pair", "call_expression", "arguments",
-                            "expression_statement", "assignment_expression", "if_statement",
-                            "try_statement", "catch_clause", "for_statement", "while_statement"):
+            elif node_type in (
+                "export_statement",
+                "lexical_declaration",
+                "program",
+                "variable_declaration",
+                "variable_declarator",
+                "statement_block",
+                "export_clause",
+                "object",
+                "pair",
+                "call_expression",
+                "arguments",
+                "expression_statement",
+                "assignment_expression",
+                "if_statement",
+                "try_statement",
+                "catch_clause",
+                "for_statement",
+                "while_statement",
+            ):
                 self._extract_ts_nodes(child, source, module_info, defined_names)
                 prev_comment = None
             else:
                 prev_comment = None
 
-    def _extract_ts_calls(self, node, caller_name: str, source: bytes, call_graph: CallGraphInfo, defined_names: set[str]):
+    def _extract_ts_calls(
+        self,
+        node: Any,
+        caller_name: str,
+        source: bytes,
+        call_graph: CallGraphInfo,
+        defined_names: set[str],
+    ) -> None:
         """Extract function calls from a TS/JS function body."""
         for child in node.children:
             if child.type == "call_expression":
@@ -562,9 +704,11 @@ class HybridExtractor:
                 if callee and callee in defined_names:
                     call_graph.add_call(caller_name, callee)
             # Recurse into all children
-            self._extract_ts_calls(child, caller_name, source, call_graph, defined_names)
+            self._extract_ts_calls(
+                child, caller_name, source, call_graph, defined_names
+            )
 
-    def _get_pair_property_name(self, node, source: bytes) -> str | None:
+    def _get_pair_property_name(self, node: Any, source: bytes) -> str | None:
         """Get property name from a pair node (for object literal method extraction).
         Traverses up the tree to find the nearest pair ancestor and extracts its property_identifier.
         Used to name anonymous arrow functions in object literals like oRPC routers.
@@ -574,11 +718,13 @@ class HybridExtractor:
             if current.type == "pair":
                 for child in current.children:
                     if child.type == "property_identifier":
-                        return self._safe_decode(source[child.start_byte:child.end_byte])
+                        return self._safe_decode(
+                            source[child.start_byte : child.end_byte]
+                        )
             current = current.parent
         return None
 
-    def _get_assignment_name(self, node, source: bytes) -> str | None:
+    def _get_assignment_name(self, node: Any, source: bytes) -> str | None:
         """Get property name from CommonJS assignment (exports.foo = function() {}).
 
         Traverses up the tree to find assignment_expression and extracts the
@@ -595,7 +741,9 @@ class HybridExtractor:
                         # Get the property name (rightmost identifier)
                         for c in child.children:
                             if c.type == "property_identifier":
-                                name = self._safe_decode(source[c.start_byte:c.end_byte])
+                                name = self._safe_decode(
+                                    source[c.start_byte : c.end_byte]
+                                )
                                 # Skip if property is just "exports" (module.exports = fn)
                                 if name != "exports":
                                     return name
@@ -604,16 +752,16 @@ class HybridExtractor:
             current = current.parent
         return None
 
-    def _get_ts_call_name(self, node, source: bytes) -> str | None:
+    def _get_ts_call_name(self, node: Any, source: bytes) -> str | None:
         """Get the name of a called function from a call_expression."""
         for child in node.children:
             if child.type == "identifier":
-                return self._safe_decode(source[child.start_byte:child.end_byte])
+                return self._safe_decode(source[child.start_byte : child.end_byte])
             elif child.type == "member_expression":
                 # Get the method name (rightmost part)
                 for c in child.children:
                     if c.type == "property_identifier":
-                        return self._safe_decode(source[c.start_byte:c.end_byte])
+                        return self._safe_decode(source[c.start_byte : c.end_byte])
         return None
 
     def _parse_jsdoc(self, comment: str) -> str:
@@ -633,26 +781,30 @@ class HybridExtractor:
                 cleaned.append(line)
         return " ".join(cleaned)
 
-    def _extract_ts_function(self, node, source: bytes) -> FunctionInfo | None:
+    def _extract_ts_function(self, node: Any, source: bytes) -> FunctionInfo | None:
         """Extract TypeScript/JavaScript function."""
         name = ""
         params = []
         return_type = None
         is_async = False
 
-        text = self._safe_decode(source[node.start_byte:node.end_byte])
+        text = self._safe_decode(source[node.start_byte : node.end_byte])
         is_async = text.strip().startswith("async")
 
         for child in node.children:
             # Handle different identifier types
             if child.type in ("identifier", "property_identifier") and not name:
-                name = self._safe_decode(source[child.start_byte:child.end_byte])
+                name = self._safe_decode(source[child.start_byte : child.end_byte])
             elif child.type == "formal_parameters":
                 for p in child.children:
                     if p.type not in ("(", ")", ","):
-                        params.append(self._safe_decode(source[p.start_byte:p.end_byte]))
+                        params.append(
+                            self._safe_decode(source[p.start_byte : p.end_byte])
+                        )
             elif child.type == "type_annotation":
-                return_type = self._safe_decode(source[child.start_byte:child.end_byte]).lstrip(": ")
+                return_type = self._safe_decode(
+                    source[child.start_byte : child.end_byte]
+                ).lstrip(": ")
 
         if not name:
             return None
@@ -668,7 +820,7 @@ class HybridExtractor:
 
     def _extract_ts_class(
         self,
-        node,
+        node: Any,
         source: bytes,
         class_docstring: str | None = None,
         defined_names: set[str] | None = None,
@@ -682,26 +834,35 @@ class HybridExtractor:
         for child in node.children:
             # TypeScript uses type_identifier, JS uses identifier
             if child.type in ("identifier", "type_identifier") and not name:
-                name = self._safe_decode(source[child.start_byte:child.end_byte])
+                name = self._safe_decode(source[child.start_byte : child.end_byte])
             elif child.type == "extends_clause":
                 for c in child.children:
                     if c.type == "identifier":
-                        bases.append(self._safe_decode(source[c.start_byte:c.end_byte]))
+                        bases.append(
+                            self._safe_decode(source[c.start_byte : c.end_byte])
+                        )
             elif child.type == "implements_clause":
                 for c in child.children:
                     if c.type == "identifier":
-                        bases.append(f"implements {self._safe_decode(source[c.start_byte:c.end_byte])}")
+                        bases.append(
+                            f"implements {self._safe_decode(source[c.start_byte:c.end_byte])}"
+                        )
             elif child.type == "class_body":
                 # Extract methods with JSDoc support
                 prev_comment = None
                 for body_child in child.children:
                     if body_child.type == "comment":
-                        comment_text = self._safe_decode(source[body_child.start_byte:body_child.end_byte])
+                        comment_text = self._safe_decode(
+                            source[body_child.start_byte : body_child.end_byte]
+                        )
                         if comment_text.startswith("/**"):
                             prev_comment = self._parse_jsdoc(comment_text)
                         continue
 
-                    if body_child.type in ("method_definition", "public_field_definition"):
+                    if body_child.type in (
+                        "method_definition",
+                        "public_field_definition",
+                    ):
                         method = self._extract_ts_function(body_child, source)
                         if method:
                             method.is_method = True
@@ -711,7 +872,13 @@ class HybridExtractor:
                             # Extract calls from this method
                             if defined_names and call_graph and name:
                                 caller_name = f"{name}.{method.name}"
-                                self._extract_ts_calls(body_child, caller_name, source, call_graph, defined_names)
+                                self._extract_ts_calls(
+                                    body_child,
+                                    caller_name,
+                                    source,
+                                    call_graph,
+                                    defined_names,
+                                )
                         prev_comment = None
                     else:
                         prev_comment = None
@@ -749,19 +916,19 @@ class HybridExtractor:
         self._extract_go_nodes(tree.root_node, source, module_info, defined_names)
         return module_info
 
-    def _collect_go_definitions(self, node, source: bytes) -> set[str]:
+    def _collect_go_definitions(self, node: Any, source: bytes) -> set[str]:
         """Collect all defined function/method names."""
         names: set[str] = set()
         for child in node.children:
             if child.type == "function_declaration":
                 for c in child.children:
                     if c.type == "identifier":
-                        names.add(self._safe_decode(source[c.start_byte:c.end_byte]))
+                        names.add(self._safe_decode(source[c.start_byte : c.end_byte]))
                         break
             elif child.type == "method_declaration":
                 for c in child.children:
                     if c.type == "field_identifier":
-                        names.add(self._safe_decode(source[c.start_byte:c.end_byte]))
+                        names.add(self._safe_decode(source[c.start_byte : c.end_byte]))
                         break
             # Recurse into source_file
             if child.type in ("source_file",):
@@ -776,7 +943,13 @@ class HybridExtractor:
             self._ts_parsers["go"] = parser
         return self._ts_parsers["go"]
 
-    def _extract_go_nodes(self, node, source: bytes, module_info: ModuleInfo, defined_names: set[str] | None = None):
+    def _extract_go_nodes(
+        self,
+        node: Any,
+        source: bytes,
+        module_info: ModuleInfo,
+        defined_names: set[str] | None = None,
+    ) -> None:
         """Recursively extract from Go tree-sitter nodes."""
         for child in node.children:
             node_type = child.type
@@ -792,7 +965,13 @@ class HybridExtractor:
                     module_info.functions.append(func)
                     # Extract calls from the function body
                     if defined_names:
-                        self._extract_go_calls(child, func.name, source, module_info.call_graph, defined_names)
+                        self._extract_go_calls(
+                            child,
+                            func.name,
+                            source,
+                            module_info.call_graph,
+                            defined_names,
+                        )
 
             # Methods (functions with receiver)
             elif node_type == "method_declaration":
@@ -803,7 +982,13 @@ class HybridExtractor:
                     module_info.functions.append(method)
                     # Extract calls from the method body
                     if defined_names:
-                        self._extract_go_calls(child, method.name, source, module_info.call_graph, defined_names)
+                        self._extract_go_calls(
+                            child,
+                            method.name,
+                            source,
+                            module_info.call_graph,
+                            defined_names,
+                        )
 
             # Type declarations (struct, interface)
             elif node_type == "type_declaration":
@@ -815,7 +1000,14 @@ class HybridExtractor:
             if node_type in ("source_file",):
                 self._extract_go_nodes(child, source, module_info, defined_names)
 
-    def _extract_go_calls(self, node, caller_name: str, source: bytes, call_graph: CallGraphInfo, defined_names: set[str]):
+    def _extract_go_calls(
+        self,
+        node: Any,
+        caller_name: str,
+        source: bytes,
+        call_graph: CallGraphInfo,
+        defined_names: set[str],
+    ) -> None:
         """Extract function calls from a Go function body."""
         for child in node.children:
             if child.type == "call_expression":
@@ -823,53 +1015,67 @@ class HybridExtractor:
                 if callee and callee in defined_names:
                     call_graph.add_call(caller_name, callee)
             # Recurse into all children
-            self._extract_go_calls(child, caller_name, source, call_graph, defined_names)
+            self._extract_go_calls(
+                child, caller_name, source, call_graph, defined_names
+            )
 
-    def _get_go_call_name(self, node, source: bytes) -> str | None:
+    def _get_go_call_name(self, node: Any, source: bytes) -> str | None:
         """Get the name of a called function from a call_expression."""
         for child in node.children:
             if child.type == "identifier":
-                return self._safe_decode(source[child.start_byte:child.end_byte])
+                return self._safe_decode(source[child.start_byte : child.end_byte])
             elif child.type == "selector_expression":
                 # Method call like s.prepare() - get the method name (rightmost part)
                 for c in child.children:
                     if c.type == "field_identifier":
-                        return self._safe_decode(source[c.start_byte:c.end_byte])
+                        return self._safe_decode(source[c.start_byte : c.end_byte])
         return None
 
-    def _extract_go_imports(self, node, source: bytes, module_info: ModuleInfo):
+    def _extract_go_imports(
+        self, node: Any, source: bytes, module_info: ModuleInfo
+    ) -> None:
         """Extract Go import declarations."""
         for child in node.children:
             if child.type == "import_spec":
-                text = self._safe_decode(source[child.start_byte:child.end_byte]).strip('"')
-                module_info.imports.append(ImportInfo(
-                    module=text,
-                    names=[],
-                    is_from=False,
-                    line_number=child.start_point[0] + 1,
-                ))
+                text = self._safe_decode(
+                    source[child.start_byte : child.end_byte]
+                ).strip('"')
+                module_info.imports.append(
+                    ImportInfo(
+                        module=text,
+                        names=[],
+                        is_from=False,
+                        line_number=child.start_point[0] + 1,
+                    )
+                )
             elif child.type == "import_spec_list":
                 for spec in child.children:
                     if spec.type == "import_spec":
-                        text = self._safe_decode(source[spec.start_byte:spec.end_byte]).strip('"')
+                        text = self._safe_decode(
+                            source[spec.start_byte : spec.end_byte]
+                        ).strip('"')
                         # Handle alias: `alias "path"`
                         parts = text.split()
                         if len(parts) == 2:
-                            module_info.imports.append(ImportInfo(
-                                module=parts[1].strip('"'),
-                                names=[parts[0]],
-                                is_from=False,
-                                line_number=spec.start_point[0] + 1,
-                            ))
+                            module_info.imports.append(
+                                ImportInfo(
+                                    module=parts[1].strip('"'),
+                                    names=[parts[0]],
+                                    is_from=False,
+                                    line_number=spec.start_point[0] + 1,
+                                )
+                            )
                         else:
-                            module_info.imports.append(ImportInfo(
-                                module=text.strip('"'),
-                                names=[],
-                                is_from=False,
-                                line_number=spec.start_point[0] + 1,
-                            ))
+                            module_info.imports.append(
+                                ImportInfo(
+                                    module=text.strip('"'),
+                                    names=[],
+                                    is_from=False,
+                                    line_number=spec.start_point[0] + 1,
+                                )
+                            )
 
-    def _extract_go_function(self, node, source: bytes) -> FunctionInfo | None:
+    def _extract_go_function(self, node: Any, source: bytes) -> FunctionInfo | None:
         """Extract Go function declaration."""
         name = ""
         params = []
@@ -877,13 +1083,17 @@ class HybridExtractor:
 
         for child in node.children:
             if child.type == "identifier" and not name:
-                name = self._safe_decode(source[child.start_byte:child.end_byte])
+                name = self._safe_decode(source[child.start_byte : child.end_byte])
             elif child.type == "parameter_list":
                 params = self._extract_go_params(child, source)
             elif child.type == "result":
-                return_type = self._safe_decode(source[child.start_byte:child.end_byte])
+                return_type = self._safe_decode(
+                    source[child.start_byte : child.end_byte]
+                )
             elif child.type == "type_identifier" and not return_type:
-                return_type = self._safe_decode(source[child.start_byte:child.end_byte])
+                return_type = self._safe_decode(
+                    source[child.start_byte : child.end_byte]
+                )
 
         if not name:
             return None
@@ -896,7 +1106,7 @@ class HybridExtractor:
             line_number=node.start_point[0] + 1,
         )
 
-    def _extract_go_method(self, node, source: bytes) -> FunctionInfo | None:
+    def _extract_go_method(self, node: Any, source: bytes) -> FunctionInfo | None:
         """Extract Go method declaration (function with receiver)."""
         name = ""
         params = []
@@ -913,11 +1123,15 @@ class HybridExtractor:
                 else:
                     params = self._extract_go_params(child, source)
             elif child.type == "field_identifier":
-                name = self._safe_decode(source[child.start_byte:child.end_byte])
+                name = self._safe_decode(source[child.start_byte : child.end_byte])
             elif child.type == "result":
-                return_type = self._safe_decode(source[child.start_byte:child.end_byte])
+                return_type = self._safe_decode(
+                    source[child.start_byte : child.end_byte]
+                )
             elif child.type == "type_identifier" and not return_type:
-                return_type = self._safe_decode(source[child.start_byte:child.end_byte])
+                return_type = self._safe_decode(
+                    source[child.start_byte : child.end_byte]
+                )
 
         if not name:
             return None
@@ -935,16 +1149,16 @@ class HybridExtractor:
             line_number=node.start_point[0] + 1,
         )
 
-    def _extract_go_params(self, node, source: bytes) -> list[str]:
+    def _extract_go_params(self, node: Any, source: bytes) -> list[str]:
         """Extract Go parameter list."""
         params = []
         for child in node.children:
             if child.type == "parameter_declaration":
-                param = self._safe_decode(source[child.start_byte:child.end_byte])
+                param = self._safe_decode(source[child.start_byte : child.end_byte])
                 params.append(param)
         return params
 
-    def _extract_go_type(self, node, source: bytes) -> ClassInfo | None:
+    def _extract_go_type(self, node: Any, source: bytes) -> ClassInfo | None:
         """Extract Go type declaration (struct or interface)."""
         name = ""
         methods = []
@@ -954,7 +1168,9 @@ class HybridExtractor:
             if child.type == "type_spec":
                 for spec_child in child.children:
                     if spec_child.type == "type_identifier":
-                        name = self._safe_decode(source[spec_child.start_byte:spec_child.end_byte])
+                        name = self._safe_decode(
+                            source[spec_child.start_byte : spec_child.end_byte]
+                        )
                     elif spec_child.type == "struct_type":
                         # Extract embedded types as "bases"
                         for field in spec_child.children:
@@ -962,8 +1178,13 @@ class HybridExtractor:
                                 for decl in field.children:
                                     if decl.type == "field_declaration":
                                         # Check for embedded type (no field name, just type)
-                                        field_text = self._safe_decode(source[decl.start_byte:decl.end_byte]).strip()
-                                        if " " not in field_text and not field_text.startswith("//"):
+                                        field_text = self._safe_decode(
+                                            source[decl.start_byte : decl.end_byte]
+                                        ).strip()
+                                        if (
+                                            " " not in field_text
+                                            and not field_text.startswith("//")
+                                        ):
                                             bases.append(field_text)
                     elif spec_child.type == "interface_type":
                         # Extract interface methods
@@ -974,20 +1195,32 @@ class HybridExtractor:
                                 method_return = None
                                 for m_child in iface_child.children:
                                     if m_child.type == "field_identifier":
-                                        method_name = self._safe_decode(source[m_child.start_byte:m_child.end_byte])
+                                        method_name = self._safe_decode(
+                                            source[
+                                                m_child.start_byte : m_child.end_byte
+                                            ]
+                                        )
                                     elif m_child.type == "parameter_list":
-                                        method_params = self._extract_go_params(m_child, source)
+                                        method_params = self._extract_go_params(
+                                            m_child, source
+                                        )
                                     elif m_child.type == "type_identifier":
-                                        method_return = self._safe_decode(source[m_child.start_byte:m_child.end_byte])
+                                        method_return = self._safe_decode(
+                                            source[
+                                                m_child.start_byte : m_child.end_byte
+                                            ]
+                                        )
                                 if method_name:
-                                    methods.append(FunctionInfo(
-                                        name=method_name,
-                                        params=method_params,
-                                        return_type=method_return,
-                                        docstring=None,
-                                        is_method=True,
-                                        line_number=iface_child.start_point[0] + 1,
-                                    ))
+                                    methods.append(
+                                        FunctionInfo(
+                                            name=method_name,
+                                            params=method_params,
+                                            return_type=method_return,
+                                            docstring=None,
+                                            is_method=True,
+                                            line_number=iface_child.start_point[0] + 1,
+                                        )
+                                    )
 
         if not name:
             return None
@@ -1022,7 +1255,7 @@ class HybridExtractor:
         self._extract_rust_nodes(tree.root_node, source, module_info, defined_names)
         return module_info
 
-    def _collect_rust_definitions(self, node, source: bytes) -> set[str]:
+    def _collect_rust_definitions(self, node: Any, source: bytes) -> set[str]:
         """Collect all defined function/method names in Rust code."""
         names: set[str] = set()
         for child in node.children:
@@ -1030,7 +1263,7 @@ class HybridExtractor:
                 # Top-level function
                 for c in child.children:
                     if c.type == "identifier":
-                        names.add(self._safe_decode(source[c.start_byte:c.end_byte]))
+                        names.add(self._safe_decode(source[c.start_byte : c.end_byte]))
                         break
             elif child.type == "impl_item":
                 # Impl block methods
@@ -1040,7 +1273,11 @@ class HybridExtractor:
                             if item.type == "function_item":
                                 for fc in item.children:
                                     if fc.type == "identifier":
-                                        names.add(self._safe_decode(source[fc.start_byte:fc.end_byte]))
+                                        names.add(
+                                            self._safe_decode(
+                                                source[fc.start_byte : fc.end_byte]
+                                            )
+                                        )
                                         break
             # Recurse into modules
             if child.type in ("source_file", "mod_item", "declaration_list"):
@@ -1055,7 +1292,13 @@ class HybridExtractor:
             self._ts_parsers["rust"] = parser
         return self._ts_parsers["rust"]
 
-    def _extract_rust_nodes(self, node, source: bytes, module_info: ModuleInfo, defined_names: set[str] | None = None):
+    def _extract_rust_nodes(
+        self,
+        node: Any,
+        source: bytes,
+        module_info: ModuleInfo,
+        defined_names: set[str] | None = None,
+    ) -> None:
         """Recursively extract from Rust tree-sitter nodes."""
         if defined_names is None:
             defined_names = set()
@@ -1065,15 +1308,17 @@ class HybridExtractor:
 
             # Use declarations
             if node_type == "use_declaration":
-                text = self._safe_decode(source[child.start_byte:child.end_byte])
+                text = self._safe_decode(source[child.start_byte : child.end_byte])
                 # Strip "use " prefix and trailing semicolon for clean display
                 module = text.replace("use ", "").rstrip(";").strip()
-                module_info.imports.append(ImportInfo(
-                    module=module,
-                    names=[],
-                    is_from=False,
-                    line_number=child.start_point[0] + 1,
-                ))
+                module_info.imports.append(
+                    ImportInfo(
+                        module=module,
+                        names=[],
+                        is_from=False,
+                        line_number=child.start_point[0] + 1,
+                    )
+                )
 
             # Functions
             elif node_type == "function_item":
@@ -1081,7 +1326,9 @@ class HybridExtractor:
                 if func:
                     module_info.functions.append(func)
                     # Extract call graph from function body
-                    self._extract_rust_calls(child, func.name, source, module_info.call_graph, defined_names)
+                    self._extract_rust_calls(
+                        child, func.name, source, module_info.call_graph, defined_names
+                    )
 
             # Struct definitions
             elif node_type == "struct_item":
@@ -1103,24 +1350,30 @@ class HybridExtractor:
             if node_type in ("source_file", "mod_item", "declaration_list"):
                 self._extract_rust_nodes(child, source, module_info, defined_names)
 
-    def _extract_rust_function(self, node, source: bytes) -> FunctionInfo | None:
+    def _extract_rust_function(self, node: Any, source: bytes) -> FunctionInfo | None:
         """Extract Rust function item."""
         name = ""
         params = []
         return_type = None
         is_async = False
 
-        text = self._safe_decode(source[node.start_byte:node.end_byte])
-        is_async = "async fn" in text or "async " in text.split("fn")[0] if "fn" in text else False
+        text = self._safe_decode(source[node.start_byte : node.end_byte])
+        is_async = (
+            "async fn" in text or "async " in text.split("fn")[0]
+            if "fn" in text
+            else False
+        )
 
         for child in node.children:
             if child.type == "identifier":
-                name = self._safe_decode(source[child.start_byte:child.end_byte])
+                name = self._safe_decode(source[child.start_byte : child.end_byte])
             elif child.type == "parameters":
                 params = self._extract_rust_params(child, source)
             elif child.type == "type_identifier" or child.type.endswith("_type"):
                 # Return type comes after ->
-                return_type = self._safe_decode(source[child.start_byte:child.end_byte])
+                return_type = self._safe_decode(
+                    source[child.start_byte : child.end_byte]
+                )
 
         # Look for return type after ->
         if "->" in text and not return_type:
@@ -1139,25 +1392,25 @@ class HybridExtractor:
             line_number=node.start_point[0] + 1,
         )
 
-    def _extract_rust_params(self, node, source: bytes) -> list[str]:
+    def _extract_rust_params(self, node: Any, source: bytes) -> list[str]:
         """Extract Rust parameter list."""
         params = []
         for child in node.children:
             if child.type == "parameter":
-                param = self._safe_decode(source[child.start_byte:child.end_byte])
+                param = self._safe_decode(source[child.start_byte : child.end_byte])
                 params.append(param)
             elif child.type == "self_parameter":
-                param = self._safe_decode(source[child.start_byte:child.end_byte])
+                param = self._safe_decode(source[child.start_byte : child.end_byte])
                 params.append(param)
         return params
 
-    def _extract_rust_struct(self, node, source: bytes) -> ClassInfo | None:
+    def _extract_rust_struct(self, node: Any, source: bytes) -> ClassInfo | None:
         """Extract Rust struct definition."""
         name = ""
 
         for child in node.children:
             if child.type == "type_identifier":
-                name = self._safe_decode(source[child.start_byte:child.end_byte])
+                name = self._safe_decode(source[child.start_byte : child.end_byte])
                 break
 
         if not name:
@@ -1171,27 +1424,33 @@ class HybridExtractor:
             line_number=node.start_point[0] + 1,
         )
 
-    def _extract_rust_trait(self, node, source: bytes) -> ClassInfo | None:
+    def _extract_rust_trait(self, node: Any, source: bytes) -> ClassInfo | None:
         """Extract Rust trait definition."""
         name = ""
         methods = []
 
         for child in node.children:
             if child.type == "type_identifier":
-                name = self._safe_decode(source[child.start_byte:child.end_byte])
+                name = self._safe_decode(source[child.start_byte : child.end_byte])
             elif child.type == "declaration_list":
                 for item in child.children:
                     if item.type == "function_signature_item":
-                        sig = self._safe_decode(source[item.start_byte:item.end_byte])
-                        fn_name = sig.split("(")[0].replace("fn ", "").strip() if "(" in sig else sig
-                        methods.append(FunctionInfo(
-                            name=fn_name,
-                            params=[],
-                            return_type=None,
-                            docstring=None,
-                            is_method=True,
-                            line_number=item.start_point[0] + 1,
-                        ))
+                        sig = self._safe_decode(source[item.start_byte : item.end_byte])
+                        fn_name = (
+                            sig.split("(")[0].replace("fn ", "").strip()
+                            if "(" in sig
+                            else sig
+                        )
+                        methods.append(
+                            FunctionInfo(
+                                name=fn_name,
+                                params=[],
+                                return_type=None,
+                                docstring=None,
+                                is_method=True,
+                                line_number=item.start_point[0] + 1,
+                            )
+                        )
 
         if not name:
             return None
@@ -1204,7 +1463,13 @@ class HybridExtractor:
             line_number=node.start_point[0] + 1,
         )
 
-    def _extract_rust_impl(self, node, source: bytes, module_info: ModuleInfo, defined_names: set[str] | None = None):
+    def _extract_rust_impl(
+        self,
+        node: Any,
+        source: bytes,
+        module_info: ModuleInfo,
+        defined_names: set[str] | None = None,
+    ) -> None:
         """Extract Rust impl block methods and associate with struct/trait."""
         if defined_names is None:
             defined_names = set()
@@ -1212,9 +1477,9 @@ class HybridExtractor:
 
         for child in node.children:
             if child.type == "type_identifier":
-                impl_type = self._safe_decode(source[child.start_byte:child.end_byte])
+                impl_type = self._safe_decode(source[child.start_byte : child.end_byte])
             elif child.type == "generic_type":
-                impl_type = self._safe_decode(source[child.start_byte:child.end_byte])
+                impl_type = self._safe_decode(source[child.start_byte : child.end_byte])
             elif child.type == "declaration_list":
                 for item in child.children:
                     if item.type == "function_item":
@@ -1226,9 +1491,22 @@ class HybridExtractor:
                             func.name = caller_name
                             module_info.functions.append(func)
                             # Extract call graph from method body
-                            self._extract_rust_calls(item, caller_name, source, module_info.call_graph, defined_names)
+                            self._extract_rust_calls(
+                                item,
+                                caller_name,
+                                source,
+                                module_info.call_graph,
+                                defined_names,
+                            )
 
-    def _extract_rust_calls(self, node, caller_name: str, source: bytes, call_graph: CallGraphInfo, defined_names: set[str]):
+    def _extract_rust_calls(
+        self,
+        node: Any,
+        caller_name: str,
+        source: bytes,
+        call_graph: CallGraphInfo,
+        defined_names: set[str],
+    ) -> None:
         """Extract function calls from a Rust function body."""
         for child in node.children:
             # Skip macro invocations (like println!)
@@ -1239,23 +1517,25 @@ class HybridExtractor:
                 if callee and callee in defined_names:
                     call_graph.add_call(caller_name, callee)
             # Recurse into all children
-            self._extract_rust_calls(child, caller_name, source, call_graph, defined_names)
+            self._extract_rust_calls(
+                child, caller_name, source, call_graph, defined_names
+            )
 
-    def _get_rust_call_name(self, node, source: bytes) -> str | None:
+    def _get_rust_call_name(self, node: Any, source: bytes) -> str | None:
         """Get the name of a called function from a call_expression."""
         for child in node.children:
             if child.type == "identifier":
-                return self._safe_decode(source[child.start_byte:child.end_byte])
+                return self._safe_decode(source[child.start_byte : child.end_byte])
             elif child.type == "field_expression":
                 # Method call like self.foo() - get the field name (rightmost part)
                 for c in child.children:
                     if c.type == "field_identifier":
-                        return self._safe_decode(source[c.start_byte:c.end_byte])
+                        return self._safe_decode(source[c.start_byte : c.end_byte])
             elif child.type == "scoped_identifier":
                 # Qualified call like Foo::bar() - get the last identifier
                 for c in child.children:
                     if c.type == "identifier":
-                        return self._safe_decode(source[c.start_byte:c.end_byte])
+                        return self._safe_decode(source[c.start_byte : c.end_byte])
         return None
 
     # === Java Extraction ===
@@ -1280,7 +1560,7 @@ class HybridExtractor:
         self._extract_java_nodes(tree.root_node, source, module_info, defined_names)
         return module_info
 
-    def _collect_java_definitions(self, node, source: bytes) -> set[str]:
+    def _collect_java_definitions(self, node: Any, source: bytes) -> set[str]:
         """Collect all defined method names in Java code."""
         names: set[str] = set()
         for child in node.children:
@@ -1288,7 +1568,7 @@ class HybridExtractor:
                 # Find method name
                 for c in child.children:
                     if c.type == "identifier":
-                        names.add(self._safe_decode(source[c.start_byte:c.end_byte]))
+                        names.add(self._safe_decode(source[c.start_byte : c.end_byte]))
                         break
             elif child.type == "class_declaration":
                 # Look inside class body
@@ -1308,7 +1588,13 @@ class HybridExtractor:
             self._ts_parsers["java"] = parser
         return self._ts_parsers["java"]
 
-    def _extract_java_nodes(self, node, source: bytes, module_info: ModuleInfo, defined_names: set[str] | None = None):
+    def _extract_java_nodes(
+        self,
+        node: Any,
+        source: bytes,
+        module_info: ModuleInfo,
+        defined_names: set[str] | None = None,
+    ) -> None:
         """Recursively extract from Java tree-sitter nodes."""
         if defined_names is None:
             defined_names = set()
@@ -1322,7 +1608,9 @@ class HybridExtractor:
 
             # Class declarations
             elif node_type == "class_declaration":
-                cls = self._extract_java_class(child, source, module_info, defined_names)
+                cls = self._extract_java_class(
+                    child, source, module_info, defined_names
+                )
                 if cls:
                     module_info.classes.append(cls)
 
@@ -1336,20 +1624,31 @@ class HybridExtractor:
             if node_type == "program":
                 self._extract_java_nodes(child, source, module_info, defined_names)
 
-    def _extract_java_import(self, node, source: bytes, module_info: ModuleInfo):
+    def _extract_java_import(
+        self, node: Any, source: bytes, module_info: ModuleInfo
+    ) -> None:
         """Extract Java import declaration."""
         # Get the full import text and parse it
-        import_text = self._safe_decode(source[node.start_byte:node.end_byte])
+        import_text = self._safe_decode(source[node.start_byte : node.end_byte])
         # Strip "import " prefix and trailing semicolon
-        module = import_text.replace("import ", "").replace("static ", "").rstrip(";").strip()
-        module_info.imports.append(ImportInfo(
-            module=module,
-            names=[],
-            is_from=False,
-            line_number=node.start_point[0] + 1,
-        ))
+        module = (
+            import_text.replace("import ", "")
+            .replace("static ", "")
+            .rstrip(";")
+            .strip()
+        )
+        module_info.imports.append(
+            ImportInfo(
+                module=module,
+                names=[],
+                is_from=False,
+                line_number=node.start_point[0] + 1,
+            )
+        )
 
-    def _extract_java_class(self, node, source: bytes, module_info: ModuleInfo, defined_names: set[str]) -> ClassInfo | None:
+    def _extract_java_class(
+        self, node: Any, source: bytes, module_info: ModuleInfo, defined_names: set[str]
+    ) -> ClassInfo | None:
         """Extract Java class declaration."""
         name = ""
         methods = []
@@ -1357,19 +1656,23 @@ class HybridExtractor:
 
         for child in node.children:
             if child.type == "identifier":
-                name = self._safe_decode(source[child.start_byte:child.end_byte])
+                name = self._safe_decode(source[child.start_byte : child.end_byte])
             elif child.type == "superclass":
                 # Extract extends clause
                 for c in child.children:
                     if c.type == "type_identifier":
-                        bases.append(self._safe_decode(source[c.start_byte:c.end_byte]))
+                        bases.append(
+                            self._safe_decode(source[c.start_byte : c.end_byte])
+                        )
             elif child.type == "super_interfaces":
                 # Extract implements clause
                 for c in child.children:
                     if c.type == "type_list":
                         for t in c.children:
                             if t.type == "type_identifier":
-                                bases.append(self._safe_decode(source[t.start_byte:t.end_byte]))
+                                bases.append(
+                                    self._safe_decode(source[t.start_byte : t.end_byte])
+                                )
             elif child.type == "class_body":
                 # Extract methods from class body
                 for body_child in child.children:
@@ -1379,9 +1682,17 @@ class HybridExtractor:
                             methods.append(method)
                             module_info.functions.append(method)
                             # Extract call graph from method body
-                            self._extract_java_calls(body_child, method.name, source, module_info.call_graph, defined_names)
+                            self._extract_java_calls(
+                                body_child,
+                                method.name,
+                                source,
+                                module_info.call_graph,
+                                defined_names,
+                            )
                     elif body_child.type == "constructor_declaration":
-                        method = self._extract_java_constructor(body_child, source, name)
+                        method = self._extract_java_constructor(
+                            body_child, source, name
+                        )
                         if method:
                             methods.append(method)
                             module_info.functions.append(method)
@@ -1397,7 +1708,7 @@ class HybridExtractor:
             line_number=node.start_point[0] + 1,
         )
 
-    def _extract_java_interface(self, node, source: bytes) -> ClassInfo | None:
+    def _extract_java_interface(self, node: Any, source: bytes) -> ClassInfo | None:
         """Extract Java interface declaration."""
         name = ""
         methods = []
@@ -1405,13 +1716,15 @@ class HybridExtractor:
 
         for child in node.children:
             if child.type == "identifier":
-                name = self._safe_decode(source[child.start_byte:child.end_byte])
+                name = self._safe_decode(source[child.start_byte : child.end_byte])
             elif child.type == "extends_interfaces":
                 for c in child.children:
                     if c.type == "type_list":
                         for t in c.children:
                             if t.type == "type_identifier":
-                                bases.append(self._safe_decode(source[t.start_byte:t.end_byte]))
+                                bases.append(
+                                    self._safe_decode(source[t.start_byte : t.end_byte])
+                                )
             elif child.type == "interface_body":
                 for body_child in child.children:
                     if body_child.type == "method_declaration":
@@ -1430,7 +1743,7 @@ class HybridExtractor:
             line_number=node.start_point[0] + 1,
         )
 
-    def _extract_java_method(self, node, source: bytes) -> FunctionInfo | None:
+    def _extract_java_method(self, node: Any, source: bytes) -> FunctionInfo | None:
         """Extract Java method declaration."""
         name = ""
         params = []
@@ -1438,11 +1751,21 @@ class HybridExtractor:
 
         for child in node.children:
             if child.type == "identifier":
-                name = self._safe_decode(source[child.start_byte:child.end_byte])
+                name = self._safe_decode(source[child.start_byte : child.end_byte])
             elif child.type == "formal_parameters":
                 params = self._extract_java_params(child, source)
-            elif child.type in ("type_identifier", "void_type", "integral_type", "floating_point_type", "boolean_type", "generic_type", "array_type"):
-                return_type = self._safe_decode(source[child.start_byte:child.end_byte])
+            elif child.type in (
+                "type_identifier",
+                "void_type",
+                "integral_type",
+                "floating_point_type",
+                "boolean_type",
+                "generic_type",
+                "array_type",
+            ):
+                return_type = self._safe_decode(
+                    source[child.start_byte : child.end_byte]
+                )
 
         if not name:
             return None
@@ -1456,14 +1779,16 @@ class HybridExtractor:
             line_number=node.start_point[0] + 1,
         )
 
-    def _extract_java_constructor(self, node, source: bytes, class_name: str) -> FunctionInfo | None:
+    def _extract_java_constructor(
+        self, node: Any, source: bytes, class_name: str
+    ) -> FunctionInfo | None:
         """Extract Java constructor declaration."""
         name = class_name  # Constructor has same name as class
         params = []
 
         for child in node.children:
             if child.type == "identifier":
-                name = self._safe_decode(source[child.start_byte:child.end_byte])
+                name = self._safe_decode(source[child.start_byte : child.end_byte])
             elif child.type == "formal_parameters":
                 params = self._extract_java_params(child, source)
 
@@ -1476,19 +1801,26 @@ class HybridExtractor:
             line_number=node.start_point[0] + 1,
         )
 
-    def _extract_java_params(self, node, source: bytes) -> list[str]:
+    def _extract_java_params(self, node: Any, source: bytes) -> list[str]:
         """Extract Java formal parameters."""
         params = []
         for child in node.children:
             if child.type == "formal_parameter":
-                param = self._safe_decode(source[child.start_byte:child.end_byte])
+                param = self._safe_decode(source[child.start_byte : child.end_byte])
                 params.append(param)
             elif child.type == "spread_parameter":
-                param = self._safe_decode(source[child.start_byte:child.end_byte])
+                param = self._safe_decode(source[child.start_byte : child.end_byte])
                 params.append(param)
         return params
 
-    def _extract_java_calls(self, node, caller_name: str, source: bytes, call_graph: CallGraphInfo, defined_names: set[str]):
+    def _extract_java_calls(
+        self,
+        node: Any,
+        caller_name: str,
+        source: bytes,
+        call_graph: CallGraphInfo,
+        defined_names: set[str],
+    ) -> None:
         """Extract method calls from a Java method body."""
         for child in node.children:
             if child.type == "method_invocation":
@@ -1496,13 +1828,15 @@ class HybridExtractor:
                 if callee and callee in defined_names:
                     call_graph.add_call(caller_name, callee)
             # Recurse into all children
-            self._extract_java_calls(child, caller_name, source, call_graph, defined_names)
+            self._extract_java_calls(
+                child, caller_name, source, call_graph, defined_names
+            )
 
-    def _get_java_call_name(self, node, source: bytes) -> str | None:
+    def _get_java_call_name(self, node: Any, source: bytes) -> str | None:
         """Get the name of a called method from a method_invocation node."""
         for child in node.children:
             if child.type == "identifier":
-                return self._safe_decode(source[child.start_byte:child.end_byte])
+                return self._safe_decode(source[child.start_byte : child.end_byte])
         return None
 
     # === C Extraction ===
@@ -1527,7 +1861,7 @@ class HybridExtractor:
         self._extract_c_nodes(tree.root_node, source, module_info, defined_names)
         return module_info
 
-    def _collect_c_definitions(self, node, source: bytes) -> set[str]:
+    def _collect_c_definitions(self, node: Any, source: bytes) -> set[str]:
         """Collect all defined function names in C code."""
         names: set[str] = set()
         for child in node.children:
@@ -1537,7 +1871,11 @@ class HybridExtractor:
                     if c.type == "function_declarator":
                         for dc in c.children:
                             if dc.type == "identifier":
-                                names.add(self._safe_decode(source[dc.start_byte:dc.end_byte]))
+                                names.add(
+                                    self._safe_decode(
+                                        source[dc.start_byte : dc.end_byte]
+                                    )
+                                )
                                 break
             # Recurse into translation_unit
             if child.type == "translation_unit":
@@ -1552,7 +1890,13 @@ class HybridExtractor:
             self._ts_parsers["c"] = parser
         return self._ts_parsers["c"]
 
-    def _extract_c_nodes(self, node, source: bytes, module_info: ModuleInfo, defined_names: set[str] | None = None):
+    def _extract_c_nodes(
+        self,
+        node: Any,
+        source: bytes,
+        module_info: ModuleInfo,
+        defined_names: set[str] | None = None,
+    ) -> None:
         """Recursively extract from C tree-sitter nodes."""
         if defined_names is None:
             defined_names = set()
@@ -1570,38 +1914,50 @@ class HybridExtractor:
                 if func:
                     module_info.functions.append(func)
                     # Extract call graph from function body
-                    self._extract_c_calls(child, func.name, source, module_info.call_graph, defined_names)
+                    self._extract_c_calls(
+                        child, func.name, source, module_info.call_graph, defined_names
+                    )
 
             # Recurse into container nodes (FIXED: was only translation_unit)
             if node_type in ("translation_unit", "struct_specifier", "union_specifier"):
                 self._extract_c_nodes(child, source, module_info, defined_names)
 
-    def _extract_c_include(self, node, source: bytes, module_info: ModuleInfo):
+    def _extract_c_include(
+        self, node: Any, source: bytes, module_info: ModuleInfo
+    ) -> None:
         """Extract C #include directive."""
         # Get the included file path
         for child in node.children:
             if child.type == "string_literal":
                 # Local include "file.h"
-                module = self._safe_decode(source[child.start_byte:child.end_byte]).strip('"')
-                module_info.imports.append(ImportInfo(
-                    module=module,
-                    names=[],
-                    is_from=False,
-                    line_number=node.start_point[0] + 1,
-                ))
+                module = self._safe_decode(
+                    source[child.start_byte : child.end_byte]
+                ).strip('"')
+                module_info.imports.append(
+                    ImportInfo(
+                        module=module,
+                        names=[],
+                        is_from=False,
+                        line_number=node.start_point[0] + 1,
+                    )
+                )
                 return
             elif child.type == "system_lib_string":
                 # System include <file.h>
-                module = self._safe_decode(source[child.start_byte:child.end_byte]).strip('<>')
-                module_info.imports.append(ImportInfo(
-                    module=module,
-                    names=[],
-                    is_from=False,
-                    line_number=node.start_point[0] + 1,
-                ))
+                module = self._safe_decode(
+                    source[child.start_byte : child.end_byte]
+                ).strip("<>")
+                module_info.imports.append(
+                    ImportInfo(
+                        module=module,
+                        names=[],
+                        is_from=False,
+                        line_number=node.start_point[0] + 1,
+                    )
+                )
                 return
 
-    def _extract_c_function(self, node, source: bytes) -> FunctionInfo | None:
+    def _extract_c_function(self, node: Any, source: bytes) -> FunctionInfo | None:
         """Extract C function definition."""
         name = ""
         params = []
@@ -1609,15 +1965,23 @@ class HybridExtractor:
 
         for child in node.children:
             # Return type comes before the declarator
-            if child.type in ("primitive_type", "type_identifier", "sized_type_specifier"):
-                return_type = self._safe_decode(source[child.start_byte:child.end_byte])
+            if child.type in (
+                "primitive_type",
+                "type_identifier",
+                "sized_type_specifier",
+            ):
+                return_type = self._safe_decode(
+                    source[child.start_byte : child.end_byte]
+                )
             elif child.type == "pointer_declarator":
                 # Pointer return type like int* or char*
                 for pc in child.children:
                     if pc.type == "function_declarator":
                         for dc in pc.children:
                             if dc.type == "identifier":
-                                name = self._safe_decode(source[dc.start_byte:dc.end_byte])
+                                name = self._safe_decode(
+                                    source[dc.start_byte : dc.end_byte]
+                                )
                             elif dc.type == "parameter_list":
                                 params = self._extract_c_params(dc, source)
                 if return_type:
@@ -1625,7 +1989,7 @@ class HybridExtractor:
             elif child.type == "function_declarator":
                 for dc in child.children:
                     if dc.type == "identifier":
-                        name = self._safe_decode(source[dc.start_byte:dc.end_byte])
+                        name = self._safe_decode(source[dc.start_byte : dc.end_byte])
                     elif dc.type == "parameter_list":
                         params = self._extract_c_params(dc, source)
 
@@ -1641,16 +2005,23 @@ class HybridExtractor:
             line_number=node.start_point[0] + 1,
         )
 
-    def _extract_c_params(self, node, source: bytes) -> list[str]:
+    def _extract_c_params(self, node: Any, source: bytes) -> list[str]:
         """Extract C function parameters."""
         params = []
         for child in node.children:
             if child.type == "parameter_declaration":
-                param = self._safe_decode(source[child.start_byte:child.end_byte])
+                param = self._safe_decode(source[child.start_byte : child.end_byte])
                 params.append(param)
         return params
 
-    def _extract_c_calls(self, node, caller_name: str, source: bytes, call_graph: CallGraphInfo, defined_names: set[str]):
+    def _extract_c_calls(
+        self,
+        node: Any,
+        caller_name: str,
+        source: bytes,
+        call_graph: CallGraphInfo,
+        defined_names: set[str],
+    ) -> None:
         """Extract function calls from a C function body."""
         for child in node.children:
             if child.type == "call_expression":
@@ -1660,11 +2031,11 @@ class HybridExtractor:
             # Recurse into all children
             self._extract_c_calls(child, caller_name, source, call_graph, defined_names)
 
-    def _get_c_call_name(self, node, source: bytes) -> str | None:
+    def _get_c_call_name(self, node: Any, source: bytes) -> str | None:
         """Get the name of a called function from a call_expression node."""
         for child in node.children:
             if child.type == "identifier":
-                return self._safe_decode(source[child.start_byte:child.end_byte])
+                return self._safe_decode(source[child.start_byte : child.end_byte])
         return None
 
     # === C++ Extraction ===
@@ -1689,7 +2060,7 @@ class HybridExtractor:
         self._extract_cpp_nodes(tree.root_node, source, module_info, defined_names)
         return module_info
 
-    def _collect_cpp_definitions(self, node, source: bytes) -> set[str]:
+    def _collect_cpp_definitions(self, node: Any, source: bytes) -> set[str]:
         """Collect all defined function names in C++ code."""
         names: set[str] = set()
         for child in node.children:
@@ -1699,7 +2070,11 @@ class HybridExtractor:
                     if c.type == "function_declarator":
                         for dc in c.children:
                             if dc.type == "identifier":
-                                names.add(self._safe_decode(source[dc.start_byte:dc.end_byte]))
+                                names.add(
+                                    self._safe_decode(
+                                        source[dc.start_byte : dc.end_byte]
+                                    )
+                                )
                                 break
             # Recurse into translation_unit
             if child.type == "translation_unit":
@@ -1714,7 +2089,13 @@ class HybridExtractor:
             self._ts_parsers["cpp"] = parser
         return self._ts_parsers["cpp"]
 
-    def _extract_cpp_nodes(self, node, source: bytes, module_info: ModuleInfo, defined_names: set[str] | None = None):
+    def _extract_cpp_nodes(
+        self,
+        node: Any,
+        source: bytes,
+        module_info: ModuleInfo,
+        defined_names: set[str] | None = None,
+    ) -> None:
         """Recursively extract from C++ tree-sitter nodes."""
         if defined_names is None:
             defined_names = set()
@@ -1732,40 +2113,57 @@ class HybridExtractor:
                 if func:
                     module_info.functions.append(func)
                     # Extract call graph from function body
-                    self._extract_cpp_calls(child, func.name, source, module_info.call_graph, defined_names)
+                    self._extract_cpp_calls(
+                        child, func.name, source, module_info.call_graph, defined_names
+                    )
 
             # Recurse into container nodes (FIXED: was only translation_unit, missed namespaces/classes)
-            if node_type in ("translation_unit", "namespace_definition",
-                             "class_specifier", "struct_specifier",
-                             "declaration", "declaration_list"):
+            if node_type in (
+                "translation_unit",
+                "namespace_definition",
+                "class_specifier",
+                "struct_specifier",
+                "declaration",
+                "declaration_list",
+            ):
                 self._extract_cpp_nodes(child, source, module_info, defined_names)
 
-    def _extract_cpp_include(self, node, source: bytes, module_info: ModuleInfo):
+    def _extract_cpp_include(
+        self, node: Any, source: bytes, module_info: ModuleInfo
+    ) -> None:
         """Extract C++ #include directive."""
         # Get the included file path
         for child in node.children:
             if child.type == "string_literal":
                 # Local include "file.hpp"
-                module = self._safe_decode(source[child.start_byte:child.end_byte]).strip('"')
-                module_info.imports.append(ImportInfo(
-                    module=module,
-                    names=[],
-                    is_from=False,
-                    line_number=node.start_point[0] + 1,
-                ))
+                module = self._safe_decode(
+                    source[child.start_byte : child.end_byte]
+                ).strip('"')
+                module_info.imports.append(
+                    ImportInfo(
+                        module=module,
+                        names=[],
+                        is_from=False,
+                        line_number=node.start_point[0] + 1,
+                    )
+                )
                 return
             elif child.type == "system_lib_string":
                 # System include <file.h>
-                module = self._safe_decode(source[child.start_byte:child.end_byte]).strip('<>')
-                module_info.imports.append(ImportInfo(
-                    module=module,
-                    names=[],
-                    is_from=False,
-                    line_number=node.start_point[0] + 1,
-                ))
+                module = self._safe_decode(
+                    source[child.start_byte : child.end_byte]
+                ).strip("<>")
+                module_info.imports.append(
+                    ImportInfo(
+                        module=module,
+                        names=[],
+                        is_from=False,
+                        line_number=node.start_point[0] + 1,
+                    )
+                )
                 return
 
-    def _extract_cpp_function(self, node, source: bytes) -> FunctionInfo | None:
+    def _extract_cpp_function(self, node: Any, source: bytes) -> FunctionInfo | None:
         """Extract C++ function definition."""
         name = ""
         params = []
@@ -1773,15 +2171,23 @@ class HybridExtractor:
 
         for child in node.children:
             # Return type comes before the declarator
-            if child.type in ("primitive_type", "type_identifier", "sized_type_specifier"):
-                return_type = self._safe_decode(source[child.start_byte:child.end_byte])
+            if child.type in (
+                "primitive_type",
+                "type_identifier",
+                "sized_type_specifier",
+            ):
+                return_type = self._safe_decode(
+                    source[child.start_byte : child.end_byte]
+                )
             elif child.type == "pointer_declarator":
                 # Pointer return type like int* or char*
                 for pc in child.children:
                     if pc.type == "function_declarator":
                         for dc in pc.children:
                             if dc.type == "identifier":
-                                name = self._safe_decode(source[dc.start_byte:dc.end_byte])
+                                name = self._safe_decode(
+                                    source[dc.start_byte : dc.end_byte]
+                                )
                             elif dc.type == "parameter_list":
                                 params = self._extract_cpp_params(dc, source)
                 if return_type:
@@ -1789,7 +2195,7 @@ class HybridExtractor:
             elif child.type == "function_declarator":
                 for dc in child.children:
                     if dc.type == "identifier":
-                        name = self._safe_decode(source[dc.start_byte:dc.end_byte])
+                        name = self._safe_decode(source[dc.start_byte : dc.end_byte])
                     elif dc.type == "parameter_list":
                         params = self._extract_cpp_params(dc, source)
 
@@ -1805,16 +2211,23 @@ class HybridExtractor:
             line_number=node.start_point[0] + 1,
         )
 
-    def _extract_cpp_params(self, node, source: bytes) -> list[str]:
+    def _extract_cpp_params(self, node: Any, source: bytes) -> list[str]:
         """Extract C++ function parameters."""
         params = []
         for child in node.children:
             if child.type == "parameter_declaration":
-                param = self._safe_decode(source[child.start_byte:child.end_byte])
+                param = self._safe_decode(source[child.start_byte : child.end_byte])
                 params.append(param)
         return params
 
-    def _extract_cpp_calls(self, node, caller_name: str, source: bytes, call_graph: CallGraphInfo, defined_names: set[str]):
+    def _extract_cpp_calls(
+        self,
+        node: Any,
+        caller_name: str,
+        source: bytes,
+        call_graph: CallGraphInfo,
+        defined_names: set[str],
+    ) -> None:
         """Extract function calls from a C++ function body."""
         for child in node.children:
             if child.type == "call_expression":
@@ -1822,13 +2235,15 @@ class HybridExtractor:
                 if callee and callee in defined_names:
                     call_graph.add_call(caller_name, callee)
             # Recurse into all children
-            self._extract_cpp_calls(child, caller_name, source, call_graph, defined_names)
+            self._extract_cpp_calls(
+                child, caller_name, source, call_graph, defined_names
+            )
 
-    def _get_cpp_call_name(self, node, source: bytes) -> str | None:
+    def _get_cpp_call_name(self, node: Any, source: bytes) -> str | None:
         """Get the name of a called function from a call_expression node."""
         for child in node.children:
             if child.type == "identifier":
-                return self._safe_decode(source[child.start_byte:child.end_byte])
+                return self._safe_decode(source[child.start_byte : child.end_byte])
         return None
 
     # === Ruby Extraction ===
@@ -1853,14 +2268,18 @@ class HybridExtractor:
         self._extract_ruby_nodes(tree.root_node, source, module_info, defined_names)
         return module_info
 
-    def _collect_ruby_definitions(self, node, source: bytes) -> set[str]:
+    def _collect_ruby_definitions(self, node: Any, source: bytes) -> set[str]:
         """Collect all defined method names in Ruby code."""
         names: set[str] = set()
         for child in node.children:
             if child.type == "method":
                 name_node = child.child_by_field_name("name")
                 if name_node:
-                    names.add(self._safe_decode(source[name_node.start_byte:name_node.end_byte]))
+                    names.add(
+                        self._safe_decode(
+                            source[name_node.start_byte : name_node.end_byte]
+                        )
+                    )
             # Recurse into class bodies, module bodies etc
             names.update(self._collect_ruby_definitions(child, source))
         return names
@@ -1873,7 +2292,13 @@ class HybridExtractor:
             self._ts_parsers["ruby"] = parser
         return self._ts_parsers["ruby"]
 
-    def _extract_ruby_nodes(self, node, source: bytes, module_info: ModuleInfo, defined_names: set[str] | None = None):
+    def _extract_ruby_nodes(
+        self,
+        node: Any,
+        source: bytes,
+        module_info: ModuleInfo,
+        defined_names: set[str] | None = None,
+    ) -> None:
         """Recursively extract from Ruby tree-sitter nodes."""
         if defined_names is None:
             defined_names = set()
@@ -1887,11 +2312,15 @@ class HybridExtractor:
                 if func:
                     module_info.functions.append(func)
                     # Extract call graph from method body
-                    self._extract_ruby_calls(child, func.name, source, module_info.call_graph, defined_names)
+                    self._extract_ruby_calls(
+                        child, func.name, source, module_info.call_graph, defined_names
+                    )
 
             # Class definitions
             elif node_type == "class":
-                cls = self._extract_ruby_class(child, source, defined_names, module_info.call_graph)
+                cls = self._extract_ruby_class(
+                    child, source, defined_names, module_info.call_graph
+                )
                 if cls:
                     module_info.classes.append(cls)
 
@@ -1900,7 +2329,9 @@ class HybridExtractor:
                 # Recurse into module body
                 body_node = child.child_by_field_name("body")
                 if body_node:
-                    self._extract_ruby_nodes(body_node, source, module_info, defined_names)
+                    self._extract_ruby_nodes(
+                        body_node, source, module_info, defined_names
+                    )
 
             # Require statements (imports)
             elif node_type == "call":
@@ -1912,13 +2343,13 @@ class HybridExtractor:
             else:
                 self._extract_ruby_nodes(child, source, module_info, defined_names)
 
-    def _extract_ruby_method(self, node, source: bytes) -> FunctionInfo | None:
+    def _extract_ruby_method(self, node: Any, source: bytes) -> FunctionInfo | None:
         """Extract a Ruby method definition."""
         name_node = node.child_by_field_name("name")
         if not name_node:
             return None
 
-        name = self._safe_decode(source[name_node.start_byte:name_node.end_byte])
+        name = self._safe_decode(source[name_node.start_byte : name_node.end_byte])
 
         # Extract parameters
         params = []
@@ -1935,28 +2366,44 @@ class HybridExtractor:
             line_number=node.start_point[0] + 1,
         )
 
-    def _extract_ruby_params(self, node, source: bytes) -> list[str]:
+    def _extract_ruby_params(self, node: Any, source: bytes) -> list[str]:
         """Extract Ruby method parameters."""
         params = []
         for child in node.children:
-            if child.type in ("identifier", "optional_parameter", "splat_parameter", "keyword_parameter", "block_parameter"):
-                param_text = self._safe_decode(source[child.start_byte:child.end_byte])
+            if child.type in (
+                "identifier",
+                "optional_parameter",
+                "splat_parameter",
+                "keyword_parameter",
+                "block_parameter",
+            ):
+                param_text = self._safe_decode(
+                    source[child.start_byte : child.end_byte]
+                )
                 params.append(param_text)
         return params
 
-    def _extract_ruby_class(self, node, source: bytes, defined_names: set[str], call_graph: CallGraphInfo) -> ClassInfo | None:
+    def _extract_ruby_class(
+        self,
+        node: Any,
+        source: bytes,
+        defined_names: set[str],
+        call_graph: CallGraphInfo,
+    ) -> ClassInfo | None:
         """Extract a Ruby class definition."""
         name_node = node.child_by_field_name("name")
         if not name_node:
             return None
 
-        name = self._safe_decode(source[name_node.start_byte:name_node.end_byte])
+        name = self._safe_decode(source[name_node.start_byte : name_node.end_byte])
 
         # Extract superclass if present
         superclass = None
         superclass_node = node.child_by_field_name("superclass")
         if superclass_node:
-            superclass = self._safe_decode(source[superclass_node.start_byte:superclass_node.end_byte])
+            superclass = self._safe_decode(
+                source[superclass_node.start_byte : superclass_node.end_byte]
+            )
 
         methods = []
         body_node = node.child_by_field_name("body")
@@ -1966,7 +2413,13 @@ class HybridExtractor:
                     method = self._extract_ruby_method(child, source)
                     if method:
                         methods.append(method)
-                        self._extract_ruby_calls(child, f"{name}.{method.name}", source, call_graph, defined_names)
+                        self._extract_ruby_calls(
+                            child,
+                            f"{name}.{method.name}",
+                            source,
+                            call_graph,
+                            defined_names,
+                        )
 
         return ClassInfo(
             name=name,
@@ -1976,13 +2429,15 @@ class HybridExtractor:
             line_number=node.start_point[0] + 1,
         )
 
-    def _extract_ruby_require(self, node, source: bytes) -> ImportInfo | None:
+    def _extract_ruby_require(self, node: Any, source: bytes) -> ImportInfo | None:
         """Extract a Ruby require/require_relative statement."""
         method_node = node.child_by_field_name("method")
         if not method_node:
             return None
 
-        method_name = self._safe_decode(source[method_node.start_byte:method_node.end_byte])
+        method_name = self._safe_decode(
+            source[method_node.start_byte : method_node.end_byte]
+        )
         if method_name not in ("require", "require_relative"):
             return None
 
@@ -1995,9 +2450,11 @@ class HybridExtractor:
             if child.type == "string":
                 string_content = child.child_by_field_name("content")
                 if string_content:
-                    module = self._safe_decode(source[string_content.start_byte:string_content.end_byte])
+                    module = self._safe_decode(
+                        source[string_content.start_byte : string_content.end_byte]
+                    )
                 else:
-                    text = self._safe_decode(source[child.start_byte:child.end_byte])
+                    text = self._safe_decode(source[child.start_byte : child.end_byte])
                     module = text.strip("'\"")
 
                 return ImportInfo(
@@ -2008,7 +2465,14 @@ class HybridExtractor:
 
         return None
 
-    def _extract_ruby_calls(self, node, caller_name: str, source: bytes, call_graph: CallGraphInfo, defined_names: set[str]):
+    def _extract_ruby_calls(
+        self,
+        node: Any,
+        caller_name: str,
+        source: bytes,
+        call_graph: CallGraphInfo,
+        defined_names: set[str],
+    ) -> None:
         """Extract method calls from a Ruby method body."""
         for child in node.children:
             if child.type == "call":
@@ -2016,13 +2480,17 @@ class HybridExtractor:
                 if callee and callee in defined_names:
                     call_graph.add_call(caller_name, callee)
             # Recurse into all children
-            self._extract_ruby_calls(child, caller_name, source, call_graph, defined_names)
+            self._extract_ruby_calls(
+                child, caller_name, source, call_graph, defined_names
+            )
 
-    def _get_ruby_call_name(self, node, source: bytes) -> str | None:
+    def _get_ruby_call_name(self, node: Any, source: bytes) -> str | None:
         """Get the name of a called method from a call node."""
         method_node = node.child_by_field_name("method")
         if method_node:
-            return self._safe_decode(source[method_node.start_byte:method_node.end_byte])
+            return self._safe_decode(
+                source[method_node.start_byte : method_node.end_byte]
+            )
         return None
 
     def _extract_kotlin(self, file_path: Path) -> ModuleInfo:
@@ -2053,14 +2521,14 @@ class HybridExtractor:
             self._ts_parsers["kotlin"] = parser
         return self._ts_parsers["kotlin"]
 
-    def _collect_kotlin_definitions(self, node, source: bytes) -> set[str]:
+    def _collect_kotlin_definitions(self, node: Any, source: bytes) -> set[str]:
         """Collect all defined function/method names in Kotlin."""
         names: set[str] = set()
         for child in node.children:
             if child.type == "function_declaration":
                 for c in child.children:
                     if c.type == "identifier":
-                        names.add(self._safe_decode(source[c.start_byte:c.end_byte]))
+                        names.add(self._safe_decode(source[c.start_byte : c.end_byte]))
                         break
             elif child.type == "class_declaration":
                 for c in child.children:
@@ -2069,14 +2537,24 @@ class HybridExtractor:
                             if member.type == "function_declaration":
                                 for m in member.children:
                                     if m.type == "identifier":
-                                        names.add(self._safe_decode(source[m.start_byte:m.end_byte]))
+                                        names.add(
+                                            self._safe_decode(
+                                                source[m.start_byte : m.end_byte]
+                                            )
+                                        )
                                         break
             # Recurse
             if child.type in ("source_file", "package_header", "import_list"):
                 names.update(self._collect_kotlin_definitions(child, source))
         return names
 
-    def _extract_kotlin_nodes(self, node, source: bytes, module_info: ModuleInfo, defined_names: set[str] | None = None):
+    def _extract_kotlin_nodes(
+        self,
+        node: Any,
+        source: bytes,
+        module_info: ModuleInfo,
+        defined_names: set[str] | None = None,
+    ) -> None:
         """Extract Kotlin nodes into module info."""
         call_graph = module_info.call_graph or CallGraphInfo()
         module_info.call_graph = call_graph
@@ -2088,10 +2566,14 @@ class HybridExtractor:
                     module_info.functions.append(func_info)
                     # Extract calls from function body
                     if defined_names:
-                        self._extract_kotlin_calls(child, func_info.name, source, call_graph, defined_names)
+                        self._extract_kotlin_calls(
+                            child, func_info.name, source, call_graph, defined_names
+                        )
 
             elif child.type == "class_declaration":
-                class_info = self._extract_kotlin_class(child, source, defined_names or set(), call_graph)
+                class_info = self._extract_kotlin_class(
+                    child, source, defined_names or set(), call_graph
+                )
                 if class_info:
                     module_info.classes.append(class_info)
 
@@ -2101,11 +2583,16 @@ class HybridExtractor:
                     module_info.imports.append(import_info)
 
             # Recurse for nested structures (FIXED: was only source_file, missed objects/companions)
-            if child.type in ("source_file", "class_declaration", "class_body",
-                              "object_declaration", "companion_object"):
+            if child.type in (
+                "source_file",
+                "class_declaration",
+                "class_body",
+                "object_declaration",
+                "companion_object",
+            ):
                 self._extract_kotlin_nodes(child, source, module_info, defined_names)
 
-    def _extract_kotlin_function(self, node, source: bytes) -> FunctionInfo | None:
+    def _extract_kotlin_function(self, node: Any, source: bytes) -> FunctionInfo | None:
         """Extract function info from Kotlin function_declaration."""
         name = None
         params = []
@@ -2113,11 +2600,13 @@ class HybridExtractor:
 
         for child in node.children:
             if child.type == "identifier":
-                name = self._safe_decode(source[child.start_byte:child.end_byte])
+                name = self._safe_decode(source[child.start_byte : child.end_byte])
             elif child.type == "function_value_parameters":
                 params = self._extract_kotlin_params(child, source)
             elif child.type == "type_identifier" or child.type == "user_type":
-                return_type = self._safe_decode(source[child.start_byte:child.end_byte])
+                return_type = self._safe_decode(
+                    source[child.start_byte : child.end_byte]
+                )
 
         if not name:
             return None
@@ -2130,25 +2619,33 @@ class HybridExtractor:
             line_number=node.start_point[0] + 1,
         )
 
-    def _extract_kotlin_params(self, node, source: bytes) -> list[str]:
+    def _extract_kotlin_params(self, node: Any, source: bytes) -> list[str]:
         """Extract parameter list from Kotlin function_value_parameters."""
         params = []
         for child in node.children:
             if child.type == "parameter":
                 for c in child.children:
                     if c.type == "identifier":
-                        params.append(self._safe_decode(source[c.start_byte:c.end_byte]))
+                        params.append(
+                            self._safe_decode(source[c.start_byte : c.end_byte])
+                        )
                         break
         return params
 
-    def _extract_kotlin_class(self, node, source: bytes, defined_names: set[str], call_graph: CallGraphInfo) -> ClassInfo | None:
+    def _extract_kotlin_class(
+        self,
+        node: Any,
+        source: bytes,
+        defined_names: set[str],
+        call_graph: CallGraphInfo,
+    ) -> ClassInfo | None:
         """Extract class info from Kotlin class_declaration."""
         name = None
         methods = []
 
         for child in node.children:
             if child.type == "identifier":
-                name = self._safe_decode(source[child.start_byte:child.end_byte])
+                name = self._safe_decode(source[child.start_byte : child.end_byte])
             elif child.type == "class_body":
                 for member in child.children:
                     if member.type == "function_declaration":
@@ -2156,7 +2653,9 @@ class HybridExtractor:
                         if method:
                             methods.append(method)
                             # Extract calls from method body
-                            self._extract_kotlin_calls(member, method.name, source, call_graph, defined_names)
+                            self._extract_kotlin_calls(
+                                member, method.name, source, call_graph, defined_names
+                            )
 
         if not name:
             return None
@@ -2169,9 +2668,9 @@ class HybridExtractor:
             line_number=node.start_point[0] + 1,
         )
 
-    def _extract_kotlin_import(self, node, source: bytes) -> ImportInfo | None:
+    def _extract_kotlin_import(self, node: Any, source: bytes) -> ImportInfo | None:
         """Extract import info from Kotlin import_header."""
-        text = self._safe_decode(source[node.start_byte:node.end_byte]).strip()
+        text = self._safe_decode(source[node.start_byte : node.end_byte]).strip()
         if text.startswith("import "):
             module = text[7:].strip()
             # Handle alias: import foo.bar as baz
@@ -2184,7 +2683,14 @@ class HybridExtractor:
             )
         return None
 
-    def _extract_kotlin_calls(self, node, caller_name: str, source: bytes, call_graph: CallGraphInfo, defined_names: set[str]):
+    def _extract_kotlin_calls(
+        self,
+        node: Any,
+        caller_name: str,
+        source: bytes,
+        call_graph: CallGraphInfo,
+        defined_names: set[str],
+    ) -> None:
         """Extract function calls from a Kotlin function body."""
         for child in node.children:
             if child.type == "call_expression":
@@ -2192,13 +2698,15 @@ class HybridExtractor:
                 if callee and callee in defined_names:
                     call_graph.add_call(caller_name, callee)
             # Recurse into all children
-            self._extract_kotlin_calls(child, caller_name, source, call_graph, defined_names)
+            self._extract_kotlin_calls(
+                child, caller_name, source, call_graph, defined_names
+            )
 
-    def _get_kotlin_call_name(self, node, source: bytes) -> str | None:
+    def _get_kotlin_call_name(self, node: Any, source: bytes) -> str | None:
         """Get the name of a called function from a call_expression node."""
         for child in node.children:
             if child.type == "identifier":
-                return self._safe_decode(source[child.start_byte:child.end_byte])
+                return self._safe_decode(source[child.start_byte : child.end_byte])
         return None
 
     # === Swift Extraction ===
@@ -2231,14 +2739,18 @@ class HybridExtractor:
             self._ts_parsers["swift"] = parser
         return self._ts_parsers["swift"]
 
-    def _collect_swift_definitions(self, node, source: bytes) -> set[str]:
+    def _collect_swift_definitions(self, node: Any, source: bytes) -> set[str]:
         """Collect all defined function/method names in Swift."""
         names: set[str] = set()
         for child in node.children:
             if child.type == "function_declaration":
                 name_node = child.child_by_field_name("name")
                 if name_node:
-                    names.add(self._safe_decode(source[name_node.start_byte:name_node.end_byte]))
+                    names.add(
+                        self._safe_decode(
+                            source[name_node.start_byte : name_node.end_byte]
+                        )
+                    )
             elif child.type == "class_declaration":
                 # Find methods in class body
                 for c in child.children:
@@ -2247,13 +2759,25 @@ class HybridExtractor:
                             if member.type == "function_declaration":
                                 name_node = member.child_by_field_name("name")
                                 if name_node:
-                                    names.add(self._safe_decode(source[name_node.start_byte:name_node.end_byte]))
+                                    names.add(
+                                        self._safe_decode(
+                                            source[
+                                                name_node.start_byte : name_node.end_byte
+                                            ]
+                                        )
+                                    )
             # Recurse
             if child.type == "source_file":
                 names.update(self._collect_swift_definitions(child, source))
         return names
 
-    def _extract_swift_nodes(self, node, source: bytes, module_info: ModuleInfo, defined_names: set[str] | None = None):
+    def _extract_swift_nodes(
+        self,
+        node: Any,
+        source: bytes,
+        module_info: ModuleInfo,
+        defined_names: set[str] | None = None,
+    ) -> None:
         """Extract Swift nodes into module info."""
         call_graph = module_info.call_graph or CallGraphInfo()
         module_info.call_graph = call_graph
@@ -2265,10 +2789,14 @@ class HybridExtractor:
                     module_info.functions.append(func_info)
                     # Extract calls from function body
                     if defined_names:
-                        self._extract_swift_calls(child, func_info.name, source, call_graph, defined_names)
+                        self._extract_swift_calls(
+                            child, func_info.name, source, call_graph, defined_names
+                        )
 
             elif child.type == "class_declaration":
-                class_info = self._extract_swift_class(child, source, defined_names or set(), call_graph)
+                class_info = self._extract_swift_class(
+                    child, source, defined_names or set(), call_graph
+                )
                 if class_info:
                     module_info.classes.append(class_info)
 
@@ -2278,13 +2806,19 @@ class HybridExtractor:
                     module_info.imports.append(import_info)
 
             # Recurse for nested structures (FIXED: was only source_file, missed extensions/structs/protocols)
-            if child.type in ("source_file", "class_declaration", "class_body",
-                              "struct_declaration", "extension_declaration",
-                              "protocol_declaration", "protocol_body",
-                              "enum_declaration"):
+            if child.type in (
+                "source_file",
+                "class_declaration",
+                "class_body",
+                "struct_declaration",
+                "extension_declaration",
+                "protocol_declaration",
+                "protocol_body",
+                "enum_declaration",
+            ):
                 self._extract_swift_nodes(child, source, module_info, defined_names)
 
-    def _extract_swift_function(self, node, source: bytes) -> FunctionInfo | None:
+    def _extract_swift_function(self, node: Any, source: bytes) -> FunctionInfo | None:
         """Extract function info from Swift function_declaration."""
         name = None
         params = []
@@ -2292,19 +2826,23 @@ class HybridExtractor:
 
         name_node = node.child_by_field_name("name")
         if name_node:
-            name = self._safe_decode(source[name_node.start_byte:name_node.end_byte])
+            name = self._safe_decode(source[name_node.start_byte : name_node.end_byte])
 
         for child in node.children:
             if child.type == "parameter":
                 for c in child.children:
                     if c.type == "simple_identifier":
-                        params.append(self._safe_decode(source[c.start_byte:c.end_byte]))
+                        params.append(
+                            self._safe_decode(source[c.start_byte : c.end_byte])
+                        )
                         break
             elif child.type == "type_annotation":
                 # Return type after ->
                 for c in child.children:
                     if c.type in ("type_identifier", "user_type", "simple_identifier"):
-                        return_type = self._safe_decode(source[c.start_byte:c.end_byte])
+                        return_type = self._safe_decode(
+                            source[c.start_byte : c.end_byte]
+                        )
                         break
 
         if not name:
@@ -2318,14 +2856,20 @@ class HybridExtractor:
             line_number=node.start_point[0] + 1,
         )
 
-    def _extract_swift_class(self, node, source: bytes, defined_names: set[str], call_graph: CallGraphInfo) -> ClassInfo | None:
+    def _extract_swift_class(
+        self,
+        node: Any,
+        source: bytes,
+        defined_names: set[str],
+        call_graph: CallGraphInfo,
+    ) -> ClassInfo | None:
         """Extract class info from Swift class_declaration."""
         name = None
         methods = []
 
         for child in node.children:
             if child.type == "type_identifier":
-                name = self._safe_decode(source[child.start_byte:child.end_byte])
+                name = self._safe_decode(source[child.start_byte : child.end_byte])
             elif child.type == "class_body":
                 for member in child.children:
                     if member.type == "function_declaration":
@@ -2333,7 +2877,9 @@ class HybridExtractor:
                         if method:
                             methods.append(method)
                             # Extract calls from method body
-                            self._extract_swift_calls(member, method.name, source, call_graph, defined_names)
+                            self._extract_swift_calls(
+                                member, method.name, source, call_graph, defined_names
+                            )
 
         if not name:
             return None
@@ -2346,9 +2892,9 @@ class HybridExtractor:
             line_number=node.start_point[0] + 1,
         )
 
-    def _extract_swift_import(self, node, source: bytes) -> ImportInfo | None:
+    def _extract_swift_import(self, node: Any, source: bytes) -> ImportInfo | None:
         """Extract import info from Swift import_declaration."""
-        text = self._safe_decode(source[node.start_byte:node.end_byte]).strip()
+        text = self._safe_decode(source[node.start_byte : node.end_byte]).strip()
         if text.startswith("import "):
             module = text[7:].strip()
             return ImportInfo(
@@ -2357,7 +2903,14 @@ class HybridExtractor:
             )
         return None
 
-    def _extract_swift_calls(self, node, caller_name: str, source: bytes, call_graph: CallGraphInfo, defined_names: set[str]):
+    def _extract_swift_calls(
+        self,
+        node: Any,
+        caller_name: str,
+        source: bytes,
+        call_graph: CallGraphInfo,
+        defined_names: set[str],
+    ) -> None:
         """Extract function calls from a Swift function body."""
         for child in node.children:
             if child.type == "call_expression":
@@ -2365,13 +2918,15 @@ class HybridExtractor:
                 if callee and callee in defined_names:
                     call_graph.add_call(caller_name, callee)
             # Recurse into all children
-            self._extract_swift_calls(child, caller_name, source, call_graph, defined_names)
+            self._extract_swift_calls(
+                child, caller_name, source, call_graph, defined_names
+            )
 
-    def _get_swift_call_name(self, node, source: bytes) -> str | None:
+    def _get_swift_call_name(self, node: Any, source: bytes) -> str | None:
         """Get the name of a called function from a call_expression node."""
         for child in node.children:
             if child.type == "simple_identifier":
-                return self._safe_decode(source[child.start_byte:child.end_byte])
+                return self._safe_decode(source[child.start_byte : child.end_byte])
         return None
 
     # === C# Extraction ===
@@ -2401,7 +2956,9 @@ class HybridExtractor:
             self._ts_parsers["csharp"] = parser
         return self._ts_parsers["csharp"]
 
-    def _extract_csharp_nodes(self, node, source: bytes, module_info: ModuleInfo):
+    def _extract_csharp_nodes(
+        self, node: Any, source: bytes, module_info: ModuleInfo
+    ) -> None:
         """Extract C# nodes into module info."""
         for child in node.children:
             if child.type == "method_declaration":
@@ -2417,11 +2974,18 @@ class HybridExtractor:
                 if import_info:
                     module_info.imports.append(import_info)
             # Recurse for namespaces, classes, and other containers
-            if child.type in ("compilation_unit", "namespace_declaration", "file_scoped_namespace_declaration",
-                              "class_declaration", "struct_declaration", "interface_declaration", "declaration_list"):
+            if child.type in (
+                "compilation_unit",
+                "namespace_declaration",
+                "file_scoped_namespace_declaration",
+                "class_declaration",
+                "struct_declaration",
+                "interface_declaration",
+                "declaration_list",
+            ):
                 self._extract_csharp_nodes(child, source, module_info)
 
-    def _extract_csharp_method(self, node, source: bytes) -> FunctionInfo | None:
+    def _extract_csharp_method(self, node: Any, source: bytes) -> FunctionInfo | None:
         """Extract method info from C# method_declaration."""
         name = None
         params = []
@@ -2429,12 +2993,19 @@ class HybridExtractor:
 
         for child in node.children:
             if child.type == "identifier":
-                name = self._safe_decode(source[child.start_byte:child.end_byte])
+                name = self._safe_decode(source[child.start_byte : child.end_byte])
             elif child.type == "parameter_list":
                 params = self._extract_csharp_params(child, source)
-            elif child.type in ("predefined_type", "generic_name", "identifier", "nullable_type"):
+            elif child.type in (
+                "predefined_type",
+                "generic_name",
+                "identifier",
+                "nullable_type",
+            ):
                 if return_type is None:  # First type is return type
-                    return_type = self._safe_decode(source[child.start_byte:child.end_byte])
+                    return_type = self._safe_decode(
+                        source[child.start_byte : child.end_byte]
+                    )
 
         if not name:
             return None
@@ -2447,25 +3018,27 @@ class HybridExtractor:
             line_number=node.start_point[0] + 1,
         )
 
-    def _extract_csharp_params(self, node, source: bytes) -> list[str]:
+    def _extract_csharp_params(self, node: Any, source: bytes) -> list[str]:
         """Extract parameter list from C# parameter_list."""
         params = []
         for child in node.children:
             if child.type == "parameter":
                 for c in child.children:
                     if c.type == "identifier":
-                        params.append(self._safe_decode(source[c.start_byte:c.end_byte]))
+                        params.append(
+                            self._safe_decode(source[c.start_byte : c.end_byte])
+                        )
                         break
         return params
 
-    def _extract_csharp_class(self, node, source: bytes) -> ClassInfo | None:
+    def _extract_csharp_class(self, node: Any, source: bytes) -> ClassInfo | None:
         """Extract class info from C# class_declaration."""
         name = None
         methods = []
 
         for child in node.children:
             if child.type == "identifier":
-                name = self._safe_decode(source[child.start_byte:child.end_byte])
+                name = self._safe_decode(source[child.start_byte : child.end_byte])
             elif child.type == "declaration_list":
                 for member in child.children:
                     if member.type == "method_declaration":
@@ -2484,11 +3057,11 @@ class HybridExtractor:
             line_number=node.start_point[0] + 1,
         )
 
-    def _extract_csharp_import(self, node, source: bytes) -> ImportInfo | None:
+    def _extract_csharp_import(self, node: Any, source: bytes) -> ImportInfo | None:
         """Extract import info from C# using_directive."""
         for child in node.children:
             if child.type in ("identifier", "qualified_name"):
-                module = self._safe_decode(source[child.start_byte:child.end_byte])
+                module = self._safe_decode(source[child.start_byte : child.end_byte])
                 return ImportInfo(
                     module=module,
                     names=[],
@@ -2525,14 +3098,18 @@ class HybridExtractor:
             self._ts_parsers["scala"] = parser
         return self._ts_parsers["scala"]
 
-    def _collect_scala_definitions(self, node, source: bytes) -> set[str]:
+    def _collect_scala_definitions(self, node: Any, source: bytes) -> set[str]:
         """Collect all defined function/method names in Scala."""
         names: set[str] = set()
         for child in node.children:
             if child.type == "function_definition":
                 name_node = child.child_by_field_name("name")
                 if name_node:
-                    names.add(self._safe_decode(source[name_node.start_byte:name_node.end_byte]))
+                    names.add(
+                        self._safe_decode(
+                            source[name_node.start_byte : name_node.end_byte]
+                        )
+                    )
             elif child.type in ("class_definition", "object_definition"):
                 for c in child.children:
                     if c.type == "template_body":
@@ -2540,12 +3117,24 @@ class HybridExtractor:
                             if member.type == "function_definition":
                                 name_node = member.child_by_field_name("name")
                                 if name_node:
-                                    names.add(self._safe_decode(source[name_node.start_byte:name_node.end_byte]))
+                                    names.add(
+                                        self._safe_decode(
+                                            source[
+                                                name_node.start_byte : name_node.end_byte
+                                            ]
+                                        )
+                                    )
             # Recurse
             names.update(self._collect_scala_definitions(child, source))
         return names
 
-    def _extract_scala_nodes(self, node, source: bytes, module_info: ModuleInfo, defined_names: set[str] | None = None):
+    def _extract_scala_nodes(
+        self,
+        node: Any,
+        source: bytes,
+        module_info: ModuleInfo,
+        defined_names: set[str] | None = None,
+    ) -> None:
         """Extract Scala nodes into module info."""
         call_graph = module_info.call_graph or CallGraphInfo()
         module_info.call_graph = call_graph
@@ -2557,10 +3146,14 @@ class HybridExtractor:
                     module_info.functions.append(func_info)
                     # Extract calls from function body
                     if defined_names:
-                        self._extract_scala_calls(child, func_info.name, source, call_graph, defined_names)
+                        self._extract_scala_calls(
+                            child, func_info.name, source, call_graph, defined_names
+                        )
 
             elif child.type in ("class_definition", "object_definition"):
-                class_info = self._extract_scala_class(child, source, defined_names or set(), call_graph)
+                class_info = self._extract_scala_class(
+                    child, source, defined_names or set(), call_graph
+                )
                 if class_info:
                     module_info.classes.append(class_info)
 
@@ -2570,11 +3163,17 @@ class HybridExtractor:
                     module_info.imports.append(import_info)
 
             # Recurse for nested structures
-            if child.type in ("compilation_unit", "package_clause", "template_body",
-                              "object_definition", "class_definition", "trait_definition"):
+            if child.type in (
+                "compilation_unit",
+                "package_clause",
+                "template_body",
+                "object_definition",
+                "class_definition",
+                "trait_definition",
+            ):
                 self._extract_scala_nodes(child, source, module_info, defined_names)
 
-    def _extract_scala_function(self, node, source: bytes) -> FunctionInfo | None:
+    def _extract_scala_function(self, node: Any, source: bytes) -> FunctionInfo | None:
         """Extract function info from Scala function_definition."""
         name = None
         params = []
@@ -2582,13 +3181,15 @@ class HybridExtractor:
 
         name_node = node.child_by_field_name("name")
         if name_node:
-            name = self._safe_decode(source[name_node.start_byte:name_node.end_byte])
+            name = self._safe_decode(source[name_node.start_byte : name_node.end_byte])
 
         for child in node.children:
             if child.type == "parameters":
                 params = self._extract_scala_params(child, source)
             elif child.type in ("type_identifier", "generic_type", "simple_type"):
-                return_type = self._safe_decode(source[child.start_byte:child.end_byte])
+                return_type = self._safe_decode(
+                    source[child.start_byte : child.end_byte]
+                )
 
         if not name:
             return None
@@ -2601,24 +3202,34 @@ class HybridExtractor:
             line_number=node.start_point[0] + 1,
         )
 
-    def _extract_scala_params(self, node, source: bytes) -> list[str]:
+    def _extract_scala_params(self, node: Any, source: bytes) -> list[str]:
         """Extract parameter list from Scala parameters."""
         params = []
         for child in node.children:
             if child.type == "parameter":
                 name_node = child.child_by_field_name("name")
                 if name_node:
-                    params.append(self._safe_decode(source[name_node.start_byte:name_node.end_byte]))
+                    params.append(
+                        self._safe_decode(
+                            source[name_node.start_byte : name_node.end_byte]
+                        )
+                    )
         return params
 
-    def _extract_scala_class(self, node, source: bytes, defined_names: set[str], call_graph: CallGraphInfo) -> ClassInfo | None:
+    def _extract_scala_class(
+        self,
+        node: Any,
+        source: bytes,
+        defined_names: set[str],
+        call_graph: CallGraphInfo,
+    ) -> ClassInfo | None:
         """Extract class info from Scala class_definition or object_definition."""
         name = None
         methods = []
 
         name_node = node.child_by_field_name("name")
         if name_node:
-            name = self._safe_decode(source[name_node.start_byte:name_node.end_byte])
+            name = self._safe_decode(source[name_node.start_byte : name_node.end_byte])
 
         for child in node.children:
             if child.type == "template_body":
@@ -2628,7 +3239,9 @@ class HybridExtractor:
                         if method:
                             methods.append(method)
                             # Extract calls from method body
-                            self._extract_scala_calls(member, method.name, source, call_graph, defined_names)
+                            self._extract_scala_calls(
+                                member, method.name, source, call_graph, defined_names
+                            )
 
         if not name:
             return None
@@ -2641,9 +3254,9 @@ class HybridExtractor:
             line_number=node.start_point[0] + 1,
         )
 
-    def _extract_scala_import(self, node, source: bytes) -> ImportInfo | None:
+    def _extract_scala_import(self, node: Any, source: bytes) -> ImportInfo | None:
         """Extract import info from Scala import_declaration."""
-        text = self._safe_decode(source[node.start_byte:node.end_byte]).strip()
+        text = self._safe_decode(source[node.start_byte : node.end_byte]).strip()
         if text.startswith("import "):
             module = text[7:].strip()
             # Handle selective imports: import foo.{A, B}
@@ -2659,7 +3272,14 @@ class HybridExtractor:
             )
         return None
 
-    def _extract_scala_calls(self, node, caller_name: str, source: bytes, call_graph: CallGraphInfo, defined_names: set[str]):
+    def _extract_scala_calls(
+        self,
+        node: Any,
+        caller_name: str,
+        source: bytes,
+        call_graph: CallGraphInfo,
+        defined_names: set[str],
+    ) -> None:
         """Extract function calls from a Scala function body."""
         for child in node.children:
             if child.type == "call_expression":
@@ -2667,13 +3287,15 @@ class HybridExtractor:
                 if callee and callee in defined_names:
                     call_graph.add_call(caller_name, callee)
             # Recurse into all children
-            self._extract_scala_calls(child, caller_name, source, call_graph, defined_names)
+            self._extract_scala_calls(
+                child, caller_name, source, call_graph, defined_names
+            )
 
-    def _get_scala_call_name(self, node, source: bytes) -> str | None:
+    def _get_scala_call_name(self, node: Any, source: bytes) -> str | None:
         """Get the name of a called function from a call_expression node."""
         for child in node.children:
             if child.type == "identifier":
-                return self._safe_decode(source[child.start_byte:child.end_byte])
+                return self._safe_decode(source[child.start_byte : child.end_byte])
         return None
 
     # === Lua Extraction ===
@@ -2706,7 +3328,7 @@ class HybridExtractor:
             self._ts_parsers["lua"] = parser
         return self._ts_parsers["lua"]
 
-    def _collect_lua_definitions(self, node, source: bytes) -> set[str]:
+    def _collect_lua_definitions(self, node: Any, source: bytes) -> set[str]:
         """Collect all defined function names in Lua."""
         names: set[str] = set()
 
@@ -2716,13 +3338,24 @@ class HybridExtractor:
                 # Find the identifier child (the function name)
                 for grandchild in child.children:
                     if grandchild.type == "identifier":
-                        names.add(self._safe_decode(source[grandchild.start_byte:grandchild.end_byte]))
+                        names.add(
+                            self._safe_decode(
+                                source[grandchild.start_byte : grandchild.end_byte]
+                            )
+                        )
                         break
-                    elif grandchild.type in ("dot_index_expression", "method_index_expression"):
+                    elif grandchild.type in (
+                        "dot_index_expression",
+                        "method_index_expression",
+                    ):
                         # Table.method or Table:method
                         field = grandchild.child_by_field_name("field")
                         if field:
-                            names.add(self._safe_decode(source[field.start_byte:field.end_byte]))
+                            names.add(
+                                self._safe_decode(
+                                    source[field.start_byte : field.end_byte]
+                                )
+                            )
                         break
 
             # Recurse
@@ -2730,7 +3363,13 @@ class HybridExtractor:
 
         return names
 
-    def _extract_lua_nodes(self, node, source: bytes, module_info: ModuleInfo, defined_names: set[str] | None = None):
+    def _extract_lua_nodes(
+        self,
+        node: Any,
+        source: bytes,
+        module_info: ModuleInfo,
+        defined_names: set[str] | None = None,
+    ) -> None:
         """Extract Lua nodes into module info."""
         call_graph = module_info.call_graph or CallGraphInfo()
         module_info.call_graph = call_graph
@@ -2743,7 +3382,9 @@ class HybridExtractor:
                     module_info.functions.append(func_info)
                     # Extract calls from function body
                     if defined_names:
-                        self._extract_lua_calls(child, func_info.name, source, call_graph, defined_names)
+                        self._extract_lua_calls(
+                            child, func_info.name, source, call_graph, defined_names
+                        )
 
             # require statements
             elif child.type == "function_call":
@@ -2755,19 +3396,19 @@ class HybridExtractor:
             else:
                 self._extract_lua_nodes(child, source, module_info, defined_names)
 
-    def _extract_lua_function(self, node, source: bytes) -> FunctionInfo | None:
+    def _extract_lua_function(self, node: Any, source: bytes) -> FunctionInfo | None:
         """Extract function info from function_declaration."""
         # Find the identifier child (the function name)
         name = None
         for child in node.children:
             if child.type == "identifier":
-                name = self._safe_decode(source[child.start_byte:child.end_byte])
+                name = self._safe_decode(source[child.start_byte : child.end_byte])
                 break
             elif child.type in ("dot_index_expression", "method_index_expression"):
                 # Table.method or Table:method
                 field = child.child_by_field_name("field")
                 if field:
-                    name = self._safe_decode(source[field.start_byte:field.end_byte])
+                    name = self._safe_decode(source[field.start_byte : field.end_byte])
                 break
 
         if not name:
@@ -2783,32 +3424,34 @@ class HybridExtractor:
             line_number=node.start_point[0] + 1,
         )
 
-    def _extract_lua_params(self, node, source: bytes) -> list[str]:
+    def _extract_lua_params(self, node: Any, source: bytes) -> list[str]:
         """Extract parameters from a Lua function node."""
         params = []
         for child in node.children:
             if child.type == "parameters":
                 for param in child.children:
                     if param.type == "identifier":
-                        params.append(self._safe_decode(source[param.start_byte:param.end_byte]))
+                        params.append(
+                            self._safe_decode(source[param.start_byte : param.end_byte])
+                        )
                     elif param.type == "spread":
                         params.append("...")
                 break
         return params
 
-    def _extract_lua_require(self, node, source: bytes) -> ImportInfo | None:
+    def _extract_lua_require(self, node: Any, source: bytes) -> ImportInfo | None:
         """Extract require statement from a function_call node."""
         func_name = None
         module = None
 
         for child in node.children:
             if child.type == "identifier":
-                func_name = self._safe_decode(source[child.start_byte:child.end_byte])
+                func_name = self._safe_decode(source[child.start_byte : child.end_byte])
             elif child.type == "arguments":
                 # Get the first string argument
                 for arg in child.children:
                     if arg.type == "string":
-                        text = self._safe_decode(source[arg.start_byte:arg.end_byte])
+                        text = self._safe_decode(source[arg.start_byte : arg.end_byte])
                         # Strip quotes
                         if text.startswith('"') and text.endswith('"'):
                             module = text[1:-1]
@@ -2817,7 +3460,7 @@ class HybridExtractor:
                         break
             elif child.type == "string":
                 # require "module" syntax
-                text = self._safe_decode(source[child.start_byte:child.end_byte])
+                text = self._safe_decode(source[child.start_byte : child.end_byte])
                 if text.startswith('"') and text.endswith('"'):
                     module = text[1:-1]
                 elif text.startswith("'") and text.endswith("'"):
@@ -2830,7 +3473,14 @@ class HybridExtractor:
             )
         return None
 
-    def _extract_lua_calls(self, node, caller_name: str, source: bytes, call_graph: CallGraphInfo, defined_names: set[str]):
+    def _extract_lua_calls(
+        self,
+        node: Any,
+        caller_name: str,
+        source: bytes,
+        call_graph: CallGraphInfo,
+        defined_names: set[str],
+    ) -> None:
         """Extract function calls from a Lua function body."""
         for child in node.children:
             if child.type == "function_call":
@@ -2838,18 +3488,20 @@ class HybridExtractor:
                 if callee and callee in defined_names:
                     call_graph.add_call(caller_name, callee)
             # Recurse into all children
-            self._extract_lua_calls(child, caller_name, source, call_graph, defined_names)
+            self._extract_lua_calls(
+                child, caller_name, source, call_graph, defined_names
+            )
 
-    def _get_lua_call_name(self, node, source: bytes) -> str | None:
+    def _get_lua_call_name(self, node: Any, source: bytes) -> str | None:
         """Get the name of a called function from a function_call node."""
         for child in node.children:
             if child.type == "identifier":
-                return self._safe_decode(source[child.start_byte:child.end_byte])
+                return self._safe_decode(source[child.start_byte : child.end_byte])
             elif child.type in ("dot_index_expression", "method_index_expression"):
                 # Table.method() or Table:method()
                 field = child.child_by_field_name("field")
                 if field:
-                    return self._safe_decode(source[field.start_byte:field.end_byte])
+                    return self._safe_decode(source[field.start_byte : field.end_byte])
         return None
 
     # === Luau Extraction ===
@@ -2882,7 +3534,7 @@ class HybridExtractor:
             self._ts_parsers["luau"] = parser
         return self._ts_parsers["luau"]
 
-    def _collect_luau_definitions(self, node, source: bytes) -> set[str]:
+    def _collect_luau_definitions(self, node: Any, source: bytes) -> set[str]:
         """Collect all defined function names in Luau."""
         names: set[str] = set()
 
@@ -2892,14 +3544,23 @@ class HybridExtractor:
                 # Find the identifier child (the function name)
                 for grandchild in child.children:
                     if grandchild.type == "identifier":
-                        names.add(self._safe_decode(source[grandchild.start_byte:grandchild.end_byte]))
+                        names.add(
+                            self._safe_decode(
+                                source[grandchild.start_byte : grandchild.end_byte]
+                            )
+                        )
                         break
-                    elif grandchild.type in ("dot_index_expression", "method_index_expression"):
+                    elif grandchild.type in (
+                        "dot_index_expression",
+                        "method_index_expression",
+                    ):
                         # Table.method or Table:method - last identifier is the method name
                         for subchild in grandchild.children:
                             if subchild.type == "identifier":
                                 # Keep updating - last one is the method name
-                                name = self._safe_decode(source[subchild.start_byte:subchild.end_byte])
+                                name = self._safe_decode(
+                                    source[subchild.start_byte : subchild.end_byte]
+                                )
                         if name:
                             names.add(name)
                         break
@@ -2909,7 +3570,13 @@ class HybridExtractor:
 
         return names
 
-    def _extract_luau_nodes(self, node, source: bytes, module_info: ModuleInfo, defined_names: set[str] | None = None):
+    def _extract_luau_nodes(
+        self,
+        node: Any,
+        source: bytes,
+        module_info: ModuleInfo,
+        defined_names: set[str] | None = None,
+    ) -> None:
         """Extract Luau nodes into module info."""
         call_graph = module_info.call_graph or CallGraphInfo()
         module_info.call_graph = call_graph
@@ -2922,7 +3589,9 @@ class HybridExtractor:
                     module_info.functions.append(func_info)
                     # Extract calls from function body
                     if defined_names:
-                        self._extract_luau_calls(child, func_info.name, source, call_graph, defined_names)
+                        self._extract_luau_calls(
+                            child, func_info.name, source, call_graph, defined_names
+                        )
 
             # require statements
             elif child.type == "function_call":
@@ -2934,20 +3603,22 @@ class HybridExtractor:
             else:
                 self._extract_luau_nodes(child, source, module_info, defined_names)
 
-    def _extract_luau_function(self, node, source: bytes) -> FunctionInfo | None:
+    def _extract_luau_function(self, node: Any, source: bytes) -> FunctionInfo | None:
         """Extract function info from function_declaration or local_function."""
         # Find the identifier child (the function name)
         name = None
         for child in node.children:
             if child.type == "identifier":
-                name = self._safe_decode(source[child.start_byte:child.end_byte])
+                name = self._safe_decode(source[child.start_byte : child.end_byte])
                 break
             elif child.type in ("dot_index_expression", "method_index_expression"):
                 # Table.method or Table:method - last identifier is the method name
                 for subchild in child.children:
                     if subchild.type == "identifier":
                         # Keep updating - last one is the method name
-                        name = self._safe_decode(source[subchild.start_byte:subchild.end_byte])
+                        name = self._safe_decode(
+                            source[subchild.start_byte : subchild.end_byte]
+                        )
                 break
 
         if not name:
@@ -2963,7 +3634,7 @@ class HybridExtractor:
             line_number=node.start_point[0] + 1,
         )
 
-    def _extract_luau_params(self, node, source: bytes) -> list[str]:
+    def _extract_luau_params(self, node: Any, source: bytes) -> list[str]:
         """Extract parameters from a Luau function node."""
         params = []
         for child in node.children:
@@ -2973,28 +3644,34 @@ class HybridExtractor:
                         # Luau wraps params in 'parameter' node containing identifier
                         for subchild in param.children:
                             if subchild.type == "identifier":
-                                params.append(self._safe_decode(source[subchild.start_byte:subchild.end_byte]))
+                                params.append(
+                                    self._safe_decode(
+                                        source[subchild.start_byte : subchild.end_byte]
+                                    )
+                                )
                                 break
                     elif param.type == "identifier":
-                        params.append(self._safe_decode(source[param.start_byte:param.end_byte]))
+                        params.append(
+                            self._safe_decode(source[param.start_byte : param.end_byte])
+                        )
                     elif param.type == "spread":
                         params.append("...")
                 break
         return params
 
-    def _extract_luau_require(self, node, source: bytes) -> ImportInfo | None:
+    def _extract_luau_require(self, node: Any, source: bytes) -> ImportInfo | None:
         """Extract require statement from a function_call node."""
         func_name = None
         module = None
 
         for child in node.children:
             if child.type == "identifier":
-                func_name = self._safe_decode(source[child.start_byte:child.end_byte])
+                func_name = self._safe_decode(source[child.start_byte : child.end_byte])
             elif child.type == "arguments":
                 # Get the argument - could be string or expression like script.Utils
                 for arg in child.children:
                     if arg.type == "string":
-                        text = self._safe_decode(source[arg.start_byte:arg.end_byte])
+                        text = self._safe_decode(source[arg.start_byte : arg.end_byte])
                         # Strip quotes
                         if text.startswith('"') and text.endswith('"'):
                             module = text[1:-1]
@@ -3003,15 +3680,19 @@ class HybridExtractor:
                         break
                     elif arg.type in ("dot_index_expression", "field_expression"):
                         # script.Utils or game.ReplicatedStorage.Config
-                        module = self._safe_decode(source[arg.start_byte:arg.end_byte])
+                        module = self._safe_decode(
+                            source[arg.start_byte : arg.end_byte]
+                        )
                         break
                     elif arg.type == "identifier":
                         # Simple identifier
-                        module = self._safe_decode(source[arg.start_byte:arg.end_byte])
+                        module = self._safe_decode(
+                            source[arg.start_byte : arg.end_byte]
+                        )
                         break
             elif child.type == "string":
                 # require "module" syntax
-                text = self._safe_decode(source[child.start_byte:child.end_byte])
+                text = self._safe_decode(source[child.start_byte : child.end_byte])
                 if text.startswith('"') and text.endswith('"'):
                     module = text[1:-1]
                 elif text.startswith("'") and text.endswith("'"):
@@ -3024,7 +3705,14 @@ class HybridExtractor:
             )
         return None
 
-    def _extract_luau_calls(self, node, caller_name: str, source: bytes, call_graph: CallGraphInfo, defined_names: set[str]):
+    def _extract_luau_calls(
+        self,
+        node: Any,
+        caller_name: str,
+        source: bytes,
+        call_graph: CallGraphInfo,
+        defined_names: set[str],
+    ) -> None:
         """Extract function calls from a Luau function body."""
         for child in node.children:
             if child.type == "function_call":
@@ -3032,18 +3720,20 @@ class HybridExtractor:
                 if callee and callee in defined_names:
                     call_graph.add_call(caller_name, callee)
             # Recurse into all children
-            self._extract_luau_calls(child, caller_name, source, call_graph, defined_names)
+            self._extract_luau_calls(
+                child, caller_name, source, call_graph, defined_names
+            )
 
-    def _get_luau_call_name(self, node, source: bytes) -> str | None:
+    def _get_luau_call_name(self, node: Any, source: bytes) -> str | None:
         """Get the name of a called function from a function_call node."""
         for child in node.children:
             if child.type == "identifier":
-                return self._safe_decode(source[child.start_byte:child.end_byte])
+                return self._safe_decode(source[child.start_byte : child.end_byte])
             elif child.type in ("dot_index_expression", "method_index_expression"):
                 # Table.method() or Table:method()
                 field = child.child_by_field_name("field")
                 if field:
-                    return self._safe_decode(source[field.start_byte:field.end_byte])
+                    return self._safe_decode(source[field.start_byte : field.end_byte])
         return None
 
     # === Elixir Extraction ===
@@ -3073,14 +3763,18 @@ class HybridExtractor:
             self._ts_parsers["elixir"] = parser
         return self._ts_parsers["elixir"]
 
-    def _extract_elixir_nodes(self, node, source: bytes, module_info: ModuleInfo):
+    def _extract_elixir_nodes(
+        self, node: Any, source: bytes, module_info: ModuleInfo
+    ) -> None:
         """Extract Elixir nodes into module info."""
         for child in node.children:
             if child.type == "call":
                 # Check if this is a def/defp/defmodule call
                 call_name = self._get_elixir_call_identifier(child, source)
                 if call_name in ("def", "defp"):
-                    func_info = self._extract_elixir_function(child, source, call_name == "defp")
+                    func_info = self._extract_elixir_function(
+                        child, source, call_name == "defp"
+                    )
                     if func_info:
                         module_info.functions.append(func_info)
                 elif call_name == "defmodule":
@@ -3094,14 +3788,16 @@ class HybridExtractor:
             # Recurse
             self._extract_elixir_nodes(child, source, module_info)
 
-    def _get_elixir_call_identifier(self, node, source: bytes) -> str | None:
+    def _get_elixir_call_identifier(self, node: Any, source: bytes) -> str | None:
         """Get the identifier from an Elixir call node."""
         for child in node.children:
             if child.type == "identifier":
-                return self._safe_decode(source[child.start_byte:child.end_byte])
+                return self._safe_decode(source[child.start_byte : child.end_byte])
         return None
 
-    def _extract_elixir_function(self, node, source: bytes, is_private: bool) -> FunctionInfo | None:
+    def _extract_elixir_function(
+        self, node: Any, source: bytes, is_private: bool
+    ) -> FunctionInfo | None:
         """Extract an Elixir function definition (def/defp)."""
         # Note: tree-sitter-elixir uses child types, not field names
         args = None
@@ -3120,7 +3816,7 @@ class HybridExtractor:
                 # Function with parameters: def func_name(args)
                 for c in arg_child.children:
                     if c.type == "identifier":
-                        name = self._safe_decode(source[c.start_byte:c.end_byte])
+                        name = self._safe_decode(source[c.start_byte : c.end_byte])
                         break
                 # Extract parameters - use child type iteration for elixir
                 inner_args = None
@@ -3131,10 +3827,16 @@ class HybridExtractor:
                 if inner_args:
                     for param in inner_args.children:
                         if param.type == "identifier":
-                            params.append(self._safe_decode(source[param.start_byte:param.end_byte]))
+                            params.append(
+                                self._safe_decode(
+                                    source[param.start_byte : param.end_byte]
+                                )
+                            )
             elif arg_child.type == "identifier":
                 # Function without parameters: def func_name do
-                name = self._safe_decode(source[arg_child.start_byte:arg_child.end_byte])
+                name = self._safe_decode(
+                    source[arg_child.start_byte : arg_child.end_byte]
+                )
 
         if not name:
             return None
@@ -3151,7 +3853,7 @@ class HybridExtractor:
         """Parse Pygments signature output."""
         if not text or not text.strip():
             return []
-        lines = text.strip().split('\n')
+        lines = text.strip().split("\n")
         return [
             line.strip().lstrip("- ").lstrip("* ")
             for line in lines
@@ -3171,17 +3873,36 @@ class HybridExtractor:
     def _detect_language(self, file_path: Path) -> str:
         """Detect language from file extension."""
         ext_map = {
-            ".py": "python", ".pyx": "python", ".pyi": "python",
-            ".js": "javascript", ".jsx": "javascript", ".mjs": "javascript", ".cjs": "javascript",
-            ".ts": "typescript", ".tsx": "typescript",
-            ".go": "go", ".rs": "rust", ".rb": "ruby",
-            ".java": "java", ".kt": "kotlin", ".kts": "kotlin",
-            ".c": "c", ".h": "c",
-            ".cpp": "cpp", ".hpp": "cpp", ".cc": "cpp", ".cxx": "cpp", ".hh": "cpp",
-            ".cs": "csharp", ".swift": "swift",
-            ".scala": "scala", ".sc": "scala",
-            ".lua": "lua", ".luau": "luau",
-            ".ex": "elixir", ".exs": "elixir",
+            ".py": "python",
+            ".pyx": "python",
+            ".pyi": "python",
+            ".js": "javascript",
+            ".jsx": "javascript",
+            ".mjs": "javascript",
+            ".cjs": "javascript",
+            ".ts": "typescript",
+            ".tsx": "typescript",
+            ".go": "go",
+            ".rs": "rust",
+            ".rb": "ruby",
+            ".java": "java",
+            ".kt": "kotlin",
+            ".kts": "kotlin",
+            ".c": "c",
+            ".h": "c",
+            ".cpp": "cpp",
+            ".hpp": "cpp",
+            ".cc": "cpp",
+            ".cxx": "cpp",
+            ".hh": "cpp",
+            ".cs": "csharp",
+            ".swift": "swift",
+            ".scala": "scala",
+            ".sc": "scala",
+            ".lua": "lua",
+            ".luau": "luau",
+            ".ex": "elixir",
+            ".exs": "elixir",
             ".php": "php",
         }
         return ext_map.get(file_path.suffix.lower(), "unknown")
@@ -3208,12 +3929,26 @@ def extract_directory(
 
     if extensions is None:
         extensions = (
-            HybridExtractor.PYTHON_EXTENSIONS |
-            HybridExtractor.TREE_SITTER_EXTENSIONS |
-            {".go", ".rs", ".rb", ".java", ".kt", ".c", ".cpp", ".h", ".hpp", ".cs", ".swift", ".scala", ".sc"}
+            HybridExtractor.PYTHON_EXTENSIONS
+            | HybridExtractor.TREE_SITTER_EXTENSIONS
+            | {
+                ".go",
+                ".rs",
+                ".rb",
+                ".java",
+                ".kt",
+                ".c",
+                ".cpp",
+                ".h",
+                ".hpp",
+                ".cs",
+                ".swift",
+                ".scala",
+                ".sc",
+            }
         )
 
-    results = {
+    results: dict[str, Any] = {
         "directory": str(directory),
         "files": [],
     }
@@ -3242,7 +3977,9 @@ if __name__ == "__main__":
     import sys
 
     if len(sys.argv) < 2:
-        print("Usage: python hybrid_extractor.py <file_or_directory> [--compact] [--recursive] [--cfg]")
+        print(
+            "Usage: python hybrid_extractor.py <file_or_directory> [--compact] [--recursive] [--cfg]"
+        )
         sys.exit(1)
 
     target = Path(sys.argv[1])
@@ -3259,9 +3996,13 @@ if __name__ == "__main__":
         if show_cfg:
             # Extract CFG for all functions
             from .cfg_extractor import (
-                extract_python_cfg, extract_typescript_cfg,
-                extract_go_cfg, extract_rust_cfg,
-                TREE_SITTER_AVAILABLE, TREE_SITTER_GO_AVAILABLE, TREE_SITTER_RUST_AVAILABLE
+                extract_python_cfg,
+                extract_typescript_cfg,
+                extract_go_cfg,
+                extract_rust_cfg,
+                TREE_SITTER_AVAILABLE,
+                TREE_SITTER_GO_AVAILABLE,
+                TREE_SITTER_RUST_AVAILABLE,
             )
 
             source = target.read_text()
@@ -3272,7 +4013,10 @@ if __name__ == "__main__":
                 try:
                     if suffix == ".py":
                         cfg = extract_python_cfg(source, func.name)
-                    elif suffix in {".ts", ".tsx", ".js", ".jsx"} and TREE_SITTER_AVAILABLE:
+                    elif (
+                        suffix in {".ts", ".tsx", ".js", ".jsx"}
+                        and TREE_SITTER_AVAILABLE
+                    ):
                         cfg = extract_typescript_cfg(source, func.name)
                     elif suffix == ".go" and TREE_SITTER_GO_AVAILABLE:
                         cfg = extract_go_cfg(source, func.name)

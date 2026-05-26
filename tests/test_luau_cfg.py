@@ -17,15 +17,16 @@ import pytest
 # Test 1: Simple Function CFG
 # =============================================================================
 
-def test_luau_cfg_simple_function():
+
+def test_luau_cfg_simple_function() -> None:
     """Simple typed function should produce linear CFG with entry/exit."""
     from code_briefcase.cfg_extractor import extract_luau_cfg
 
-    code = '''
+    code = """
 function add(a: number, b: number): number
     return a + b
 end
-'''
+"""
     cfg = extract_luau_cfg(code, "add")
 
     # Should have entry and exit blocks
@@ -46,15 +47,16 @@ end
 # Test 2: Typed Function Parameters
 # =============================================================================
 
-def test_luau_cfg_typed_parameters():
+
+def test_luau_cfg_typed_parameters() -> None:
     """Type annotations on parameters should be parsed but not affect CFG structure."""
     from code_briefcase.cfg_extractor import extract_luau_cfg
 
-    code = '''
+    code = """
 function greet(name: string, times: number?): string
     return "Hello, " .. name
 end
-'''
+"""
     cfg = extract_luau_cfg(code, "greet")
 
     assert cfg is not None
@@ -68,11 +70,12 @@ end
 # Test 3: If Statement
 # =============================================================================
 
-def test_luau_cfg_if_statement():
+
+def test_luau_cfg_if_statement() -> None:
     """If-else should create branch in CFG."""
     from code_briefcase.cfg_extractor import extract_luau_cfg
 
-    code = '''
+    code = """
 function process(x: number): number
     if x > 0 then
         return x
@@ -80,7 +83,7 @@ function process(x: number): number
         return -x
     end
 end
-'''
+"""
     cfg = extract_luau_cfg(code, "process")
 
     assert cfg is not None
@@ -97,14 +100,15 @@ end
 # Test 4: Continue Statement (Luau-specific)
 # =============================================================================
 
-def test_luau_cfg_continue_statement():
+
+def test_luau_cfg_continue_statement() -> None:
     """Continue statement should create back-edge to loop header.
 
     This is LUAU-SPECIFIC - Lua 5.1 does not have continue.
     """
     from code_briefcase.cfg_extractor import extract_luau_cfg
 
-    code = '''
+    code = """
 function sumOdd(n: number): number
     local total = 0
     for i = 1, n do
@@ -113,7 +117,7 @@ function sumOdd(n: number): number
     end
     return total
 end
-'''
+"""
     cfg = extract_luau_cfg(code, "sumOdd")
 
     assert cfg is not None
@@ -127,18 +131,19 @@ end
 # Test 5: While Loop
 # =============================================================================
 
-def test_luau_cfg_while_loop():
+
+def test_luau_cfg_while_loop() -> None:
     """While loop should create loop structure with back edge."""
     from code_briefcase.cfg_extractor import extract_luau_cfg
 
-    code = '''
+    code = """
 function countdown(n: number): ()
     while n > 0 do
         print(n)
         n -= 1
     end
 end
-'''
+"""
     cfg = extract_luau_cfg(code, "countdown")
 
     assert cfg is not None
@@ -154,17 +159,18 @@ end
 # Test 6: Repeat-Until Loop
 # =============================================================================
 
-def test_luau_cfg_repeat_until():
+
+def test_luau_cfg_repeat_until() -> None:
     """Repeat-until should execute body before checking condition."""
     from code_briefcase.cfg_extractor import extract_luau_cfg
 
-    code = '''
+    code = """
 function waitUntilReady(): ()
     repeat
         wait(0.1)
     until isReady()
 end
-'''
+"""
     cfg = extract_luau_cfg(code, "waitUntilReady")
 
     assert cfg is not None
@@ -177,14 +183,15 @@ end
 # Test 7: Compound Assignment in CFG (Luau-specific)
 # =============================================================================
 
-def test_luau_cfg_compound_assignment():
+
+def test_luau_cfg_compound_assignment() -> None:
     """Compound assignment (+=) should be treated as regular statement in CFG.
 
     This is LUAU-SPECIFIC - Lua 5.1 does not have compound assignment.
     """
     from code_briefcase.cfg_extractor import extract_luau_cfg
 
-    code = '''
+    code = """
 function accumulate(values: {number}): number
     local sum = 0
     for _, v in values do
@@ -192,7 +199,7 @@ function accumulate(values: {number}): number
     end
     return sum
 end
-'''
+"""
     cfg = extract_luau_cfg(code, "accumulate")
 
     assert cfg is not None
@@ -206,17 +213,18 @@ end
 # Test 8: Generic For Loop
 # =============================================================================
 
-def test_luau_cfg_generic_for():
+
+def test_luau_cfg_generic_for() -> None:
     """Generic for-in loop should create loop structure."""
     from code_briefcase.cfg_extractor import extract_luau_cfg
 
-    code = '''
+    code = """
 function printAll(items: {string}): ()
     for i, item in items do
         print(i, item)
     end
 end
-'''
+"""
     cfg = extract_luau_cfg(code, "printAll")
 
     assert cfg is not None
@@ -229,11 +237,12 @@ end
 # Test 9: Method Definition
 # =============================================================================
 
-def test_luau_cfg_method_definition():
+
+def test_luau_cfg_method_definition() -> None:
     """Method with colon syntax should be found and analyzed."""
     from code_briefcase.cfg_extractor import extract_luau_cfg
 
-    code = '''
+    code = """
 local Player = {}
 
 function Player:takeDamage(amount: number): ()
@@ -242,7 +251,7 @@ function Player:takeDamage(amount: number): ()
         self:die()
     end
 end
-'''
+"""
     cfg = extract_luau_cfg(code, "takeDamage")
 
     assert cfg is not None
@@ -255,11 +264,12 @@ end
 # Test 10: Nested Control Flow
 # =============================================================================
 
-def test_luau_cfg_nested_control():
+
+def test_luau_cfg_nested_control() -> None:
     """Nested if statements should accumulate complexity."""
     from code_briefcase.cfg_extractor import extract_luau_cfg
 
-    code = '''
+    code = """
 function classify(x: number): string
     if x > 0 then
         if x > 100 then
@@ -271,7 +281,7 @@ function classify(x: number): string
         return "non-positive"
     end
 end
-'''
+"""
     cfg = extract_luau_cfg(code, "classify")
 
     assert cfg is not None
@@ -284,14 +294,15 @@ end
 # Test: Function Not Found
 # =============================================================================
 
-def test_luau_cfg_function_not_found():
+
+def test_luau_cfg_function_not_found() -> None:
     """Should raise ValueError when function not found."""
     from code_briefcase.cfg_extractor import extract_luau_cfg
 
-    code = '''
+    code = """
 function exists(): ()
 end
-'''
+"""
     with pytest.raises(ValueError, match="not found"):
         extract_luau_cfg(code, "nonexistent")
 
@@ -300,18 +311,19 @@ end
 # Test: Generic Function (Luau-specific)
 # =============================================================================
 
-def test_luau_cfg_generic_function():
+
+def test_luau_cfg_generic_function() -> None:
     """Generic function with type parameter should parse correctly.
 
     This is LUAU-SPECIFIC - Lua does not have generics.
     """
     from code_briefcase.cfg_extractor import extract_luau_cfg
 
-    code = '''
+    code = """
 function identity<T>(value: T): T
     return value
 end
-'''
+"""
     cfg = extract_luau_cfg(code, "identity")
 
     assert cfg is not None

@@ -105,7 +105,9 @@ def render_markdown(payload: dict[str, Any]) -> str:
         f"{_median([float(r.get('injected_bytes_p95') or 0) for r in rollups])}"
     )
     lines.extend(["", "## Top sessions", ""])
-    for item in sorted(rollups, key=lambda r: int(r.get("tldr_errors") or 0), reverse=True)[:5]:
+    for item in sorted(
+        rollups, key=lambda r: int(r.get("tldr_errors") or 0), reverse=True
+    )[:5]:
         lines.append(
             f"- `{item.get('session_id')}` ({item.get('client')}, {item.get('project_hash')}): "
             f"verdict={item.get('verdict')}, hooks={item.get('tldr_hooks')}, errors={item.get('tldr_errors')}"
@@ -217,7 +219,9 @@ def render_html(payload: dict[str, Any], markdown: str) -> str:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Render Code Briefcase outcome report.")
+    parser = argparse.ArgumentParser(
+        description="Render Code Briefcase outcome report."
+    )
     parser.add_argument("--input", required=True)
     parser.add_argument("--markdown-out", required=True)
     parser.add_argument("--html-out", required=True)

@@ -103,7 +103,9 @@ def candidate_file_items(value: Any) -> list[dict[str, Any]]:
     return [item for item in value if isinstance(item, dict)]
 
 
-def normalize_telemetry_path_for_rollup(project: str, project_hash_value: str, value: Any) -> str:
+def normalize_telemetry_path_for_rollup(
+    project: str, project_hash_value: str, value: Any
+) -> str:
     text = str(value or "").strip()
     if not text:
         return ""
@@ -174,7 +176,9 @@ class ParsedTelemetry:
     local_evidence: dict[str, Any] | None = None
 
 
-def parse_telemetry_records(path: Path, start: datetime, end: datetime) -> list[ParsedTelemetry]:
+def parse_telemetry_records(
+    path: Path, start: datetime, end: datetime
+) -> list[ParsedTelemetry]:
     if not path.exists():
         return []
     records: list[ParsedTelemetry] = []
@@ -214,9 +218,11 @@ def parse_telemetry_records(path: Path, start: datetime, end: datetime) -> list[
                 schema_version=safe_optional_int(payload.get("schema_version")),
                 hook_run_id=payload.get("hook_run_id"),
                 context_kind=payload.get("context_kind"),
-                local_evidence=sanitize_local_evidence(payload.get("local_evidence"))
-                if isinstance(payload.get("local_evidence"), dict)
-                else None,
+                local_evidence=(
+                    sanitize_local_evidence(payload.get("local_evidence"))
+                    if isinstance(payload.get("local_evidence"), dict)
+                    else None
+                ),
             )
         )
     return records
@@ -278,7 +284,9 @@ def discover_backfill_sessions(
     return contexts
 
 
-def _rollup_from_session_summary(summary, start: datetime, end: datetime) -> SessionRollup:
+def _rollup_from_session_summary(
+    summary: Any, start: datetime, end: datetime
+) -> SessionRollup:
     rollup = SessionRollup(
         session_id=summary.session_id,
         client=summary.client,
@@ -289,8 +297,12 @@ def _rollup_from_session_summary(summary, start: datetime, end: datetime) -> Ses
         match_confidence="medium",
     )
     repo = summary.cwd
-    hashed_reads = sorted(hash_path_like(repo, path) for path in summary.tools.unique_files_read)
-    hashed_edits = sorted(hash_path_like(repo, path) for path in summary.tools.unique_files_edited)
+    hashed_reads = sorted(
+        hash_path_like(repo, path) for path in summary.tools.unique_files_read
+    )
+    hashed_edits = sorted(
+        hash_path_like(repo, path) for path in summary.tools.unique_files_edited
+    )
     for category, count in summary.tools.by_category.items():
         for _ in range(count):
             rollup.record_tool(
@@ -366,12 +378,22 @@ def enrich_from_raw_jsonl(
                             )
                     if item.get("type") == "tool_use":
                         tool_input = item.get("input") or {}
-                        command = json.dumps(tool_input) if isinstance(tool_input, dict) else str(tool_input)
-                        category = categorize_command(command, str(item.get("name") or ""))
+                        command = (
+                            json.dumps(tool_input)
+                            if isinstance(tool_input, dict)
+                            else str(tool_input)
+                        )
+                        category = categorize_command(
+                            command, str(item.get("name") or "")
+                        )
                         files_read: list[str] = []
                         files_edited: list[str] = []
                         if isinstance(tool_input, dict):
-                            rel = str(tool_input.get("file_path") or tool_input.get("path") or "")
+                            rel = str(
+                                tool_input.get("file_path")
+                                or tool_input.get("path")
+                                or ""
+                            )
                             if rel:
                                 hashed = hash_path_like(context.cwd, rel)
                                 if category == "edit":
@@ -382,7 +404,9 @@ def enrich_from_raw_jsonl(
                             ToolEvent(
                                 timestamp=ts,
                                 category=category,
-                                command_hash=command_hash(normalize_command_for_hash(command, repo_token)),
+                                command_hash=command_hash(
+                                    normalize_command_for_hash(command, repo_token)
+                                ),
                                 files_read=files_read,
                                 files_edited=files_edited,
                             )
@@ -440,19 +464,25 @@ def enrich_from_raw_jsonl(
                 category = categorize_command(command, str(payload.get("name") or ""))
                 files_read = [
                     hash_path_like(context.cwd, match)
-                    for match in re.findall(r"([A-Za-z0-9_./-]+\.[A-Za-z0-9]+)", command)
+                    for match in re.findall(
+                        r"([A-Za-z0-9_./-]+\.[A-Za-z0-9]+)", command
+                    )
                 ]
                 files_edited = []
                 if category == "edit":
                     files_edited = [
                         hash_path_like(context.cwd, match.strip())
-                        for match in re.findall(r"(?:Update|Add) File: ([^\n]+)", command)
+                        for match in re.findall(
+                            r"(?:Update|Add) File: ([^\n]+)", command
+                        )
                     ]
                 if category == "verify":
                     context.rollup.record_verification(
                         VerificationEvent(
                             timestamp=ts,
-                            command_hash=command_hash(normalize_command_for_hash(command, repo_token)),
+                            command_hash=command_hash(
+                                normalize_command_for_hash(command, repo_token)
+                            ),
                             passed="passed" in command.lower(),
                         )
                     )
@@ -460,7 +490,9 @@ def enrich_from_raw_jsonl(
                     ToolEvent(
                         timestamp=ts,
                         category=category,
-                        command_hash=command_hash(normalize_command_for_hash(command, repo_token)),
+                        command_hash=command_hash(
+                            normalize_command_for_hash(command, repo_token)
+                        ),
                         files_read=files_read,
                         files_edited=files_edited,
                     )
@@ -491,7 +523,9 @@ def match_telemetry_to_sessions(
     max_local_evidence_per_session: int = 100,
 ) -> dict[str, list[ParsedTelemetry]]:
     by_id = {session.session_id: session for session in sessions}
-    matched: dict[str, list[ParsedTelemetry]] = {session.session_id: [] for session in sessions}
+    matched: dict[str, list[ParsedTelemetry]] = {
+        session.session_id: [] for session in sessions
+    }
 
     for record in telemetry:
         target: SessionContext | None = None
@@ -503,7 +537,8 @@ def match_telemetry_to_sessions(
             candidates = [
                 session
                 for session in sessions
-                if session.client == record.client and session.project_hash == record.project_hash
+                if session.client == record.client
+                and session.project_hash == record.project_hash
             ]
             in_range = [
                 session
@@ -526,9 +561,15 @@ def match_telemetry_to_sessions(
         matched[target.session_id].append(record)
         target.rollup.match_confidence = "high"
         surfaced = len(record.surfaced_files)
-        candidate_paths = [
-            str(item.get("path")) for item in record.candidate_files if item.get("path")
-        ] or list(record.recommended_files) or list(record.surfaced_files)
+        candidate_paths = (
+            [
+                str(item.get("path"))
+                for item in record.candidate_files
+                if item.get("path")
+            ]
+            or list(record.recommended_files)
+            or list(record.surfaced_files)
+        )
         candidate_files_surfaced = (
             sum(1 for item in record.candidate_files if item.get("surfaced"))
             if record.candidate_files
@@ -568,6 +609,7 @@ def match_telemetry_to_sessions(
                 include_local_evidence=include_local_evidence,
                 max_per_session=max_local_evidence_per_session,
             )
+    return matched
 
 
 def build_backfill_report(
@@ -641,7 +683,9 @@ def build_backfill_report(
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Backfill Code Briefcase outcome rollups.")
+    parser = argparse.ArgumentParser(
+        description="Backfill Code Briefcase outcome rollups."
+    )
     parser.add_argument("--start", required=True)
     parser.add_argument("--end", required=True)
     parser.add_argument("--codex-root", default="~/.codex")

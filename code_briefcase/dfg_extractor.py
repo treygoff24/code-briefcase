@@ -14,6 +14,8 @@ Based on pflux/python-program-analysis architecture:
 
 Uses reaching definitions analysis on CFG to build def-use chains.
 """
+
+from typing import Any
 import ast
 from dataclasses import dataclass
 
@@ -28,6 +30,7 @@ class VarRef:
     - "update": in-place modification (x += ..., x.append())
     - "use": variable read
     """
+
     name: str
     ref_type: str  # "definition", "update", "use"
     line: int
@@ -49,6 +52,7 @@ class DataflowEdge:
 
     Represents that the value defined at def_ref may flow to use_ref.
     """
+
     def_ref: VarRef
     use_ref: VarRef
 
@@ -76,6 +80,7 @@ class DFGInfo:
     - Def-use chains (dataflow edges)
     - Variable grouping for quick lookup
     """
+
     function_name: str
     var_refs: list[VarRef]
     dataflow_edges: list[DataflowEdge]
@@ -103,6 +108,7 @@ class DFGInfo:
 # Python DFG Extraction (using ast module)
 # =============================================================================
 
+
 class PythonDefUseVisitor(ast.NodeVisitor):
     """
     Extract variable definitions and uses from Python AST.
@@ -110,21 +116,21 @@ class PythonDefUseVisitor(ast.NodeVisitor):
     Builds a list of VarRefs for all variable references.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.refs: list[VarRef] = []
         self.scope_stack: list[set[str]] = [set()]  # Track local scope
 
-    def _add_ref(self, name: str, ref_type: str, node: ast.AST):
+    def _add_ref(self, name: str, ref_type: str, node: Any) -> None:
         """Add a variable reference."""
         ref = VarRef(
             name=name,
             ref_type=ref_type,
-            line=node.lineno,
-            column=node.col_offset,
+            line=getattr(node, "lineno", 0),
+            column=getattr(node, "col_offset", 0),
         )
         self.refs.append(ref)
 
-    def visit_FunctionDef(self, node: ast.FunctionDef):
+    def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
         """Handle function definition - parameters are definitions."""
         # Add parameters as definitions
         for arg in node.args.args:
@@ -134,14 +140,14 @@ class PythonDefUseVisitor(ast.NodeVisitor):
         for stmt in node.body:
             self.visit(stmt)
 
-    def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef):
+    def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:
         """Handle async function - same as regular function."""
         for arg in node.args.args:
             self._add_ref(arg.arg, "definition", arg)
         for stmt in node.body:
             self.visit(stmt)
 
-    def visit_Assign(self, node: ast.Assign):
+    def visit_Assign(self, node: ast.Assign) -> None:
         """Handle assignment: target = value."""
         # First visit value side (uses)
         self.visit(node.value)
@@ -150,14 +156,14 @@ class PythonDefUseVisitor(ast.NodeVisitor):
         for target in node.targets:
             self._visit_target(target, "definition")
 
-    def visit_AnnAssign(self, node: ast.AnnAssign):
+    def visit_AnnAssign(self, node: ast.AnnAssign) -> None:
         """Handle annotated assignment: target: type = value."""
         if node.value:
             self.visit(node.value)
         if node.target:
             self._visit_target(node.target, "definition")
 
-    def visit_AugAssign(self, node: ast.AugAssign):
+    def visit_AugAssign(self, node: ast.AugAssign) -> None:
         """Handle augmented assignment: target += value."""
         # Value side
         self.visit(node.value)
@@ -169,7 +175,7 @@ class PythonDefUseVisitor(ast.NodeVisitor):
         else:
             self._visit_target(node.target, "update")
 
-    def _visit_target(self, target: ast.AST, ref_type: str):
+    def _visit_target(self, target: ast.AST, ref_type: str) -> None:
         """Visit an assignment target."""
         if isinstance(target, ast.Name):
             self._add_ref(target.id, ref_type, target)
@@ -180,7 +186,7 @@ class PythonDefUseVisitor(ast.NodeVisitor):
             self._visit_target(target.value, ref_type)
         # Attribute/Subscript targets don't introduce new definitions
 
-    def visit_For(self, node: ast.For):
+    def visit_For(self, node: ast.For) -> None:
         """Handle for loop - target is definition."""
         # Iterator is used
         self.visit(node.iter)
@@ -194,7 +200,7 @@ class PythonDefUseVisitor(ast.NodeVisitor):
         for stmt in node.orelse:
             self.visit(stmt)
 
-    def visit_With(self, node: ast.With):
+    def visit_With(self, node: ast.With) -> None:
         """Handle with statement - optional_vars are definitions."""
         for item in node.items:
             self.visit(item.context_expr)
@@ -204,59 +210,59 @@ class PythonDefUseVisitor(ast.NodeVisitor):
         for stmt in node.body:
             self.visit(stmt)
 
-    def visit_ExceptHandler(self, node: ast.ExceptHandler):
+    def visit_ExceptHandler(self, node: ast.ExceptHandler) -> None:
         """Handle except - name is definition."""
         if node.name:
             self._add_ref(node.name, "definition", node)
         for stmt in node.body:
             self.visit(stmt)
 
-    def visit_Name(self, node: ast.Name):
+    def visit_Name(self, node: ast.Name) -> None:
         """Handle name reference - context determines if it's a use."""
         if isinstance(node.ctx, ast.Load):
             self._add_ref(node.id, "use", node)
         # Store context is handled by parent (Assign, etc.)
 
-    def visit_comprehension(self, node: ast.comprehension):
+    def visit_comprehension(self, node: ast.comprehension) -> None:
         """Handle comprehension - target is definition, iter/ifs are uses."""
         self.visit(node.iter)
         self._visit_target(node.target, "definition")
         for if_clause in node.ifs:
             self.visit(if_clause)
 
-    def visit_ListComp(self, node: ast.ListComp):
+    def visit_ListComp(self, node: ast.ListComp) -> None:
         """Handle list comprehension."""
         for gen in node.generators:
             self.visit_comprehension(gen)
         self.visit(node.elt)
 
-    def visit_SetComp(self, node: ast.SetComp):
+    def visit_SetComp(self, node: ast.SetComp) -> None:
         """Handle set comprehension."""
         for gen in node.generators:
             self.visit_comprehension(gen)
         self.visit(node.elt)
 
-    def visit_DictComp(self, node: ast.DictComp):
+    def visit_DictComp(self, node: ast.DictComp) -> None:
         """Handle dict comprehension."""
         for gen in node.generators:
             self.visit_comprehension(gen)
         self.visit(node.key)
         self.visit(node.value)
 
-    def visit_GeneratorExp(self, node: ast.GeneratorExp):
+    def visit_GeneratorExp(self, node: ast.GeneratorExp) -> None:
         """Handle generator expression."""
         for gen in node.generators:
             self.visit_comprehension(gen)
         self.visit(node.elt)
 
-    def visit_Lambda(self, node: ast.Lambda):
+    def visit_Lambda(self, node: ast.Lambda) -> None:
         """Handle lambda - parameters are definitions."""
         for arg in node.args.args:
             self._add_ref(arg.arg, "definition", arg)
         self.visit(node.body)
 
     # Generic visitor for expressions with children
-    def generic_visit(self, node: ast.AST):
+    def generic_visit(self, node: ast.AST) -> None:
         """Visit all child nodes."""
         for child in ast.iter_child_nodes(node):
             self.visit(child)
@@ -270,7 +276,7 @@ class PythonReachingDefsAnalyzer:
     which definitions reach each use.
     """
 
-    def __init__(self, refs: list[VarRef]):
+    def __init__(self, refs: list[VarRef]) -> None:
         self.refs = refs
         self.defs_by_line: dict[int, list[VarRef]] = {}
         self.uses_by_line: dict[int, list[VarRef]] = {}
@@ -302,7 +308,9 @@ class PythonReachingDefsAnalyzer:
         active_defs: dict[str, list[VarRef]] = {}
 
         # Get all lines in order
-        all_lines = sorted(set(self.defs_by_line.keys()) | set(self.uses_by_line.keys()))
+        all_lines = sorted(
+            set(self.defs_by_line.keys()) | set(self.uses_by_line.keys())
+        )
 
         for line in all_lines:
             # First process uses at this line
@@ -331,7 +339,7 @@ class CFGReachingDefsAnalyzer:
     Definitions from both if/else branches reach uses after merge point.
     """
 
-    def __init__(self, refs: list[VarRef], cfg):
+    def __init__(self, refs: list[VarRef], cfg: Any) -> None:
         self.refs = refs
         self.cfg = cfg
 
@@ -354,7 +362,7 @@ class CFGReachingDefsAnalyzer:
         for edge in cfg.edges:
             self.predecessors[edge.target_id].append(edge.source_id)
 
-    def _get_block_lines(self, block) -> range:
+    def _get_block_lines(self, block: Any) -> range:
         """Get line range covered by a block."""
         return range(block.start_line, block.end_line + 1)
 
@@ -392,11 +400,15 @@ class CFGReachingDefsAnalyzer:
                 if line not in line_to_block:
                     line_to_block[line] = block.id
                 else:
-                    existing = next(b for b in self.cfg.blocks if b.id == line_to_block[line])
+                    existing = next(
+                        b for b in self.cfg.blocks if b.id == line_to_block[line]
+                    )
                     # Skip exit blocks without predecessors for line ownership
                     if block.block_type == "exit" and block.id not in self.predecessors:
                         continue
-                    if block.block_type == "exit" and not self.predecessors.get(block.id):
+                    if block.block_type == "exit" and not self.predecessors.get(
+                        block.id
+                    ):
                         continue
                     # Prefer the block with smaller line range (more specific)
                     existing_range = existing.end_line - existing.start_line
@@ -474,10 +486,9 @@ class CFGReachingDefsAnalyzer:
                     for use_ref in self.uses_by_line[line]:
                         if use_ref.name in block_reaching:
                             for def_ref in block_reaching[use_ref.name]:
-                                edges.append(DataflowEdge(
-                                    def_ref=def_ref,
-                                    use_ref=use_ref
-                                ))
+                                edges.append(
+                                    DataflowEdge(def_ref=def_ref, use_ref=use_ref)
+                                )
 
                 # Process defs - update reaching for subsequent lines
                 if line in self.defs_by_line:
@@ -525,6 +536,7 @@ def extract_python_dfg(code: str, function_name: str) -> DFGInfo:
     visitor.visit(func_node)
 
     # Get CFG for the function and compute CFG-aware def-use chains
+    analyzer: PythonReachingDefsAnalyzer | CFGReachingDefsAnalyzer
     try:
         cfg = extract_python_cfg(code, function_name)
         analyzer = CFGReachingDefsAnalyzer(visitor.refs, cfg)
@@ -592,8 +604,8 @@ def extract_python_dfg_with_cfg(code: str, function_name: str) -> DFGInfo:
         )
 
     # Compute def-use chains using CFG
-    analyzer = CFGReachingDefsAnalyzer(visitor.refs, cfg)
-    edges = analyzer.compute_def_use_chains()
+    cfg_analyzer = CFGReachingDefsAnalyzer(visitor.refs, cfg)
+    edges = cfg_analyzer.compute_def_use_chains()
 
     return DFGInfo(
         function_name=function_name,
@@ -614,18 +626,21 @@ TREE_SITTER_RUST_AVAILABLE = False
 try:
     from tree_sitter import Language, Parser
     import tree_sitter_typescript
+
     TREE_SITTER_AVAILABLE = True
 except ImportError:
     pass
 
 try:
     import tree_sitter_go
+
     TREE_SITTER_GO_AVAILABLE = True
 except ImportError:
     pass
 
 try:
     import tree_sitter_rust
+
     TREE_SITTER_RUST_AVAILABLE = True
 except ImportError:
     pass
@@ -633,6 +648,7 @@ except ImportError:
 TREE_SITTER_JAVA_AVAILABLE = False
 try:
     import tree_sitter_java
+
     TREE_SITTER_JAVA_AVAILABLE = True
 except ImportError:
     pass
@@ -640,6 +656,7 @@ except ImportError:
 TREE_SITTER_C_AVAILABLE = False
 try:
     import tree_sitter_c
+
     TREE_SITTER_C_AVAILABLE = True
 except ImportError:
     pass
@@ -647,6 +664,7 @@ except ImportError:
 TREE_SITTER_RUBY_AVAILABLE = False
 try:
     import tree_sitter_ruby
+
     TREE_SITTER_RUBY_AVAILABLE = True
 except ImportError:
     pass
@@ -654,6 +672,7 @@ except ImportError:
 TREE_SITTER_PHP_AVAILABLE = False
 try:
     import tree_sitter_php
+
     TREE_SITTER_PHP_AVAILABLE = True
 except ImportError:
     pass
@@ -661,6 +680,7 @@ except ImportError:
 TREE_SITTER_CPP_AVAILABLE = False
 try:
     import tree_sitter_cpp
+
     TREE_SITTER_CPP_AVAILABLE = True
 except ImportError:
     pass
@@ -668,6 +688,7 @@ except ImportError:
 TREE_SITTER_SWIFT_AVAILABLE = False
 try:
     import tree_sitter_swift
+
     TREE_SITTER_SWIFT_AVAILABLE = True
 except ImportError:
     pass
@@ -675,6 +696,7 @@ except ImportError:
 TREE_SITTER_CSHARP_AVAILABLE = False
 try:
     import tree_sitter_c_sharp
+
     TREE_SITTER_CSHARP_AVAILABLE = True
 except ImportError:
     pass
@@ -682,6 +704,7 @@ except ImportError:
 TREE_SITTER_KOTLIN_AVAILABLE = False
 try:
     import tree_sitter_kotlin
+
     TREE_SITTER_KOTLIN_AVAILABLE = True
 except ImportError:
     pass
@@ -689,6 +712,7 @@ except ImportError:
 TREE_SITTER_SCALA_AVAILABLE = False
 try:
     import tree_sitter_scala
+
     TREE_SITTER_SCALA_AVAILABLE = True
 except ImportError:
     pass
@@ -696,6 +720,7 @@ except ImportError:
 TREE_SITTER_LUA_AVAILABLE = False
 try:
     import tree_sitter_lua
+
     TREE_SITTER_LUA_AVAILABLE = True
 except ImportError:
     pass
@@ -703,6 +728,7 @@ except ImportError:
 TREE_SITTER_ELIXIR_AVAILABLE = False
 try:
     import tree_sitter_elixir
+
     TREE_SITTER_ELIXIR_AVAILABLE = True
 except ImportError:
     pass
@@ -710,6 +736,7 @@ except ImportError:
 TREE_SITTER_LUAU_AVAILABLE = False
 try:
     import tree_sitter_luau
+
     TREE_SITTER_LUAU_AVAILABLE = True
 except ImportError:
     pass
@@ -770,20 +797,20 @@ class TreeSitterDefUseVisitor:
         "simple_identifier",  # Swift
     }
 
-    def __init__(self, source: bytes, language: str):
+    def __init__(self, source: bytes, language: str) -> None:
         self.source = source
         self.language = language
         self.refs: list[VarRef] = []
 
-    def get_node_text(self, node) -> str:
+    def get_node_text(self, node: Any) -> str:
         """Get source text for a node."""
-        return self.source[node.start_byte:node.end_byte].decode('utf-8')
+        return self.source[node.start_byte : node.end_byte].decode("utf-8")
 
-    def visit(self, node):
+    def visit(self, node: Any) -> None:
         """Visit a node and its children."""
         self._visit_node(node)
 
-    def _visit_node(self, node):
+    def _visit_node(self, node: Any) -> None:
         """Process a node based on its type."""
         node_type = node.type
 
@@ -816,7 +843,7 @@ class TreeSitterDefUseVisitor:
         for child in node.children:
             self._visit_node(child)
 
-    def _is_definition_context(self, parent, node) -> bool:
+    def _is_definition_context(self, parent: Any, node: Any) -> bool:
         """Check if node is being defined (not used)."""
         parent_type = parent.type
 
@@ -850,7 +877,9 @@ class TreeSitterDefUseVisitor:
                 return True
             # Sometimes the left side is not a field, check first child
             if parent.children and len(parent.children) > 0:
-                if parent.children[0] == node or self._node_contains(parent.children[0], node):
+                if parent.children[0] == node or self._node_contains(
+                    parent.children[0], node
+                ):
                     return True
         if parent_type == "operator_assignment":
             # Left side of augmented assignment
@@ -858,12 +887,14 @@ class TreeSitterDefUseVisitor:
             if left and self._node_contains(left, node):
                 return True
             if parent.children and len(parent.children) > 0:
-                if parent.children[0] == node or self._node_contains(parent.children[0], node):
+                if parent.children[0] == node or self._node_contains(
+                    parent.children[0], node
+                ):
                     return True
 
         return False
 
-    def _node_contains(self, parent, target) -> bool:
+    def _node_contains(self, parent: Any, target: Any) -> bool:
         """Check if parent contains target node."""
         if parent == target:
             return True
@@ -875,15 +906,48 @@ class TreeSitterDefUseVisitor:
     def _is_valid_var_name(self, name: str) -> bool:
         """Check if name is a valid variable name (not keyword, etc.)."""
         keywords = {
-            "if", "else", "for", "while", "return", "function", "const", "let", "var",
-            "true", "false", "null", "undefined", "this", "super", "new",
-            "func", "package", "import", "type", "struct", "interface",
-            "fn", "pub", "mod", "use", "impl", "trait", "struct", "enum",
-            "self", "Self", "mut", "ref", "match", "loop", "break", "continue",
+            "if",
+            "else",
+            "for",
+            "while",
+            "return",
+            "function",
+            "const",
+            "let",
+            "var",
+            "true",
+            "false",
+            "null",
+            "undefined",
+            "this",
+            "super",
+            "new",
+            "func",
+            "package",
+            "import",
+            "type",
+            "struct",
+            "interface",
+            "fn",
+            "pub",
+            "mod",
+            "use",
+            "impl",
+            "trait",
+            "struct",
+            "enum",
+            "self",
+            "Self",
+            "mut",
+            "ref",
+            "match",
+            "loop",
+            "break",
+            "continue",
         }
         return name not in keywords and not name.startswith("_")
 
-    def _add_ref(self, name: str, ref_type: str, node):
+    def _add_ref(self, name: str, ref_type: str, node: Any) -> None:
         """Add a variable reference."""
         ref = VarRef(
             name=name,
@@ -893,7 +957,7 @@ class TreeSitterDefUseVisitor:
         )
         self.refs.append(ref)
 
-    def _handle_assignment(self, node):
+    def _handle_assignment(self, node: Any) -> None:
         """Handle assignment nodes."""
         node_type = node.type
 
@@ -910,7 +974,9 @@ class TreeSitterDefUseVisitor:
 
                     # Then add definition
                     if name_node and name_node.type in self.IDENTIFIER_TYPES:
-                        self._add_ref(self.get_node_text(name_node), "definition", name_node)
+                        self._add_ref(
+                            self.get_node_text(name_node), "definition", name_node
+                        )
 
         elif node_type == "assignment_expression":
             # x = y
@@ -1015,7 +1081,7 @@ class TreeSitterDefUseVisitor:
                     self._add_ref(name, "use", left)
                     self._add_ref(name, "update", left)
 
-    def _extract_pattern_names(self, pattern, ref_type: str):
+    def _extract_pattern_names(self, pattern: Any, ref_type: str) -> None:
         """Extract variable names from a pattern (Rust, destructuring)."""
         if pattern.type == "identifier":
             self._add_ref(self.get_node_text(pattern), ref_type, pattern)
@@ -1023,13 +1089,17 @@ class TreeSitterDefUseVisitor:
             for child in pattern.children:
                 self._extract_pattern_names(child, ref_type)
 
-    def _handle_parameters(self, node):
+    def _handle_parameters(self, node: Any) -> None:
         """Handle function parameters as definitions."""
         for child in node.children:
             if child.type == "identifier":
                 self._add_ref(self.get_node_text(child), "definition", child)
-            elif child.type in ("required_parameter", "optional_parameter",
-                               "parameter_declaration", "parameter"):
+            elif child.type in (
+                "required_parameter",
+                "optional_parameter",
+                "parameter_declaration",
+                "parameter",
+            ):
                 # Look for identifier inside
                 for inner in child.children:
                     if inner.type == "identifier":
@@ -1039,7 +1109,7 @@ class TreeSitterDefUseVisitor:
                 # Recurse for nested structures
                 self._handle_parameters(child)
 
-    def _handle_for_loop(self, node):
+    def _handle_for_loop(self, node: Any) -> None:
         """Handle for loop - iterator variable is definition."""
         # TypeScript/JavaScript: for (let i = 0; ...) or for (x of arr)
         # Go: for i, v := range arr
@@ -1081,7 +1151,7 @@ def extract_typescript_dfg(code: str, function_name: str) -> DFGInfo:
     # Parse with tree-sitter
     ts_lang = Language(tree_sitter_typescript.language_typescript())
     parser = Parser(ts_lang)
-    source_bytes = code.encode('utf-8')
+    source_bytes = code.encode("utf-8")
     tree = parser.parse(source_bytes)
 
     # Find the function
@@ -1129,7 +1199,7 @@ def extract_go_dfg(code: str, function_name: str) -> DFGInfo:
     # Parse with tree-sitter
     go_lang = Language(tree_sitter_go.language())
     parser = Parser(go_lang)
-    source_bytes = code.encode('utf-8')
+    source_bytes = code.encode("utf-8")
     tree = parser.parse(source_bytes)
 
     # Find the function
@@ -1177,7 +1247,7 @@ def extract_rust_dfg(code: str, function_name: str) -> DFGInfo:
     # Parse with tree-sitter
     rust_lang = Language(tree_sitter_rust.language())
     parser = Parser(rust_lang)
-    source_bytes = code.encode('utf-8')
+    source_bytes = code.encode("utf-8")
     tree = parser.parse(source_bytes)
 
     # Find the function
@@ -1225,7 +1295,7 @@ def extract_java_dfg(code: str, function_name: str) -> DFGInfo:
     # Parse with tree-sitter
     java_lang = Language(tree_sitter_java.language())
     parser = Parser(java_lang)
-    source_bytes = code.encode('utf-8')
+    source_bytes = code.encode("utf-8")
     tree = parser.parse(source_bytes)
 
     # Find the method
@@ -1273,7 +1343,7 @@ def extract_c_dfg(code: str, function_name: str) -> DFGInfo:
     # Parse with tree-sitter
     c_lang = Language(tree_sitter_c.language())
     parser = Parser(c_lang)
-    source_bytes = code.encode('utf-8')
+    source_bytes = code.encode("utf-8")
     tree = parser.parse(source_bytes)
 
     # Find the function using C-specific logic
@@ -1300,9 +1370,10 @@ def extract_c_dfg(code: str, function_name: str) -> DFGInfo:
     )
 
 
-def _find_c_function_by_name(root, name: str, source: bytes):
+def _find_c_function_by_name(root: Any, name: str, source: bytes) -> Any:
     """Find a C function node by name in tree-sitter tree."""
-    def search(node):
+
+    def search(node: Any) -> Any:
         if node.type == "function_definition":
             declarator = node.child_by_field_name("declarator")
             # Handle pointer_declarator wrapping function_declarator
@@ -1314,7 +1385,9 @@ def _find_c_function_by_name(root, name: str, source: bytes):
             if declarator and declarator.type == "function_declarator":
                 inner_decl = declarator.child_by_field_name("declarator")
                 if inner_decl and inner_decl.type == "identifier":
-                    func_name = source[inner_decl.start_byte:inner_decl.end_byte].decode('utf-8')
+                    func_name = source[
+                        inner_decl.start_byte : inner_decl.end_byte
+                    ].decode("utf-8")
                     if func_name == name:
                         return node
 
@@ -1348,7 +1421,7 @@ def extract_cpp_dfg(code: str, function_name: str) -> DFGInfo:
     # Parse with tree-sitter
     cpp_lang = Language(tree_sitter_cpp.language())
     parser = Parser(cpp_lang)
-    source_bytes = code.encode('utf-8')
+    source_bytes = code.encode("utf-8")
     tree = parser.parse(source_bytes)
 
     # Find the function using C++-specific logic (same as C)
@@ -1375,12 +1448,13 @@ def extract_cpp_dfg(code: str, function_name: str) -> DFGInfo:
     )
 
 
-def _find_cpp_function_by_name(root, name: str, source: bytes):
+def _find_cpp_function_by_name(root: Any, name: str, source: bytes) -> Any:
     """Find a C++ function node by name in tree-sitter tree.
 
     Handles both standalone functions (identifier) and class methods (field_identifier).
     """
-    def search(node):
+
+    def search(node: Any) -> Any:
         if node.type == "function_definition":
             declarator = node.child_by_field_name("declarator")
             # Handle pointer_declarator wrapping function_declarator
@@ -1393,7 +1467,9 @@ def _find_cpp_function_by_name(root, name: str, source: bytes):
                 inner_decl = declarator.child_by_field_name("declarator")
                 # Check both identifier (standalone functions) and field_identifier (class methods)
                 if inner_decl and inner_decl.type in ("identifier", "field_identifier"):
-                    func_name = source[inner_decl.start_byte:inner_decl.end_byte].decode('utf-8')
+                    func_name = source[
+                        inner_decl.start_byte : inner_decl.end_byte
+                    ].decode("utf-8")
                     if func_name == name:
                         return node
 
@@ -1427,7 +1503,7 @@ def extract_ruby_dfg(code: str, function_name: str) -> DFGInfo:
     # Parse with tree-sitter
     ruby_lang = Language(tree_sitter_ruby.language())
     parser = Parser(ruby_lang)
-    source_bytes = code.encode('utf-8')
+    source_bytes = code.encode("utf-8")
     tree = parser.parse(source_bytes)
 
     # Find the function
@@ -1454,14 +1530,17 @@ def extract_ruby_dfg(code: str, function_name: str) -> DFGInfo:
     )
 
 
-def _find_ruby_function_by_name(root, name: str, source: bytes):
+def _find_ruby_function_by_name(root: Any, name: str, source: bytes) -> Any:
     """Find a Ruby method node by name in tree-sitter tree."""
-    def search(node):
+
+    def search(node: Any) -> Any:
         if node.type == "method":
             # Get the method name from the name field
             name_node = node.child_by_field_name("name")
             if name_node:
-                func_name = source[name_node.start_byte:name_node.end_byte].decode('utf-8')
+                func_name = source[name_node.start_byte : name_node.end_byte].decode(
+                    "utf-8"
+                )
                 if func_name == name:
                     return node
 
@@ -1474,7 +1553,7 @@ def _find_ruby_function_by_name(root, name: str, source: bytes):
     return search(root)
 
 
-def _find_function_by_name(root, name: str, source: bytes):
+def _find_function_by_name(root: Any, name: str, source: bytes) -> Any:
     """Find a function node by name in tree-sitter tree."""
     FUNCTION_TYPES = {
         "function_declaration",
@@ -1486,12 +1565,14 @@ def _find_function_by_name(root, name: str, source: bytes):
         "method",  # Ruby: def method_name ... end
     }
 
-    def search(node):
+    def search(node: Any) -> Any:
         if node.type in FUNCTION_TYPES:
             # Try to find the function name
             name_node = node.child_by_field_name("name")
             if name_node:
-                func_name = source[name_node.start_byte:name_node.end_byte].decode('utf-8')
+                func_name = source[name_node.start_byte : name_node.end_byte].decode(
+                    "utf-8"
+                )
                 if func_name == name:
                     return node
 
@@ -1525,7 +1606,7 @@ def extract_php_dfg(code: str, function_name: str) -> DFGInfo:
     # Parse with tree-sitter
     php_lang = Language(tree_sitter_php.language_php())
     parser = Parser(php_lang)
-    source_bytes = code.encode('utf-8')
+    source_bytes = code.encode("utf-8")
     tree = parser.parse(source_bytes)
 
     # Find the function
@@ -1552,14 +1633,17 @@ def extract_php_dfg(code: str, function_name: str) -> DFGInfo:
     )
 
 
-def _find_php_function_by_name(root, name: str, source: bytes):
+def _find_php_function_by_name(root: Any, name: str, source: bytes) -> Any:
     """Find a PHP function node by name in tree-sitter tree."""
-    def search(node):
+
+    def search(node: Any) -> Any:
         # PHP function_definition has name child
         if node.type == "function_definition":
             name_node = node.child_by_field_name("name")
             if name_node:
-                func_name = source[name_node.start_byte:name_node.end_byte].decode('utf-8')
+                func_name = source[name_node.start_byte : name_node.end_byte].decode(
+                    "utf-8"
+                )
                 if func_name == name:
                     return node
 
@@ -1567,7 +1651,9 @@ def _find_php_function_by_name(root, name: str, source: bytes):
         if node.type == "method_declaration":
             name_node = node.child_by_field_name("name")
             if name_node:
-                func_name = source[name_node.start_byte:name_node.end_byte].decode('utf-8')
+                func_name = source[name_node.start_byte : name_node.end_byte].decode(
+                    "utf-8"
+                )
                 if func_name == name:
                     return node
 
@@ -1587,19 +1673,19 @@ class PHPDefUseVisitor:
     PHP variables start with $, e.g., $x, $total, $result.
     """
 
-    def __init__(self, source: bytes):
+    def __init__(self, source: bytes) -> None:
         self.source = source
         self.refs: list[VarRef] = []
 
-    def get_node_text(self, node) -> str:
+    def get_node_text(self, node: Any) -> str:
         """Get source text for a node."""
-        return self.source[node.start_byte:node.end_byte].decode('utf-8')
+        return self.source[node.start_byte : node.end_byte].decode("utf-8")
 
-    def visit(self, node):
+    def visit(self, node: Any) -> None:
         """Visit a node and its children."""
         self._visit_node(node)
 
-    def _visit_node(self, node):
+    def _visit_node(self, node: Any) -> None:
         """Process a node based on its type."""
         node_type = node.type
 
@@ -1630,7 +1716,7 @@ class PHPDefUseVisitor:
             if parent and not self._is_definition_context(parent, node):
                 name = self.get_node_text(node)
                 # Strip $ prefix if present for consistency
-                if name.startswith('$'):
+                if name.startswith("$"):
                     name = name[1:]
                 self._add_ref(name, "use", node)
             return
@@ -1639,7 +1725,7 @@ class PHPDefUseVisitor:
         for child in node.children:
             self._visit_node(child)
 
-    def _is_definition_context(self, parent, node) -> bool:
+    def _is_definition_context(self, parent: Any, node: Any) -> bool:
         """Check if node is being defined (not used)."""
         parent_type = parent.type
 
@@ -1655,7 +1741,7 @@ class PHPDefUseVisitor:
 
         return False
 
-    def _add_ref(self, name: str, ref_type: str, node):
+    def _add_ref(self, name: str, ref_type: str, node: Any) -> None:
         """Add a variable reference."""
         ref = VarRef(
             name=name,
@@ -1665,7 +1751,7 @@ class PHPDefUseVisitor:
         )
         self.refs.append(ref)
 
-    def _handle_assignment(self, node):
+    def _handle_assignment(self, node: Any) -> None:
         """Handle PHP assignment: $x = ..."""
         left = node.child_by_field_name("left")
         right = node.child_by_field_name("right")
@@ -1677,11 +1763,11 @@ class PHPDefUseVisitor:
         # Add definition for left side
         if left and left.type == "variable_name":
             name = self.get_node_text(left)
-            if name.startswith('$'):
+            if name.startswith("$"):
                 name = name[1:]
             self._add_ref(name, "definition", left)
 
-    def _handle_augmented_assignment(self, node):
+    def _handle_augmented_assignment(self, node: Any) -> None:
         """Handle PHP augmented assignment: $x += ..."""
         left = node.child_by_field_name("left")
         right = node.child_by_field_name("right")
@@ -1693,12 +1779,12 @@ class PHPDefUseVisitor:
         # Left is both used and updated
         if left and left.type == "variable_name":
             name = self.get_node_text(left)
-            if name.startswith('$'):
+            if name.startswith("$"):
                 name = name[1:]
             self._add_ref(name, "use", left)
             self._add_ref(name, "update", left)
 
-    def _handle_parameters(self, node):
+    def _handle_parameters(self, node: Any) -> None:
         """Handle PHP function parameters."""
         if node.type == "formal_parameters":
             for child in node.children:
@@ -1709,12 +1795,12 @@ class PHPDefUseVisitor:
             for child in node.children:
                 if child.type == "variable_name":
                     name = self.get_node_text(child)
-                    if name.startswith('$'):
+                    if name.startswith("$"):
                         name = name[1:]
                     self._add_ref(name, "definition", child)
                     break
 
-    def _handle_foreach(self, node):
+    def _handle_foreach(self, node: Any) -> None:
         """Handle PHP foreach loop: foreach ($items as $key => $value)."""
         # The 'as' clause defines variables
         for child in node.children:
@@ -1726,13 +1812,13 @@ class PHPDefUseVisitor:
                         for pair_child in fc_child.children:
                             if pair_child.type == "variable_name":
                                 name = self.get_node_text(pair_child)
-                                if name.startswith('$'):
+                                if name.startswith("$"):
                                     name = name[1:]
                                 self._add_ref(name, "definition", pair_child)
                     elif fc_child.type == "variable_name":
                         # Simple $value pattern
                         name = self.get_node_text(fc_child)
-                        if name.startswith('$'):
+                        if name.startswith("$"):
                             name = name[1:]
                         self._add_ref(name, "definition", fc_child)
 
@@ -1763,11 +1849,13 @@ def extract_swift_dfg(code: str, function_name: str) -> DFGInfo:
     # Parse with tree-sitter
     swift_lang = Language(tree_sitter_swift.language())
     parser = Parser(swift_lang)
-    source_bytes = code.encode('utf-8')
+    source_bytes = code.encode("utf-8")
     tree = parser.parse(source_bytes)
 
     # Find the function
-    func_node = _find_swift_function_by_name(tree.root_node, function_name, source_bytes)
+    func_node = _find_swift_function_by_name(
+        tree.root_node, function_name, source_bytes
+    )
     if func_node is None:
         return DFGInfo(
             function_name=function_name,
@@ -1790,14 +1878,17 @@ def extract_swift_dfg(code: str, function_name: str) -> DFGInfo:
     )
 
 
-def _find_swift_function_by_name(root, name: str, source: bytes):
+def _find_swift_function_by_name(root: Any, name: str, source: bytes) -> Any:
     """Find a Swift function node by name in tree-sitter tree."""
-    def search(node):
+
+    def search(node: Any) -> Any:
         if node.type == "function_declaration":
             # Get the function name from the name field
             name_node = node.child_by_field_name("name")
             if name_node:
-                func_name = source[name_node.start_byte:name_node.end_byte].decode('utf-8')
+                func_name = source[name_node.start_byte : name_node.end_byte].decode(
+                    "utf-8"
+                )
                 if func_name == name:
                     return node
 
@@ -1817,19 +1908,19 @@ class SwiftDefUseVisitor:
     Swift variables are declared with let (immutable) or var (mutable).
     """
 
-    def __init__(self, source: bytes):
+    def __init__(self, source: bytes) -> None:
         self.source = source
         self.refs: list[VarRef] = []
 
-    def get_node_text(self, node) -> str:
+    def get_node_text(self, node: Any) -> str:
         """Get source text for a node."""
-        return self.source[node.start_byte:node.end_byte].decode('utf-8')
+        return self.source[node.start_byte : node.end_byte].decode("utf-8")
 
-    def visit(self, node):
+    def visit(self, node: Any) -> None:
         """Visit a node and its children."""
         self._visit_node(node)
 
-    def _visit_node(self, node):
+    def _visit_node(self, node: Any) -> None:
         """Process a node based on its type."""
         node_type = node.type
 
@@ -1861,7 +1952,7 @@ class SwiftDefUseVisitor:
         for child in node.children:
             self._visit_node(child)
 
-    def _is_definition_context(self, parent, node) -> bool:
+    def _is_definition_context(self, parent: Any, node: Any) -> bool:
         """Check if node is being defined (not used)."""
         parent_type = parent.type
 
@@ -1882,7 +1973,7 @@ class SwiftDefUseVisitor:
 
         return False
 
-    def _add_ref(self, name: str, ref_type: str, node):
+    def _add_ref(self, name: str, ref_type: str, node: Any) -> None:
         """Add a variable reference."""
         ref = VarRef(
             name=name,
@@ -1892,7 +1983,7 @@ class SwiftDefUseVisitor:
         )
         self.refs.append(ref)
 
-    def _handle_property_declaration(self, node):
+    def _handle_property_declaration(self, node: Any) -> None:
         """Handle Swift property declaration: let x = ... or var x = ..."""
         # Find pattern child which contains the identifier
         for child in node.children:
@@ -1911,10 +2002,14 @@ class SwiftDefUseVisitor:
                                 name = self.get_node_text(pattern_child)
                                 self._add_ref(name, "definition", pattern_child)
             # Visit value side for uses
-            if child.type not in ("pattern", "value_binding_pattern", "type_annotation"):
+            if child.type not in (
+                "pattern",
+                "value_binding_pattern",
+                "type_annotation",
+            ):
                 self._visit_node(child)
 
-    def _handle_assignment(self, node):
+    def _handle_assignment(self, node: Any) -> None:
         """Handle Swift assignment: x = ..."""
         children = node.children
         if len(children) >= 3:
@@ -1931,7 +2026,7 @@ class SwiftDefUseVisitor:
                 name = self.get_node_text(left)
                 self._add_ref(name, "definition", left)
 
-    def _handle_parameter(self, node):
+    def _handle_parameter(self, node: Any) -> None:
         """Handle Swift function parameter."""
         # Find simple_identifier child for parameter name
         for child in node.children:
@@ -1962,11 +2057,13 @@ def extract_csharp_dfg(code: str, function_name: str) -> DFGInfo:
     # Parse with tree-sitter
     csharp_lang = Language(tree_sitter_c_sharp.language())
     parser = Parser(csharp_lang)
-    source_bytes = code.encode('utf-8')
+    source_bytes = code.encode("utf-8")
     tree = parser.parse(source_bytes)
 
     # Find the method
-    func_node = _find_csharp_function_by_name(tree.root_node, function_name, source_bytes)
+    func_node = _find_csharp_function_by_name(
+        tree.root_node, function_name, source_bytes
+    )
     if func_node is None:
         return DFGInfo(
             function_name=function_name,
@@ -1989,14 +2086,17 @@ def extract_csharp_dfg(code: str, function_name: str) -> DFGInfo:
     )
 
 
-def _find_csharp_function_by_name(root, name: str, source: bytes):
+def _find_csharp_function_by_name(root: Any, name: str, source: bytes) -> Any:
     """Find a C# method node by name in tree-sitter tree."""
-    def search(node):
+
+    def search(node: Any) -> Any:
         if node.type == "method_declaration":
             # Get the method name from the name field
             name_node = node.child_by_field_name("name")
             if name_node:
-                func_name = source[name_node.start_byte:name_node.end_byte].decode('utf-8')
+                func_name = source[name_node.start_byte : name_node.end_byte].decode(
+                    "utf-8"
+                )
                 if func_name == name:
                     return node
 
@@ -2016,19 +2116,19 @@ class CSharpDefUseVisitor:
     C# variables are declared with var or explicit types.
     """
 
-    def __init__(self, source: bytes):
+    def __init__(self, source: bytes) -> None:
         self.source = source
         self.refs: list[VarRef] = []
 
-    def get_node_text(self, node) -> str:
+    def get_node_text(self, node: Any) -> str:
         """Get source text for a node."""
-        return self.source[node.start_byte:node.end_byte].decode('utf-8')
+        return self.source[node.start_byte : node.end_byte].decode("utf-8")
 
-    def visit(self, node):
+    def visit(self, node: Any) -> None:
         """Visit a node and its children."""
         self._visit_node(node)
 
-    def _add_ref(self, name: str, ref_type: str, node):
+    def _add_ref(self, name: str, ref_type: str, node: Any) -> None:
         """Add a variable reference."""
         ref = VarRef(
             name=name,
@@ -2038,7 +2138,7 @@ class CSharpDefUseVisitor:
         )
         self.refs.append(ref)
 
-    def _visit_node(self, node):
+    def _visit_node(self, node: Any) -> None:
         """Process a node based on its type."""
         node_type = node.type
 
@@ -2070,7 +2170,7 @@ class CSharpDefUseVisitor:
         for child in node.children:
             self._visit_node(child)
 
-    def _is_definition_context(self, parent, node) -> bool:
+    def _is_definition_context(self, parent: Any, node: Any) -> bool:
         """Check if node is being defined (not used)."""
         parent_type = parent.type
 
@@ -2092,15 +2192,46 @@ class CSharpDefUseVisitor:
     def _is_valid_var_name(self, name: str) -> bool:
         """Check if name is a valid variable name (not keyword, etc.)."""
         keywords = {
-            "if", "else", "for", "foreach", "while", "return", "switch", "case",
-            "true", "false", "null", "this", "base", "new", "class", "struct",
-            "void", "int", "string", "bool", "var", "const", "static", "public",
-            "private", "protected", "internal", "try", "catch", "finally",
-            "throw", "break", "continue", "default", "using", "namespace",
+            "if",
+            "else",
+            "for",
+            "foreach",
+            "while",
+            "return",
+            "switch",
+            "case",
+            "true",
+            "false",
+            "null",
+            "this",
+            "base",
+            "new",
+            "class",
+            "struct",
+            "void",
+            "int",
+            "string",
+            "bool",
+            "var",
+            "const",
+            "static",
+            "public",
+            "private",
+            "protected",
+            "internal",
+            "try",
+            "catch",
+            "finally",
+            "throw",
+            "break",
+            "continue",
+            "default",
+            "using",
+            "namespace",
         }
         return name not in keywords and not name.startswith("_")
 
-    def _handle_local_declaration(self, node):
+    def _handle_local_declaration(self, node: Any) -> None:
         """Handle C# local variable declaration: int x = 5; or var x = 5;"""
         for child in node.children:
             if child.type == "variable_declaration":
@@ -2110,13 +2241,15 @@ class CSharpDefUseVisitor:
                         name_node = decl_child.child_by_field_name("name")
                         if name_node:
                             # This is a definition
-                            self._add_ref(self.get_node_text(name_node), "definition", name_node)
+                            self._add_ref(
+                                self.get_node_text(name_node), "definition", name_node
+                            )
                         # Get the initializer and visit for uses
                         init = decl_child.child_by_field_name("initializer")
                         if init:
                             self._visit_node(init)
 
-    def _handle_assignment(self, node):
+    def _handle_assignment(self, node: Any) -> None:
         """Handle C# assignment: x = ..."""
         left = node.child_by_field_name("left")
         right = node.child_by_field_name("right")
@@ -2130,7 +2263,7 @@ class CSharpDefUseVisitor:
             name = self.get_node_text(left)
             self._add_ref(name, "definition", left)
 
-    def _handle_parameter(self, node):
+    def _handle_parameter(self, node: Any) -> None:
         """Handle C# method parameter."""
         # Find the parameter name
         name_node = node.child_by_field_name("name")
@@ -2160,11 +2293,13 @@ def extract_kotlin_dfg(code: str, function_name: str) -> DFGInfo:
     # Parse with tree-sitter
     kotlin_lang = Language(tree_sitter_kotlin.language())
     parser = Parser(kotlin_lang)
-    source_bytes = code.encode('utf-8')
+    source_bytes = code.encode("utf-8")
     tree = parser.parse(source_bytes)
 
     # Find the function
-    func_node = _find_kotlin_function_by_name(tree.root_node, function_name, source_bytes)
+    func_node = _find_kotlin_function_by_name(
+        tree.root_node, function_name, source_bytes
+    )
     if func_node is None:
         return DFGInfo(
             function_name=function_name,
@@ -2187,14 +2322,17 @@ def extract_kotlin_dfg(code: str, function_name: str) -> DFGInfo:
     )
 
 
-def _find_kotlin_function_by_name(root, name: str, source: bytes):
+def _find_kotlin_function_by_name(root: Any, name: str, source: bytes) -> Any:
     """Find a Kotlin function node by name in tree-sitter tree."""
-    def search(node):
+
+    def search(node: Any) -> Any:
         if node.type == "function_declaration":
             # Get the function name from the identifier child
             for child in node.children:
                 if child.type == "identifier":
-                    func_name = source[child.start_byte:child.end_byte].decode('utf-8')
+                    func_name = source[child.start_byte : child.end_byte].decode(
+                        "utf-8"
+                    )
                     if func_name == name:
                         return node
                     break
@@ -2215,19 +2353,19 @@ class KotlinDefUseVisitor:
     Kotlin variables are declared with val or var.
     """
 
-    def __init__(self, source: bytes):
+    def __init__(self, source: bytes) -> None:
         self.source = source
         self.refs: list[VarRef] = []
 
-    def get_node_text(self, node) -> str:
+    def get_node_text(self, node: Any) -> str:
         """Get source text for a node."""
-        return self.source[node.start_byte:node.end_byte].decode('utf-8')
+        return self.source[node.start_byte : node.end_byte].decode("utf-8")
 
-    def visit(self, node):
+    def visit(self, node: Any) -> None:
         """Visit a node and its children."""
         self._visit_node(node)
 
-    def _add_ref(self, name: str, ref_type: str, node):
+    def _add_ref(self, name: str, ref_type: str, node: Any) -> None:
         """Add a variable reference."""
         ref = VarRef(
             name=name,
@@ -2237,7 +2375,7 @@ class KotlinDefUseVisitor:
         )
         self.refs.append(ref)
 
-    def _visit_node(self, node):
+    def _visit_node(self, node: Any) -> None:
         """Process a node based on its type."""
         node_type = node.type
 
@@ -2269,7 +2407,7 @@ class KotlinDefUseVisitor:
         for child in node.children:
             self._visit_node(child)
 
-    def _is_definition_context(self, parent, node) -> bool:
+    def _is_definition_context(self, parent: Any, node: Any) -> bool:
         """Check if node is being defined (not used)."""
         parent_type = parent.type
 
@@ -2278,21 +2416,21 @@ class KotlinDefUseVisitor:
             # First identifier child is the target
             for child in parent.children:
                 if child.type == "identifier":
-                    return child == node
+                    return bool(child == node)
                 break
 
         # Property declaration name (inside variable_declaration)
         if parent_type == "variable_declaration":
             for child in parent.children:
                 if child.type == "identifier":
-                    return child == node
+                    return bool(child == node)
                 break
 
         # Parameter name
         if parent_type == "parameter":
             for child in parent.children:
                 if child.type == "identifier":
-                    return child == node
+                    return bool(child == node)
                 break
 
         # user_type (type annotation) is not a variable use
@@ -2304,15 +2442,47 @@ class KotlinDefUseVisitor:
     def _is_valid_var_name(self, name: str) -> bool:
         """Check if name is a valid variable name (not keyword, etc.)."""
         keywords = {
-            "if", "else", "for", "while", "return", "when", "is", "in", "as",
-            "true", "false", "null", "this", "super", "class", "object", "fun",
-            "val", "var", "const", "public", "private", "protected", "internal",
-            "try", "catch", "finally", "throw", "break", "continue", "package",
-            "import", "interface", "abstract", "override", "open", "sealed",
+            "if",
+            "else",
+            "for",
+            "while",
+            "return",
+            "when",
+            "is",
+            "in",
+            "as",
+            "true",
+            "false",
+            "null",
+            "this",
+            "super",
+            "class",
+            "object",
+            "fun",
+            "val",
+            "var",
+            "const",
+            "public",
+            "private",
+            "protected",
+            "internal",
+            "try",
+            "catch",
+            "finally",
+            "throw",
+            "break",
+            "continue",
+            "package",
+            "import",
+            "interface",
+            "abstract",
+            "override",
+            "open",
+            "sealed",
         }
         return name not in keywords and not name.startswith("_")
 
-    def _handle_property_declaration(self, node):
+    def _handle_property_declaration(self, node: Any) -> None:
         """Handle Kotlin property declaration: val x = ... or var x = ..."""
         # Find variable_declaration child which contains the name
         for child in node.children:
@@ -2320,14 +2490,21 @@ class KotlinDefUseVisitor:
                 # Get the variable name from identifier
                 for decl_child in child.children:
                     if decl_child.type == "identifier":
-                        self._add_ref(self.get_node_text(decl_child), "definition", decl_child)
+                        self._add_ref(
+                            self.get_node_text(decl_child), "definition", decl_child
+                        )
                         break
             # Visit the expression for uses (identifier is the initializer value)
-            elif child.type in ("call_expression", "identifier", "binary_expression",
-                               "string_literal", "integer_literal"):
+            elif child.type in (
+                "call_expression",
+                "identifier",
+                "binary_expression",
+                "string_literal",
+                "integer_literal",
+            ):
                 self._visit_node(child)
 
-    def _handle_assignment(self, node):
+    def _handle_assignment(self, node: Any) -> None:
         """Handle Kotlin assignment: x = ..."""
         children = list(node.children)
         if len(children) >= 3:
@@ -2345,7 +2522,7 @@ class KotlinDefUseVisitor:
                 name = self.get_node_text(left)
                 self._add_ref(name, "definition", left)
 
-    def _handle_parameter(self, node):
+    def _handle_parameter(self, node: Any) -> None:
         """Handle Kotlin function parameter."""
         # Find the parameter name (identifier)
         for child in node.children:
@@ -2376,11 +2553,13 @@ def extract_scala_dfg(code: str, function_name: str) -> DFGInfo:
     # Parse with tree-sitter
     scala_lang = Language(tree_sitter_scala.language())
     parser = Parser(scala_lang)
-    source_bytes = code.encode('utf-8')
+    source_bytes = code.encode("utf-8")
     tree = parser.parse(source_bytes)
 
     # Find the function
-    func_node = _find_scala_function_by_name(tree.root_node, function_name, source_bytes)
+    func_node = _find_scala_function_by_name(
+        tree.root_node, function_name, source_bytes
+    )
     if func_node is None:
         return DFGInfo(
             function_name=function_name,
@@ -2403,14 +2582,17 @@ def extract_scala_dfg(code: str, function_name: str) -> DFGInfo:
     )
 
 
-def _find_scala_function_by_name(root, name: str, source: bytes):
+def _find_scala_function_by_name(root: Any, name: str, source: bytes) -> Any:
     """Find a Scala function node by name in tree-sitter tree."""
-    def search(node):
+
+    def search(node: Any) -> Any:
         if node.type == "function_definition":
             # Get the function name from the name field
             name_node = node.child_by_field_name("name")
             if name_node:
-                func_name = source[name_node.start_byte:name_node.end_byte].decode('utf-8')
+                func_name = source[name_node.start_byte : name_node.end_byte].decode(
+                    "utf-8"
+                )
                 if func_name == name:
                     return node
 
@@ -2430,19 +2612,19 @@ class ScalaDefUseVisitor:
     Scala variables are declared with val (immutable) or var (mutable).
     """
 
-    def __init__(self, source: bytes):
+    def __init__(self, source: bytes) -> None:
         self.source = source
         self.refs: list[VarRef] = []
 
-    def get_node_text(self, node) -> str:
+    def get_node_text(self, node: Any) -> str:
         """Get source text for a node."""
-        return self.source[node.start_byte:node.end_byte].decode('utf-8')
+        return self.source[node.start_byte : node.end_byte].decode("utf-8")
 
-    def visit(self, node):
+    def visit(self, node: Any) -> None:
         """Visit a node and its children."""
         self._visit_node(node)
 
-    def _add_ref(self, name: str, ref_type: str, node):
+    def _add_ref(self, name: str, ref_type: str, node: Any) -> None:
         """Add a variable reference."""
         ref = VarRef(
             name=name,
@@ -2452,7 +2634,7 @@ class ScalaDefUseVisitor:
         )
         self.refs.append(ref)
 
-    def _visit_node(self, node):
+    def _visit_node(self, node: Any) -> None:
         """Process a node based on its type."""
         node_type = node.type
 
@@ -2493,7 +2675,7 @@ class ScalaDefUseVisitor:
         for child in node.children:
             self._visit_node(child)
 
-    def _is_definition_context(self, parent, node) -> bool:
+    def _is_definition_context(self, parent: Any, node: Any) -> bool:
         """Check if node is being defined (not used)."""
         parent_type = parent.type
 
@@ -2519,7 +2701,7 @@ class ScalaDefUseVisitor:
 
         return False
 
-    def _node_contains(self, parent, target) -> bool:
+    def _node_contains(self, parent: Any, target: Any) -> bool:
         """Check if parent contains target node."""
         if parent == target:
             return True
@@ -2531,16 +2713,53 @@ class ScalaDefUseVisitor:
     def _is_valid_var_name(self, name: str) -> bool:
         """Check if name is a valid variable name (not keyword, etc.)."""
         keywords = {
-            "if", "else", "for", "while", "return", "match", "case",
-            "true", "false", "null", "this", "super", "class", "object", "def",
-            "val", "var", "new", "override", "abstract", "sealed", "final",
-            "try", "catch", "finally", "throw", "import", "package", "extends",
-            "with", "trait", "type", "lazy", "yield", "implicit", "private",
-            "protected", "public", "Int", "String", "Boolean", "Unit", "Any",
+            "if",
+            "else",
+            "for",
+            "while",
+            "return",
+            "match",
+            "case",
+            "true",
+            "false",
+            "null",
+            "this",
+            "super",
+            "class",
+            "object",
+            "def",
+            "val",
+            "var",
+            "new",
+            "override",
+            "abstract",
+            "sealed",
+            "final",
+            "try",
+            "catch",
+            "finally",
+            "throw",
+            "import",
+            "package",
+            "extends",
+            "with",
+            "trait",
+            "type",
+            "lazy",
+            "yield",
+            "implicit",
+            "private",
+            "protected",
+            "public",
+            "Int",
+            "String",
+            "Boolean",
+            "Unit",
+            "Any",
         }
         return name not in keywords and not name.startswith("_")
 
-    def _handle_val_definition(self, node):
+    def _handle_val_definition(self, node: Any) -> None:
         """Handle Scala val definition: val x = ..."""
         # Find pattern child which contains the identifier
         pattern = node.child_by_field_name("pattern")
@@ -2554,7 +2773,7 @@ class ScalaDefUseVisitor:
         if pattern:
             self._extract_pattern_names(pattern, "definition")
 
-    def _handle_var_definition(self, node):
+    def _handle_var_definition(self, node: Any) -> None:
         """Handle Scala var definition: var x = ..."""
         # Same structure as val
         pattern = node.child_by_field_name("pattern")
@@ -2568,7 +2787,7 @@ class ScalaDefUseVisitor:
         if pattern:
             self._extract_pattern_names(pattern, "definition")
 
-    def _extract_pattern_names(self, pattern, ref_type: str):
+    def _extract_pattern_names(self, pattern: Any, ref_type: str) -> None:
         """Extract variable names from a pattern."""
         if pattern.type == "identifier":
             name = self.get_node_text(pattern)
@@ -2578,7 +2797,7 @@ class ScalaDefUseVisitor:
             for child in pattern.children:
                 self._extract_pattern_names(child, ref_type)
 
-    def _handle_assignment(self, node):
+    def _handle_assignment(self, node: Any) -> None:
         """Handle Scala assignment: x = ..."""
         left = node.child_by_field_name("left")
         right = node.child_by_field_name("right")
@@ -2592,7 +2811,7 @@ class ScalaDefUseVisitor:
             name = self.get_node_text(left)
             self._add_ref(name, "definition", left)
 
-    def _handle_compound_assignment(self, node):
+    def _handle_compound_assignment(self, node: Any) -> None:
         """Handle Scala compound assignment: x += ..."""
         left = node.child_by_field_name("left")
         right = node.child_by_field_name("right")
@@ -2607,7 +2826,7 @@ class ScalaDefUseVisitor:
             self._add_ref(name, "use", left)
             self._add_ref(name, "definition", left)
 
-    def _handle_parameter(self, node):
+    def _handle_parameter(self, node: Any) -> None:
         """Handle Scala function parameter."""
         # Find the parameter name (identifier)
         name_node = node.child_by_field_name("name")
@@ -2619,6 +2838,7 @@ class ScalaDefUseVisitor:
 # =============================================================================
 # Lua DFG Extraction
 # =============================================================================
+
 
 def extract_lua_dfg(code: str, function_name: str) -> DFGInfo:
     """
@@ -2641,7 +2861,7 @@ def extract_lua_dfg(code: str, function_name: str) -> DFGInfo:
     # Parse with tree-sitter
     lua_lang = Language(tree_sitter_lua.language())
     parser = Parser(lua_lang)
-    source_bytes = code.encode('utf-8')
+    source_bytes = code.encode("utf-8")
     tree = parser.parse(source_bytes)
 
     # Find the function
@@ -2668,20 +2888,23 @@ def extract_lua_dfg(code: str, function_name: str) -> DFGInfo:
     )
 
 
-def _find_lua_function_by_name(root, name: str, source: bytes):
+def _find_lua_function_by_name(root: Any, name: str, source: bytes) -> Any:
     """Find a Lua function node by name in tree-sitter tree.
 
     Handles both:
     - function name() ... end (function_declaration)
     - local function name() ... end (function_declaration with local)
     """
-    def search(node):
+
+    def search(node: Any) -> Any:
         # Check function_declaration: function name() end or local function name() end
         if node.type == "function_declaration":
             # Find the identifier child (the function name)
             for child in node.children:
                 if child.type == "identifier":
-                    func_name = source[child.start_byte:child.end_byte].decode('utf-8')
+                    func_name = source[child.start_byte : child.end_byte].decode(
+                        "utf-8"
+                    )
                     if func_name == name:
                         return node
                     break
@@ -2689,7 +2912,9 @@ def _find_lua_function_by_name(root, name: str, source: bytes):
                     # Table.method - get the field name
                     field = child.child_by_field_name("field")
                     if field:
-                        func_name = source[field.start_byte:field.end_byte].decode('utf-8')
+                        func_name = source[field.start_byte : field.end_byte].decode(
+                            "utf-8"
+                        )
                         if func_name == name:
                             return node
                     break
@@ -2714,19 +2939,19 @@ class LuaDefUseVisitor:
     - for loop variables
     """
 
-    def __init__(self, source: bytes):
+    def __init__(self, source: bytes) -> None:
         self.source = source
         self.refs: list[VarRef] = []
 
-    def get_node_text(self, node) -> str:
+    def get_node_text(self, node: Any) -> str:
         """Get source text for a node."""
-        return self.source[node.start_byte:node.end_byte].decode('utf-8')
+        return self.source[node.start_byte : node.end_byte].decode("utf-8")
 
-    def visit(self, node):
+    def visit(self, node: Any) -> None:
         """Visit a node and its children."""
         self._visit_node(node)
 
-    def _add_ref(self, name: str, ref_type: str, node):
+    def _add_ref(self, name: str, ref_type: str, node: Any) -> None:
         """Add a variable reference."""
         ref = VarRef(
             name=name,
@@ -2736,7 +2961,7 @@ class LuaDefUseVisitor:
         )
         self.refs.append(ref)
 
-    def _visit_node(self, node):
+    def _visit_node(self, node: Any) -> None:
         """Process a node based on its type."""
         node_type = node.type
 
@@ -2773,7 +2998,7 @@ class LuaDefUseVisitor:
         for child in node.children:
             self._visit_node(child)
 
-    def _is_definition_context(self, parent, node) -> bool:
+    def _is_definition_context(self, parent: Any, node: Any) -> bool:
         """Check if node is being defined (not used)."""
         parent_type = parent.type
 
@@ -2811,14 +3036,32 @@ class LuaDefUseVisitor:
     def _is_valid_var_name(self, name: str) -> bool:
         """Check if name is a valid variable name (not keyword, etc.)."""
         keywords = {
-            "if", "then", "else", "elseif", "end", "for", "while", "do",
-            "repeat", "until", "break", "return", "local", "function",
-            "true", "false", "nil", "and", "or", "not", "in",
+            "if",
+            "then",
+            "else",
+            "elseif",
+            "end",
+            "for",
+            "while",
+            "do",
+            "repeat",
+            "until",
+            "break",
+            "return",
+            "local",
+            "function",
+            "true",
+            "false",
+            "nil",
+            "and",
+            "or",
+            "not",
+            "in",
             "self",  # convention for method receiver
         }
         return name not in keywords and not name.startswith("_")
 
-    def _handle_local_declaration(self, node):
+    def _handle_local_declaration(self, node: Any) -> None:
         """Handle Lua local variable declaration: local x = ... or local x, y = ..."""
         # variable_declaration contains an assignment_statement
         for child in node.children:
@@ -2840,7 +3083,7 @@ class LuaDefUseVisitor:
             name = self.get_node_text(name_node)
             self._add_ref(name, "definition", name_node)
 
-    def _handle_assignment(self, node):
+    def _handle_assignment(self, node: Any) -> None:
         """Handle Lua assignment: x = y or x, y = a, b"""
         # Find targets (left of =) and values (right of =)
         targets = []
@@ -2870,14 +3113,14 @@ class LuaDefUseVisitor:
             name = self.get_node_text(target_node)
             self._add_ref(name, "definition", target_node)
 
-    def _handle_parameters(self, node):
+    def _handle_parameters(self, node: Any) -> None:
         """Handle Lua function parameters."""
         for child in node.children:
             if child.type == "identifier":
                 name = self.get_node_text(child)
                 self._add_ref(name, "definition", child)
 
-    def _handle_for_loop(self, node):
+    def _handle_for_loop(self, node: Any) -> None:
         """Handle Lua for loops (numeric and generic)."""
         # Find the loop clause (for_numeric_clause or for_generic_clause)
         clause = None
@@ -2913,145 +3156,9 @@ class LuaDefUseVisitor:
 
 
 # =============================================================================
-# Luau DFG Extraction
-# =============================================================================
-
-
-def extract_luau_dfg(code: str, function_name: str) -> DFGInfo:
-    """
-    Extract DFG for a Luau function.
-
-    Luau is syntactically similar to Lua with type annotations,
-    continue statement, and compound assignments (+=, -=, etc.)
-
-    Args:
-        code: Luau source code
-        function_name: Name of function to analyze
-
-    Returns:
-        DFGInfo with variable references and def-use chains
-    """
-    if not TREE_SITTER_LUAU_AVAILABLE:
-        return DFGInfo(
-            function_name=function_name,
-            var_refs=[],
-            dataflow_edges=[],
-        )
-
-    # Parse with tree-sitter
-    luau_lang = Language(tree_sitter_luau.language())
-    parser = Parser(luau_lang)
-    source_bytes = code.encode('utf-8')
-    tree = parser.parse(source_bytes)
-
-    # Find the function
-    func_node = _find_luau_function_by_name(tree.root_node, function_name, source_bytes)
-    if func_node is None:
-        return DFGInfo(
-            function_name=function_name,
-            var_refs=[],
-            dataflow_edges=[],
-        )
-
-    # Extract definitions and uses - reuse LuaDefUseVisitor with Luau extensions
-    visitor = LuauDefUseVisitor(source_bytes)
-    visitor.visit(func_node)
-
-    # Compute def-use chains
-    analyzer = PythonReachingDefsAnalyzer(visitor.refs)
-    edges = analyzer.compute_def_use_chains()
-
-    return DFGInfo(
-        function_name=function_name,
-        var_refs=visitor.refs,
-        dataflow_edges=edges,
-    )
-
-
-def _find_luau_function_by_name(root, name: str, source: bytes):
-    """Find a Luau function node by name in tree-sitter tree.
-
-    Handles both:
-    - function name() ... end (function_declaration)
-    - local function name() ... end (function_declaration with local)
-    """
-    def search(node):
-        # Check function_declaration: function name() end or local function name() end
-        if node.type == "function_declaration":
-            # Find the identifier child (the function name)
-            for child in node.children:
-                if child.type == "identifier":
-                    func_name = source[child.start_byte:child.end_byte].decode('utf-8')
-                    if func_name == name:
-                        return node
-                    break
-                elif child.type in ("dot_index_expression", "method_index_expression"):
-                    # Table.method - get the last identifier
-                    for subchild in child.children:
-                        if subchild.type == "identifier":
-                            last_id = source[subchild.start_byte:subchild.end_byte].decode('utf-8')
-                    if last_id == name:
-                        return node
-                    break
-
-        for child in node.children:
-            result = search(child)
-            if result:
-                return result
-        return None
-
-    return search(root)
-
-
-class LuauDefUseVisitor(LuaDefUseVisitor):
-    """
-    Extract variable definitions and uses from Luau tree-sitter parse tree.
-
-    Extends LuaDefUseVisitor to handle Luau-specific features:
-    - Type annotations (ignored for DFG purposes)
-    - Compound assignment operators (+=, -=, etc.) - both USE and DEF
-    - Continue statement (control flow, not DFG relevant)
-    """
-
-    def _handle_assignment(self, node):
-        """Handle assignment statement, including compound assignment."""
-        # Check for compound assignment: x += 1 (node type is compound_assignment_statement in Luau)
-        if node.type == "compound_assignment_statement":
-            # Find the target (left side) - this is both USE and DEF
-            for child in node.children:
-                if child.type == "identifier":
-                    name = self.get_node_text(child)
-                    self._add_ref(name, "use", child)  # First use the current value
-                    self._add_ref(name, "definition", child)  # Then define new value
-                    break
-                elif child.type in ("dot_index_expression", "bracket_index_expression"):
-                    # Table field compound assignment
-                    self._visit_table_access(child)
-                    break
-
-            # Visit the right side (expression)
-            for child in node.children:
-                if child.type not in ("identifier", "+=", "-=", "*=", "/=", "%=", "..=", "^="):
-                    if child.type != "dot_index_expression" and child.type != "bracket_index_expression":
-                        self._visit_node(child)
-            return
-
-        # Standard assignment - delegate to parent
-        super()._handle_assignment(node)
-
-    def _visit_node(self, node):
-        """Visit a node and extract variable references."""
-        if node.type == "compound_assignment_statement":
-            self._handle_assignment(node)
-            return
-
-        # Call parent implementation for standard nodes
-        super()._visit_node(node)
-
-
-# =============================================================================
 # Elixir DFG Extraction
 # =============================================================================
+
 
 class ElixirDefUseVisitor:
     """
@@ -3063,19 +3170,19 @@ class ElixirDefUseVisitor:
     - def func(x, y) (parameters)
     """
 
-    def __init__(self, source: bytes):
+    def __init__(self, source: bytes) -> None:
         self.source = source
         self.refs: list[VarRef] = []
 
-    def get_node_text(self, node) -> str:
+    def get_node_text(self, node: Any) -> str:
         """Get source text for a node."""
-        return self.source[node.start_byte:node.end_byte].decode('utf-8')
+        return self.source[node.start_byte : node.end_byte].decode("utf-8")
 
-    def visit(self, node):
+    def visit(self, node: Any) -> None:
         """Visit a node and its children."""
         self._visit_node(node)
 
-    def _add_ref(self, name: str, ref_type: str, node):
+    def _add_ref(self, name: str, ref_type: str, node: Any) -> None:
         """Add a variable reference."""
         ref = VarRef(
             name=name,
@@ -3085,7 +3192,7 @@ class ElixirDefUseVisitor:
         )
         self.refs.append(ref)
 
-    def _visit_node(self, node):
+    def _visit_node(self, node: Any) -> None:
         """Process a node based on its type."""
         node_type = node.type
 
@@ -3112,7 +3219,7 @@ class ElixirDefUseVisitor:
         for child in node.children:
             self._visit_node(child)
 
-    def _is_definition_context(self, parent, node) -> bool:
+    def _is_definition_context(self, parent: Any, node: Any) -> bool:
         """Check if node is being defined (not used)."""
         parent_type = parent.type
 
@@ -3150,7 +3257,7 @@ class ElixirDefUseVisitor:
 
         return False
 
-    def _node_contains(self, parent, target) -> bool:
+    def _node_contains(self, parent: Any, target: Any) -> bool:
         """Check if parent contains target node."""
         if parent == target:
             return True
@@ -3165,15 +3272,43 @@ class ElixirDefUseVisitor:
         if not name or name[0].isupper():
             return False
         keywords = {
-            "def", "defp", "defmodule", "do", "end", "if", "else", "unless",
-            "case", "cond", "with", "fn", "when", "true", "false", "nil",
-            "and", "or", "not", "in", "import", "alias", "use", "require",
-            "for", "raise", "try", "catch", "rescue", "after", "receive",
-            "quote", "unquote",
+            "def",
+            "defp",
+            "defmodule",
+            "do",
+            "end",
+            "if",
+            "else",
+            "unless",
+            "case",
+            "cond",
+            "with",
+            "fn",
+            "when",
+            "true",
+            "false",
+            "nil",
+            "and",
+            "or",
+            "not",
+            "in",
+            "import",
+            "alias",
+            "use",
+            "require",
+            "for",
+            "raise",
+            "try",
+            "catch",
+            "rescue",
+            "after",
+            "receive",
+            "quote",
+            "unquote",
         }
         return name not in keywords
 
-    def _handle_binary_operator(self, node):
+    def _handle_binary_operator(self, node: Any) -> None:
         """Handle Elixir binary operators, particularly match (=)."""
         # Find the operator
         operator = None
@@ -3208,7 +3343,7 @@ class ElixirDefUseVisitor:
             if right:
                 self._visit_node(right)
 
-    def _extract_pattern_definitions(self, pattern):
+    def _extract_pattern_definitions(self, pattern: Any) -> None:
         """Extract variable definitions from a pattern."""
         if pattern.type == "identifier":
             name = self.get_node_text(pattern)
@@ -3224,7 +3359,7 @@ class ElixirDefUseVisitor:
                 if child.is_named:
                     self._extract_pattern_definitions(child)
 
-    def _handle_call(self, node):
+    def _handle_call(self, node: Any) -> None:
         """Handle Elixir calls, including function definitions."""
         call_name = None
         for child in node.children:
@@ -3255,20 +3390,23 @@ class ElixirDefUseVisitor:
                     self._visit_node(child)
 
 
-def _find_elixir_function_by_name(root, name: str, source: bytes):
+def _find_elixir_function_by_name(root: Any, name: str, source: bytes) -> Any:
     """Find an Elixir function node by name in tree-sitter tree.
 
     Elixir functions are defined with def/defp macros:
     - def function_name(args) do ... end
     - defp private_function(args) do ... end
     """
-    def search(node):
+
+    def search(node: Any) -> Any:
         if node.type == "call":
             # Check if this is a def/defp call
             call_name = None
             for child in node.children:
                 if child.type == "identifier":
-                    call_name = source[child.start_byte:child.end_byte].decode('utf-8')
+                    call_name = source[child.start_byte : child.end_byte].decode(
+                        "utf-8"
+                    )
                     break
 
             if call_name in ("def", "defp"):
@@ -3285,12 +3423,16 @@ def _find_elixir_function_by_name(root, name: str, source: bytes):
                             # Function with params: def func_name(args)
                             for c in arg_child.children:
                                 if c.type == "identifier":
-                                    func_name = source[c.start_byte:c.end_byte].decode('utf-8')
+                                    func_name = source[
+                                        c.start_byte : c.end_byte
+                                    ].decode("utf-8")
                                     if func_name == name:
                                         return node
                         elif arg_child.type == "identifier":
                             # Function without params: def func_name do
-                            func_name = source[arg_child.start_byte:arg_child.end_byte].decode('utf-8')
+                            func_name = source[
+                                arg_child.start_byte : arg_child.end_byte
+                            ].decode("utf-8")
                             if func_name == name:
                                 return node
 
@@ -3324,11 +3466,13 @@ def extract_elixir_dfg(code: str, function_name: str) -> DFGInfo:
     # Parse with tree-sitter
     elixir_lang = Language(tree_sitter_elixir.language())
     parser = Parser(elixir_lang)
-    source_bytes = code.encode('utf-8')
+    source_bytes = code.encode("utf-8")
     tree = parser.parse(source_bytes)
 
     # Find the function
-    func_node = _find_elixir_function_by_name(tree.root_node, function_name, source_bytes)
+    func_node = _find_elixir_function_by_name(
+        tree.root_node, function_name, source_bytes
+    )
     if func_node is None:
         return DFGInfo(
             function_name=function_name,
@@ -3379,6 +3523,7 @@ def extract_elixir_dfg(code: str, function_name: str) -> DFGInfo:
 # Luau DFG Extraction
 # =============================================================================
 
+
 class LuauDefUseVisitor:  # noqa: F811
     """
     Extract variable definitions and uses from Luau tree-sitter parse tree.
@@ -3389,19 +3534,19 @@ class LuauDefUseVisitor:  # noqa: F811
     - continue statement
     """
 
-    def __init__(self, source: bytes):
+    def __init__(self, source: bytes) -> None:
         self.source = source
         self.refs: list[VarRef] = []
 
-    def get_node_text(self, node) -> str:
+    def get_node_text(self, node: Any) -> str:
         """Get source text for a node."""
-        return self.source[node.start_byte:node.end_byte].decode('utf-8')
+        return self.source[node.start_byte : node.end_byte].decode("utf-8")
 
-    def visit(self, node):
+    def visit(self, node: Any) -> None:
         """Visit a node and its children."""
         self._visit_node(node)
 
-    def _add_ref(self, name: str, ref_type: str, node):
+    def _add_ref(self, name: str, ref_type: str, node: Any) -> None:
         """Add a variable reference."""
         ref = VarRef(
             name=name,
@@ -3411,7 +3556,7 @@ class LuauDefUseVisitor:  # noqa: F811
         )
         self.refs.append(ref)
 
-    def _visit_node(self, node):
+    def _visit_node(self, node: Any) -> None:
         """Process a node based on its type."""
         node_type = node.type
 
@@ -3453,7 +3598,7 @@ class LuauDefUseVisitor:  # noqa: F811
         for child in node.children:
             self._visit_node(child)
 
-    def _is_definition_context(self, parent, node) -> bool:
+    def _is_definition_context(self, parent: Any, node: Any) -> bool:
         """Check if node is being defined (not used)."""
         parent_type = parent.type
 
@@ -3472,7 +3617,15 @@ class LuauDefUseVisitor:  # noqa: F811
                 if child.type == "identifier" and child == node:
                     # Check if this is before the operator
                     for j in range(i + 1, len(parent.children)):
-                        if parent.children[j].type in ("+=", "-=", "*=", "/=", "%=", "^=", "..="):
+                        if parent.children[j].type in (
+                            "+=",
+                            "-=",
+                            "*=",
+                            "/=",
+                            "%=",
+                            "^=",
+                            "..=",
+                        ):
                             return True
             return False
 
@@ -3501,14 +3654,33 @@ class LuauDefUseVisitor:  # noqa: F811
     def _is_valid_var_name(self, name: str) -> bool:
         """Check if name is a valid variable name (not keyword, etc.)."""
         keywords = {
-            "if", "then", "else", "elseif", "end", "for", "while", "do",
-            "repeat", "until", "break", "return", "local", "function",
-            "true", "false", "nil", "and", "or", "not", "in",
-            "self", "continue",  # Luau adds continue
+            "if",
+            "then",
+            "else",
+            "elseif",
+            "end",
+            "for",
+            "while",
+            "do",
+            "repeat",
+            "until",
+            "break",
+            "return",
+            "local",
+            "function",
+            "true",
+            "false",
+            "nil",
+            "and",
+            "or",
+            "not",
+            "in",
+            "self",
+            "continue",  # Luau adds continue
         }
         return name not in keywords and not name.startswith("_")
 
-    def _handle_local_declaration(self, node):
+    def _handle_local_declaration(self, node: Any) -> None:
         """Handle Luau local variable declaration."""
         for child in node.children:
             if child.type == "assignment_statement":
@@ -3527,7 +3699,7 @@ class LuauDefUseVisitor:  # noqa: F811
             name = self.get_node_text(name_node)
             self._add_ref(name, "definition", name_node)
 
-    def _handle_assignment(self, node):
+    def _handle_assignment(self, node: Any) -> None:
         """Handle Luau assignment: x = y or x, y = a, b"""
         targets = []
         values_node = None
@@ -3556,7 +3728,7 @@ class LuauDefUseVisitor:  # noqa: F811
             name = self.get_node_text(target_node)
             self._add_ref(name, "definition", target_node)
 
-    def _handle_update_statement(self, node):
+    def _handle_update_statement(self, node: Any) -> None:
         """Handle Luau compound assignment: x += y, x -= y, etc.
 
         Compound assignment is x = x op y, so:
@@ -3586,7 +3758,7 @@ class LuauDefUseVisitor:  # noqa: F811
             # Then DEF (write new value)
             self._add_ref(name, "definition", target_node)
 
-    def _handle_parameters(self, node):
+    def _handle_parameters(self, node: Any) -> None:
         """Handle Luau function parameters (may have type annotations)."""
         for child in node.children:
             if child.type == "identifier":
@@ -3601,7 +3773,7 @@ class LuauDefUseVisitor:  # noqa: F811
                         self._add_ref(name, "definition", param_child)
                         break
 
-    def _handle_for_loop(self, node):
+    def _handle_for_loop(self, node: Any) -> None:
         """Handle Luau for loops (numeric and generic)."""
         clause = None
         body = None
@@ -3663,20 +3835,25 @@ class LuauDefUseVisitor:  # noqa: F811
             self._visit_node(body)
 
 
-def _find_luau_function_by_name(root, name: str, source: bytes):
+def _find_luau_function_by_name(root: Any, name: str, source: bytes) -> Any:
     """Find a Luau function node by name in tree-sitter tree."""
-    def search(node):
+
+    def search(node: Any) -> Any:
         if node.type == "function_declaration":
             for child in node.children:
                 if child.type == "identifier":
-                    func_name = source[child.start_byte:child.end_byte].decode('utf-8')
+                    func_name = source[child.start_byte : child.end_byte].decode(
+                        "utf-8"
+                    )
                     if func_name == name:
                         return node
                     break
                 elif child.type in ("dot_index_expression", "method_index_expression"):
                     field = child.child_by_field_name("field")
                     if field:
-                        func_name = source[field.start_byte:field.end_byte].decode('utf-8')
+                        func_name = source[field.start_byte : field.end_byte].decode(
+                            "utf-8"
+                        )
                         if func_name == name:
                             return node
                     break
@@ -3711,7 +3888,7 @@ def extract_luau_dfg(code: str, function_name: str) -> DFGInfo:  # noqa: F811
     # Parse with tree-sitter
     luau_lang = Language(tree_sitter_luau.language())
     parser = Parser(luau_lang)
-    source_bytes = code.encode('utf-8')
+    source_bytes = code.encode("utf-8")
     tree = parser.parse(source_bytes)
 
     # Find the function

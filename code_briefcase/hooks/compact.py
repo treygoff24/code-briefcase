@@ -5,7 +5,9 @@ from code_briefcase.hooks.runtime import HookEvent, HookResponse
 from code_briefcase.session_warm import count_source_files
 
 
-def build_pre_compact_response(event: HookEvent, max_entries: int = 20) -> HookExecutionResult:
+def build_pre_compact_response(
+    event: HookEvent, max_entries: int = 20
+) -> HookExecutionResult:
     """Build cheap workspace context for compaction hooks.
 
     This intentionally avoids semantic search, full indexing, or daemon round trips.
@@ -35,7 +37,7 @@ def build_pre_compact_response(event: HookEvent, max_entries: int = 20) -> HookE
         "Code Briefcase compact context:",
         f"- Project: {project.name}",
         f"- Source files: {count_text}",
-        "- For targeted follow-up context, run `code-briefcase pack \"<task>\" --project . --budget 3000`.",
+        '- For targeted follow-up context, run `code-briefcase pack "<task>" --project . --budget 3000`.',
     ]
     if entries:
         lines.append("- Top-level entries: " + ", ".join(entries))

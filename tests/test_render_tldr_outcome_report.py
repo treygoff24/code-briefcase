@@ -1,4 +1,5 @@
 from __future__ import annotations
+from typing import Any
 
 import json
 import subprocess
@@ -10,9 +11,12 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 
-def test_render_report_writes_markdown_and_html_without_secrets(tmp_path):
+def test_render_report_writes_markdown_and_html_without_secrets(tmp_path: Any) -> None:
     payload = {
-        "window": {"start": "2026-05-20T00:00:00+00:00", "end": "2026-05-21T00:00:00+00:00"},
+        "window": {
+            "start": "2026-05-20T00:00:00+00:00",
+            "end": "2026-05-21T00:00:00+00:00",
+        },
         "rollups": [
             {
                 "session_id": "s1",
@@ -53,11 +57,14 @@ def test_render_report_writes_markdown_and_html_without_secrets(tmp_path):
     assert "proxy-only" in md
 
 
-def test_render_report_includes_hook_duration_summary():
+def test_render_report_includes_hook_duration_summary() -> None:
     from scripts.render_tldr_outcome_report import render_markdown  # noqa: E402
 
     payload = {
-        "window": {"start": "2026-05-20T00:00:00+00:00", "end": "2026-05-21T00:00:00+00:00"},
+        "window": {
+            "start": "2026-05-20T00:00:00+00:00",
+            "end": "2026-05-21T00:00:00+00:00",
+        },
         "rollups": [
             {
                 "session_id": "s1",
@@ -77,11 +84,14 @@ def test_render_report_includes_hook_duration_summary():
     assert "Hook duration p50/p95 (ms): 12.0/18.0" in markdown
 
 
-def test_render_report_includes_skip_noop_and_clean_check_summary():
+def test_render_report_includes_skip_noop_and_clean_check_summary() -> None:
     from scripts.render_tldr_outcome_report import render_markdown  # noqa: E402
 
     payload = {
-        "window": {"start": "2026-05-20T00:00:00+00:00", "end": "2026-05-21T00:00:00+00:00"},
+        "window": {
+            "start": "2026-05-20T00:00:00+00:00",
+            "end": "2026-05-21T00:00:00+00:00",
+        },
         "rollups": [
             {
                 "session_id": "s1",
@@ -105,11 +115,17 @@ def test_render_report_includes_skip_noop_and_clean_check_summary():
     assert "Clean post-edit checks: 1" in markdown
 
 
-def test_render_html_escapes_table_and_verdict_values(tmp_path):
-    from scripts.render_tldr_outcome_report import render_html, render_markdown  # noqa: E402
+def test_render_html_escapes_table_and_verdict_values(tmp_path: Any) -> None:
+    from scripts.render_tldr_outcome_report import (
+        render_html,
+        render_markdown,
+    )  # noqa: E402
 
     payload = {
-        "window": {"start": "2026-05-20T00:00:00+00:00", "end": "2026-05-21T00:00:00+00:00"},
+        "window": {
+            "start": "2026-05-20T00:00:00+00:00",
+            "end": "2026-05-21T00:00:00+00:00",
+        },
         "rollups": [
             {
                 "session_id": "<script>alert(1)</script>",
@@ -130,10 +146,10 @@ def test_render_html_escapes_table_and_verdict_values(tmp_path):
     assert "proxy&lt;script&gt;only" in html
 
 
-def test_render_html_escapes_markdown_pre_block():
+def test_render_html_escapes_markdown_pre_block() -> None:
     from scripts.render_tldr_outcome_report import render_html  # noqa: E402
 
-    payload = {"rollups": []}
+    payload: Any = {"rollups": []}
     markdown = "A & B <tag> C > D"
     html = render_html(payload, markdown)
 
@@ -141,8 +157,11 @@ def test_render_html_escapes_markdown_pre_block():
     assert "<tag>" not in html.split("<pre>", 1)[1]
 
 
-def test_render_report_includes_and_escapes_local_rich_evidence():
-    from scripts.render_tldr_outcome_report import render_html, render_markdown  # noqa: E402
+def test_render_report_includes_and_escapes_local_rich_evidence() -> None:
+    from scripts.render_tldr_outcome_report import (
+        render_html,
+        render_markdown,
+    )  # noqa: E402
 
     payload = {
         "rollups": [

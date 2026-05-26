@@ -65,7 +65,7 @@ class TLDRDaemon:
     Automatically shuts down after IDLE_TIMEOUT seconds of inactivity.
     """
 
-    def __init__(self, project_path: Path):
+    def __init__(self, project_path: Path) -> None:
         """
         Initialize the daemon for a project.
 
@@ -114,7 +114,9 @@ class TLDRDaemon:
 
     def _compute_socket_path(self) -> Path:
         """Compute deterministic socket path from project path."""
-        hash_val = hashlib.md5(str(Path(self.project).resolve()).encode()).hexdigest()[:8]
+        hash_val = hashlib.md5(str(Path(self.project).resolve()).encode()).hexdigest()[
+            :8
+        ]
         tmp_dir = tempfile.gettempdir()
         return Path(tmp_dir) / f"code-briefcase-{hash_val}.sock"
 
@@ -178,7 +180,10 @@ class TLDRDaemon:
     def call_graph(self) -> dict:
         """Get the call graph, loading if necessary."""
         self._ensure_call_graph_loaded()
-        return self.indexes.get("call_graph", {"edges": [], "nodes": {}})
+        call_graph = self.indexes.get("call_graph", {"edges": [], "nodes": {}})
+        return (
+            call_graph if isinstance(call_graph, dict) else {"edges": [], "nodes": {}}
+        )
 
     def handle_command(self, command: dict[str, Any]) -> dict[str, Any]:
         """
@@ -253,6 +258,7 @@ class TLDRDaemon:
     def _snapshot_hook_stats(self) -> dict[str, HookStats]:
         """Create a deep copy of current hook stats for delta tracking."""
         from copy import deepcopy
+
         return {name: deepcopy(stats) for name, stats in self._hook_stats.items()}
 
     def _handle_track(self, command: dict) -> dict:
@@ -297,7 +303,9 @@ class TLDRDaemon:
     def _flush_hook_stats(self) -> None:
         """Flush hook stats delta to disk and reset counter."""
         try:
-            self._hook_stats_store.flush_delta(self._hook_stats, self._hook_stats_baseline)
+            self._hook_stats_store.flush_delta(
+                self._hook_stats, self._hook_stats_baseline
+            )
             self._hook_stats_baseline = self._snapshot_hook_stats()
             self._hook_invocation_count = 0
             logger.debug("Flushed hook stats to disk")
@@ -330,7 +338,9 @@ class TLDRDaemon:
         all_sessions_stats = {
             "active_sessions": len(self._session_stats),
             "total_raw_tokens": sum(s.raw_tokens for s in self._session_stats.values()),
-            "total_tldr_tokens": sum(s.tldr_tokens for s in self._session_stats.values()),
+            "total_tldr_tokens": sum(
+                s.tldr_tokens for s in self._session_stats.values()
+            ),
             "total_requests": sum(s.requests for s in self._session_stats.values()),
             "session_ids": list(self._session_stats.keys()),  # Debug: show stored IDs
         }
@@ -406,7 +416,9 @@ class TLDRDaemon:
                         f"{stats.requests} requests, {stats.savings_percent:.1f}% savings"
                     )
                 except Exception as e:
-                    logger.error(f"Failed to persist stats for session {session_id}: {e}")
+                    logger.error(
+                        f"Failed to persist stats for session {session_id}: {e}"
+                    )
 
         # Persist hook stats (final flush)
         if self._hook_invocation_count > 0:
@@ -465,7 +477,9 @@ class TLDRDaemon:
                 if stats.requests % 10 == 0:
                     try:
                         self._stats_store.append(stats)
-                        logger.debug(f"Persisted stats for session {session_id}: {stats.requests} requests")
+                        logger.debug(
+                            f"Persisted stats for session {session_id}: {stats.requests} requests"
+                        )
                     except Exception as e:
                         logger.warning(f"Failed to persist stats: {e}")
 
@@ -510,7 +524,7 @@ class TLDRDaemon:
             logger.exception("Impact analysis failed")
             return {"status": "error", "message": str(e)}
 
-    def _ensure_call_graph_loaded(self):
+    def _ensure_call_graph_loaded(self) -> None:
         """Load call graph if not already loaded."""
         if "call_graph" in self.indexes:
             return
@@ -566,7 +580,10 @@ class TLDRDaemon:
         file_path = command.get("file")
         function = command.get("function")
         if not file_path or not function:
-            return {"status": "error", "message": "Missing required parameters: file, function"}
+            return {
+                "status": "error",
+                "message": "Missing required parameters: file, function",
+            }
 
         try:
             language = command.get("language", "python")
@@ -586,7 +603,10 @@ class TLDRDaemon:
         file_path = command.get("file")
         function = command.get("function")
         if not file_path or not function:
-            return {"status": "error", "message": "Missing required parameters: file, function"}
+            return {
+                "status": "error",
+                "message": "Missing required parameters: file, function",
+            }
 
         try:
             language = command.get("language", "python")
@@ -607,7 +627,10 @@ class TLDRDaemon:
         function = command.get("function")
         line = command.get("line")
         if not file_path or not function or line is None:
-            return {"status": "error", "message": "Missing required parameters: file, function, line"}
+            return {
+                "status": "error",
+                "message": "Missing required parameters: file, function, line",
+            }
 
         try:
             direction = command.get("direction", "backward")
@@ -630,10 +653,16 @@ class TLDRDaemon:
         try:
             language = command.get("language", "python")
             from code_briefcase.cross_file_calls import build_project_call_graph
+
             graph = build_project_call_graph(self.project, language=language)
             result = {
                 "edges": [
-                    {"from_file": e[0], "from_func": e[1], "to_file": e[2], "to_func": e[3]}
+                    {
+                        "from_file": e[0],
+                        "from_func": e[1],
+                        "to_file": e[2],
+                        "to_func": e[3],
+                    }
                     for e in graph.edges
                 ],
                 "count": len(graph.edges),
@@ -647,7 +676,10 @@ class TLDRDaemon:
         """Handle cache warming command (builds call graph cache)."""
         try:
             language = command.get("language", "python")
-            from code_briefcase.cross_file_calls import scan_project, build_project_call_graph
+            from code_briefcase.cross_file_calls import (
+                scan_project,
+                build_project_call_graph,
+            )
 
             files = scan_project(self.project, language=language)
             graph = build_project_call_graph(self.project, language=language)
@@ -658,7 +690,12 @@ class TLDRDaemon:
             cache_file = cache_dir / "call_graph.json"
             cache_data = {
                 "edges": [
-                    {"from_file": e[0], "from_func": e[1], "to_file": e[2], "to_func": e[3]}
+                    {
+                        "from_file": e[0],
+                        "from_func": e[1],
+                        "to_file": e[2],
+                        "to_func": e[3],
+                    }
                     for e in graph.edges
                 ],
                 "languages": [language],
@@ -689,7 +726,10 @@ class TLDRDaemon:
             elif action == "search":
                 query = command.get("query")
                 if not query:
-                    return {"status": "error", "message": "Missing required parameter: query"}
+                    return {
+                        "status": "error",
+                        "message": "Missing required parameter: query",
+                    }
                 k = command.get("k", 10)
                 results = semantic_search(str(self.project), query, k=k)
                 return {"status": "ok", "results": results}
@@ -792,7 +832,7 @@ class TLDRDaemon:
             logger.exception("Importers lookup failed")
             return {"status": "error", "message": str(e)}
 
-    def _ensure_dedup_index_loaded(self):
+    def _ensure_dedup_index_loaded(self) -> None:
         """Load or create ContentHashedIndex for file deduplication."""
         if self.dedup_index is not None:
             return
@@ -814,7 +854,7 @@ class TLDRDaemon:
             except Exception as e:
                 logger.debug(f"Could not index {py_file}: {e}")
 
-    def _save_dedup_index(self):
+    def _save_dedup_index(self) -> None:
         """Persist ContentHashedIndex to disk."""
         if self.dedup_index:
             try:
@@ -857,8 +897,7 @@ class TLDRDaemon:
         # Check if we should trigger background re-indexing
         threshold = self._semantic_config.get("auto_reindex_threshold", 20)
         should_reindex = (
-            self._dirty_count >= threshold
-            and not self._reindex_in_progress
+            self._dirty_count >= threshold and not self._reindex_in_progress
         )
 
         if should_reindex:
@@ -871,7 +910,7 @@ class TLDRDaemon:
             "reindex_triggered": should_reindex,
         }
 
-    def _trigger_background_reindex(self):
+    def _trigger_background_reindex(self) -> None:
         """Trigger background semantic re-indexing.
 
         Spawns a subprocess to rebuild the semantic index,
@@ -883,16 +922,22 @@ class TLDRDaemon:
 
         self._reindex_in_progress = True
         dirty_files = list(self._dirty_files)
-        logger.info(f"Triggering background semantic re-index for {len(dirty_files)} files")
+        logger.info(
+            f"Triggering background semantic re-index for {len(dirty_files)} files"
+        )
 
-        def do_reindex():
+        def do_reindex() -> None:
             try:
                 import subprocess
 
                 # Run semantic index command
                 cmd = [
-                    sys.executable, "-m", "code_briefcase.cli",
-                    "semantic", "index", str(self.project)
+                    sys.executable,
+                    "-m",
+                    "code_briefcase.cli",
+                    "semantic",
+                    "index",
+                    str(self.project),
                 ]
                 result = subprocess.run(
                     cmd,
@@ -904,7 +949,9 @@ class TLDRDaemon:
                 if result.returncode == 0:
                     logger.info("Background semantic re-index completed successfully")
                 else:
-                    logger.error(f"Background semantic re-index failed: {result.stderr}")
+                    logger.error(
+                        f"Background semantic re-index failed: {result.stderr}"
+                    )
 
             except Exception as e:
                 logger.exception(f"Background semantic re-index error: {e}")
@@ -916,6 +963,7 @@ class TLDRDaemon:
 
         # Run in thread to not block daemon
         import threading
+
         thread = threading.Thread(target=do_reindex, daemon=True)
         thread.start()
 
@@ -926,7 +974,10 @@ class TLDRDaemon:
         no_lint = command.get("no_lint", False)
         language = command.get("language")
         try:
-            from code_briefcase.diagnostics import get_diagnostics, get_project_diagnostics
+            from code_briefcase.diagnostics import (
+                get_diagnostics,
+                get_project_diagnostics,
+            )
 
             if check_project:
                 result = get_project_diagnostics(
@@ -936,7 +987,10 @@ class TLDRDaemon:
                 )
             else:
                 if not file_path:
-                    return {"status": "error", "message": "Missing required parameter: file"}
+                    return {
+                        "status": "error",
+                        "message": "Missing required parameter: file",
+                    }
                 result = get_diagnostics(
                     file_path,
                     language=language,
@@ -983,7 +1037,11 @@ class TLDRDaemon:
                     cwd=str(self.project),
                 )
                 if result.returncode == 0:
-                    files = [f.strip() for f in result.stdout.strip().split("\n") if f.strip()]
+                    files = [
+                        f.strip()
+                        for f in result.stdout.strip().split("\n")
+                        if f.strip()
+                    ]
             except Exception as e:
                 logger.debug(f"git diff failed: {e}")
 
@@ -997,15 +1055,20 @@ class TLDRDaemon:
         for file_path in files:
             if not file_path.endswith(".py"):
                 continue
-            full_path = self.project / file_path if not Path(file_path).is_absolute() else Path(file_path)
+            full_path = (
+                self.project / file_path
+                if not Path(file_path).is_absolute()
+                else Path(file_path)
+            )
             if not full_path.exists():
                 continue
 
             try:
                 from code_briefcase.ast_extractor import extract_file
+
                 info = extract_file(str(full_path))
-                for func in info.get("functions", []):
-                    changed_functions.add(func.get("name", ""))
+                for func in info.functions:
+                    changed_functions.add(func.name)
             except Exception as e:
                 logger.debug(f"Could not extract {file_path}: {e}")
 
@@ -1028,13 +1091,19 @@ class TLDRDaemon:
             # Search for imports of this module in test files
             try:
                 from code_briefcase.cross_file_calls import scan_project
-                test_files = [f for f in scan_project(self.project) if "test" in f.lower()]
+
+                test_files = [
+                    f for f in scan_project(self.project) if "test" in f.lower()
+                ]
 
                 for test_file in test_files:
                     try:
                         with open(self.project / test_file) as f:
                             content = f.read()
-                            if f"import {module_name}" in content or f"from {module_name}" in content:
+                            if (
+                                f"import {module_name}" in content
+                                or f"from {module_name}" in content
+                            ):
                                 affected_tests.add(test_file)
                     except Exception:
                         pass
@@ -1053,7 +1122,7 @@ class TLDRDaemon:
             },
         }
 
-    def notify_file_changed(self, file_path: str):
+    def notify_file_changed(self, file_path: str) -> None:
         """Notify daemon that a file has changed.
 
         This invalidates cached queries that depend on this file.
@@ -1085,11 +1154,13 @@ class TLDRDaemon:
 
     def _get_tmp_pid_path(self) -> Path:
         """Get PID file path in temp dir (matches socket path pattern)."""
-        hash_val = hashlib.md5(str(Path(self.project).resolve()).encode()).hexdigest()[:8]
+        hash_val = hashlib.md5(str(Path(self.project).resolve()).encode()).hexdigest()[
+            :8
+        ]
         tmp_dir = tempfile.gettempdir()
         return Path(tmp_dir) / f"code-briefcase-{hash_val}.pid"
 
-    def write_pid_file(self):
+    def write_pid_file(self) -> None:
         """Write daemon PID to .code-briefcase/daemon.pid (and /tmp if not already done).
 
         If _pidfile is set, startup.py already wrote and locked /tmp/code-briefcase-{hash}.pid.
@@ -1110,7 +1181,7 @@ class TLDRDaemon:
         else:
             logger.info(f"Wrote PID {pid} to {pid_file} (lock held by startup)")
 
-    def remove_pid_file(self):
+    def remove_pid_file(self) -> None:
         """Remove PID files and release lock."""
         # Remove .code-briefcase/daemon.pid
         pid_file = self.tldr_dir / "daemon.pid"
@@ -1140,7 +1211,7 @@ class TLDRDaemon:
 
         logger.info("Removed PID files")
 
-    def write_status(self, status: str):
+    def write_status(self, status: str) -> None:
         """Write status to .code-briefcase/status file."""
         self.tldr_dir.mkdir(parents=True, exist_ok=True)
         status_file = self.tldr_dir / "status"
@@ -1155,7 +1226,7 @@ class TLDRDaemon:
             return status_file.read_text().strip()
         return "unknown"
 
-    def _create_socket(self):
+    def _create_socket(self) -> None:
         """Create and bind the socket (legacy method, calls _create_server_socket)."""
         self._socket = self._create_server_socket()
 
@@ -1194,7 +1265,9 @@ class TLDRDaemon:
                     # Check if existing daemon is responsive
                     if self.socket_path.exists():
                         try:
-                            test_sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+                            test_sock = socket.socket(
+                                socket.AF_UNIX, socket.SOCK_STREAM
+                            )
                             test_sock.connect(str(self.socket_path))
                             test_sock.close()
                             # Another daemon is running - exit
@@ -1215,7 +1288,7 @@ class TLDRDaemon:
 
         return sock
 
-    def _cleanup_socket(self):
+    def _cleanup_socket(self) -> None:
         """Clean up the socket."""
         if self._socket:
             self._socket.close()
@@ -1228,6 +1301,7 @@ class TLDRDaemon:
 
         if self.socket_path.exists():
             import stat
+
             try:
                 # Only unlink if it's actually a socket
                 if stat.S_ISSOCK(self.socket_path.stat().st_mode):
@@ -1236,7 +1310,7 @@ class TLDRDaemon:
                 pass
         logger.info("Socket cleaned up")
 
-    def _handle_one_connection(self):
+    def _handle_one_connection(self) -> None:
         """Handle a single client connection."""
         if not self._socket:
             return
@@ -1297,13 +1371,15 @@ class TLDRDaemon:
         finally:
             conn.close()
 
-    def _send_response(self, conn: socket.socket, response: dict[str, Any], *, framed: bool) -> None:
+    def _send_response(
+        self, conn: socket.socket, response: dict[str, Any], *, framed: bool
+    ) -> None:
         if framed:
             send_framed_json(conn, response)
         else:
             send_json_line(conn, response)
 
-    def run(self):
+    def run(self) -> None:
         """Run the daemon main loop."""
         self.write_pid_file()
         self.write_status("indexing")
@@ -1311,7 +1387,11 @@ class TLDRDaemon:
         # Cross-platform signal handling for graceful shutdown
         # Signal handlers just set the flag - actual cleanup happens in finally block
         def _signal_handler(signum: int, frame: Any) -> None:
-            signame = signal.Signals(signum).name if hasattr(signal, 'Signals') else str(signum)
+            signame = (
+                signal.Signals(signum).name
+                if hasattr(signal, "Signals")
+                else str(signum)
+            )
             logger.info(f"Received {signame}, initiating graceful shutdown")
             self._shutdown_requested = True
 

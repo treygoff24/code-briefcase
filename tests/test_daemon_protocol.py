@@ -1,3 +1,4 @@
+from typing import Any
 import json
 import socket
 import time
@@ -18,7 +19,7 @@ from code_briefcase.daemon.protocol import (
 from code_briefcase.daemon.startup import DaemonResponse, query_daemon
 
 
-def test_framed_json_round_trips_over_socketpair():
+def test_framed_json_round_trips_over_socketpair() -> None:
     left, right = socket.socketpair()
     try:
         send_framed_json(left, {"status": "ok", "value": "x" * 100})
@@ -29,7 +30,7 @@ def test_framed_json_round_trips_over_socketpair():
         right.close()
 
 
-def test_recv_json_line_accepts_crlf():
+def test_recv_json_line_accepts_crlf() -> None:
     left, right = socket.socketpair()
     try:
         left.sendall(b'{"cmd":"status"}\r\n')
@@ -40,7 +41,7 @@ def test_recv_json_line_accepts_crlf():
         right.close()
 
 
-def test_decode_response_bytes_accepts_legacy_and_framed():
+def test_decode_response_bytes_accepts_legacy_and_framed() -> None:
     legacy = json.dumps({"status": "ok", "mode": "legacy"}).encode()
 
     left, right = socket.socketpair()
@@ -55,8 +56,10 @@ def test_decode_response_bytes_accepts_legacy_and_framed():
     assert decode_response_bytes(list(framed)) == {"status": "ok", "mode": "framed"}
 
 
-def test_query_daemon_response_downgrades_to_legacy(monkeypatch, tmp_path):
-    def fail_v2(*_args, **_kwargs):
+def test_query_daemon_response_downgrades_to_legacy(
+    monkeypatch: Any, tmp_path: Any
+) -> None:
+    def fail_v2(*_args: Any, **_kwargs: Any) -> None:
         raise DaemonProtocolError("old daemon")
 
     monkeypatch.setattr(startup, "_query_daemon_v2", fail_v2)
@@ -72,7 +75,7 @@ def test_query_daemon_response_downgrades_to_legacy(monkeypatch, tmp_path):
     assert response.payload == {"status": "ok", "protocol": "legacy"}
 
 
-def test_query_daemon_response_reports_timeout(monkeypatch, tmp_path):
+def test_query_daemon_response_reports_timeout(monkeypatch: Any, tmp_path: Any) -> None:
     monkeypatch.setattr(
         startup,
         "_query_daemon_v2",
@@ -84,7 +87,7 @@ def test_query_daemon_response_reports_timeout(monkeypatch, tmp_path):
     assert response.kind == DaemonResponseKind.TIMEOUT
 
 
-def test_daemon_response_ok_rejects_application_errors():
+def test_daemon_response_ok_rejects_application_errors() -> None:
     assert not DaemonResponse(
         DaemonResponseKind.OK,
         payload={"status": "error", "message": "bad command"},
@@ -97,7 +100,9 @@ def test_daemon_response_ok_rejects_application_errors():
     assert DaemonResponse(DaemonResponseKind.OK, payload={"result": "x"}).ok
 
 
-def test_query_daemon_raises_with_application_error_message(monkeypatch, tmp_path):
+def test_query_daemon_raises_with_application_error_message(
+    monkeypatch: Any, tmp_path: Any
+) -> None:
     monkeypatch.setattr(
         startup,
         "query_daemon_response",
@@ -111,7 +116,7 @@ def test_query_daemon_raises_with_application_error_message(monkeypatch, tmp_pat
         query_daemon(tmp_path, {"cmd": "nope"})
 
 
-def test_line_reader_handles_coalesced_messages():
+def test_line_reader_handles_coalesced_messages() -> None:
     left, right = socket.socketpair()
     reader = LineReader()
     try:
@@ -124,7 +129,9 @@ def test_line_reader_handles_coalesced_messages():
         right.close()
 
 
-def test_query_or_start_daemon_starts_once_when_unreachable(monkeypatch, tmp_path):
+def test_query_or_start_daemon_starts_once_when_unreachable(
+    monkeypatch: Any, tmp_path: Any
+) -> None:
     responses = iter(
         [
             DaemonResponse(DaemonResponseKind.UNREACHABLE, message="no socket"),
@@ -133,7 +140,9 @@ def test_query_or_start_daemon_starts_once_when_unreachable(monkeypatch, tmp_pat
     )
     starts = []
 
-    monkeypatch.setattr(startup, "query_daemon_response", lambda *_args, **_kwargs: next(responses))
+    monkeypatch.setattr(
+        startup, "query_daemon_response", lambda *_args, **_kwargs: next(responses)
+    )
     monkeypatch.setattr(
         startup,
         "start_daemon",
@@ -147,7 +156,9 @@ def test_query_or_start_daemon_starts_once_when_unreachable(monkeypatch, tmp_pat
     assert starts == [(tmp_path, {"quiet": True})]
 
 
-def test_shutdown_ack_returns_before_slow_supervisor_teardown(tmp_path, monkeypatch):
+def test_shutdown_ack_returns_before_slow_supervisor_teardown(
+    tmp_path: Any, monkeypatch: Any
+) -> None:
     daemon = TLDRDaemon(tmp_path)
 
     def slow_stop() -> None:

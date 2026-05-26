@@ -26,6 +26,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class FunctionInfo:
     """Extracted function/method information."""
+
     name: str
     params: list[str]
     return_type: str | None
@@ -46,6 +47,7 @@ class FunctionInfo:
 @dataclass
 class ClassInfo:
     """Extracted class information."""
+
     name: str
     bases: list[str]
     docstring: str | None
@@ -62,6 +64,7 @@ class ClassInfo:
 @dataclass
 class ImportInfo:
     """Extracted import information."""
+
     module: str
     names: list[str]  # Empty for 'import x', filled for 'from x import y, z'
     is_from: bool = False
@@ -78,10 +81,11 @@ class ImportInfo:
 @dataclass
 class CallGraphInfo:
     """Call graph showing function relationships."""
+
     calls: dict[str, list[str]] = field(default_factory=dict)  # func -> [called funcs]
     called_by: dict[str, list[str]] = field(default_factory=dict)  # func -> [callers]
 
-    def add_call(self, caller: str, callee: str):
+    def add_call(self, caller: str, callee: str) -> None:
         """Record a function call."""
         if caller not in self.calls:
             self.calls[caller] = []
@@ -97,6 +101,7 @@ class CallGraphInfo:
 @dataclass
 class ModuleInfo:
     """Complete module extraction result."""
+
     file_path: str
     language: str
     docstring: str | None
@@ -152,10 +157,14 @@ class ModuleInfo:
                 }
                 for f in self.functions
             ],
-            "call_graph": {
-                "calls": self.call_graph.calls,
-                "called_by": self.call_graph.called_by,
-            } if self.call_graph.calls else {},
+            "call_graph": (
+                {
+                    "calls": self.call_graph.calls,
+                    "called_by": self.call_graph.called_by,
+                }
+                if self.call_graph.calls
+                else {}
+            ),
         }
 
     def to_compact(self) -> dict[str, Any]:
@@ -167,7 +176,11 @@ class ModuleInfo:
 
         if self.docstring:
             # Truncate long docstrings
-            doc = self.docstring[:200] + "..." if len(self.docstring) > 200 else self.docstring
+            doc = (
+                self.docstring[:200] + "..."
+                if len(self.docstring) > 200
+                else self.docstring
+            )
             result["doc"] = doc
 
         if self.imports:
@@ -178,7 +191,11 @@ class ModuleInfo:
             for c in self.classes:
                 class_info: dict[str, Any] = {"bases": c.bases} if c.bases else {}
                 if c.docstring:
-                    class_info["doc"] = c.docstring[:100] + "..." if len(c.docstring) > 100 else c.docstring
+                    class_info["doc"] = (
+                        c.docstring[:100] + "..."
+                        if len(c.docstring) > 100
+                        else c.docstring
+                    )
                 if c.methods:
                     class_info["methods"] = [m.signature() for m in c.methods]
                 result["classes"][c.name] = class_info
@@ -228,22 +245,26 @@ class PythonASTExtractor:
         for node in ast.iter_child_nodes(tree):
             if isinstance(node, ast.Import):
                 for alias in node.names:
-                    module_info.imports.append(ImportInfo(
-                        module=alias.name,
-                        names=[],
-                        is_from=False,
-                        line_number=node.lineno,
-                    ))
+                    module_info.imports.append(
+                        ImportInfo(
+                            module=alias.name,
+                            names=[],
+                            is_from=False,
+                            line_number=node.lineno,
+                        )
+                    )
 
             elif isinstance(node, ast.ImportFrom):
                 module_name = node.module or ""
                 names = [alias.name for alias in node.names]
-                module_info.imports.append(ImportInfo(
-                    module=module_name,
-                    names=names,
-                    is_from=True,
-                    line_number=node.lineno,
-                ))
+                module_info.imports.append(
+                    ImportInfo(
+                        module=module_name,
+                        names=names,
+                        is_from=True,
+                        line_number=node.lineno,
+                    )
+                )
 
             elif isinstance(node, ast.ClassDef):
                 class_info = self._extract_class(
@@ -258,7 +279,9 @@ class PythonASTExtractor:
                 func_info = self._extract_function(node)
                 module_info.functions.append(func_info)
                 # Extract calls from this function
-                self._extract_calls(node, node.name, module_info.call_graph, defined_names)
+                self._extract_calls(
+                    node, node.name, module_info.call_graph, defined_names
+                )
                 # Extract nested functions
                 self._extract_nested_functions(node, module_info, defined_names)
 
@@ -269,7 +292,7 @@ class PythonASTExtractor:
         parent_node: ast.FunctionDef | ast.AsyncFunctionDef,
         module_info: ModuleInfo,
         defined_names: set[str],
-    ):
+    ) -> None:
         """Extract nested functions from a function body."""
         for node in ast.walk(parent_node):
             if node is parent_node:
@@ -280,7 +303,9 @@ class PythonASTExtractor:
                 func_info.decorators.insert(0, f"nested_in:{parent_node.name}")
                 module_info.functions.append(func_info)
                 # Extract calls from this nested function
-                self._extract_calls(node, node.name, module_info.call_graph, defined_names)
+                self._extract_calls(
+                    node, node.name, module_info.call_graph, defined_names
+                )
 
     def _extract_class(
         self,
@@ -341,7 +366,10 @@ class PythonASTExtractor:
                             docstring=method.docstring,
                             is_method=True,
                             is_async=method.is_async,
-                            decorators=[f"nested_in:{qualified_name}.{nested_class.name}"] + method.decorators,
+                            decorators=[
+                                f"nested_in:{qualified_name}.{nested_class.name}"
+                            ]
+                            + method.decorators,
                             line_number=method.line_number,
                         )
                         module_info.functions.append(nested_method)
@@ -354,7 +382,7 @@ class PythonASTExtractor:
         caller_name: str,
         call_graph: CallGraphInfo,
         defined_names: set[str],
-    ):
+    ) -> None:
         """Extract function calls from a function body."""
         for child in ast.walk(node):
             if isinstance(child, ast.Call):
@@ -373,9 +401,7 @@ class PythonASTExtractor:
         return None
 
     def _extract_function(
-        self,
-        node: ast.FunctionDef | ast.AsyncFunctionDef,
-        is_method: bool = False
+        self, node: ast.FunctionDef | ast.AsyncFunctionDef, is_method: bool = False
     ) -> FunctionInfo:
         """Extract function/method information."""
         params = self._extract_params(node.args)
@@ -422,7 +448,9 @@ class PythonASTExtractor:
             params.append("*")
 
         # Keyword-only params
-        kw_defaults_map = {i: d for i, d in enumerate(args.kw_defaults) if d is not None}
+        kw_defaults_map = {
+            i: d for i, d in enumerate(args.kw_defaults) if d is not None
+        }
         for i, arg in enumerate(args.kwonlyargs):
             param = self._format_arg(arg)
             if i in kw_defaults_map:

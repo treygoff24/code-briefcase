@@ -8,6 +8,8 @@ This module provides utilities to:
 - Trigger background warming when appropriate
 """
 
+from typing import Any
+
 import json
 import os
 import subprocess
@@ -17,7 +19,7 @@ from pathlib import Path
 from typing import Optional
 
 
-def _get_subprocess_detach_kwargs():
+def _get_subprocess_detach_kwargs() -> Any:
     """Get platform-specific kwargs for detaching subprocess."""
     if os.name == "nt":  # Windows
         create_new_pg = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
@@ -77,10 +79,10 @@ def get_cache_age(project_path: Path) -> Optional[float]:
         if timestamp is None:
             return None
 
-        age_seconds = time.time() - timestamp
+        age_seconds = time.time() - float(timestamp)
         return age_seconds / 3600  # Convert to hours
 
-    except (json.JSONDecodeError, KeyError, TypeError):
+    except (json.JSONDecodeError, KeyError, TypeError, ValueError):
         return None
 
 

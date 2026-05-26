@@ -77,7 +77,9 @@ def check_prompt_for_secrets(prompt: str) -> str | None:
     for match in _ENV_LINE_RE.finditer(prompt):
         key_name = match.group(1).lower()
         value = match.group(2)
-        if any(fragment in key_name for fragment in _ENV_SECRET_KEY_FRAGMENTS) and _is_high_entropy(value):
+        if any(
+            fragment in key_name for fragment in _ENV_SECRET_KEY_FRAGMENTS
+        ) and _is_high_entropy(value):
             return "possible .env credential"
 
     return None

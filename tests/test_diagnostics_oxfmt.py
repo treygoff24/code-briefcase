@@ -1,3 +1,4 @@
+from typing import Any
 from pathlib import Path
 
 import pytest
@@ -6,7 +7,7 @@ from code_briefcase import diagnostics as diag
 
 
 @pytest.fixture
-def install_fake_oxfmt(make_executable):
+def install_fake_oxfmt(make_executable: Any) -> Any:
     def _install(project: Path) -> None:
         make_executable(
             project / "node_modules" / ".bin" / "oxfmt",
@@ -21,7 +22,9 @@ esac
     return _install
 
 
-def test_run_oxfmt_accepts_formatted_file(tmp_path, monkeypatch, install_fake_oxfmt):
+def test_run_oxfmt_accepts_formatted_file(
+    tmp_path: Any, monkeypatch: Any, install_fake_oxfmt: Any
+) -> None:
     monkeypatch.setattr(diag.shutil, "which", lambda name: None)
     install_fake_oxfmt(tmp_path)
 
@@ -31,7 +34,9 @@ def test_run_oxfmt_accepts_formatted_file(tmp_path, monkeypatch, install_fake_ox
     assert diag._run_oxfmt(source) == []
 
 
-def test_run_oxfmt_reports_formatting_drift(tmp_path, monkeypatch, install_fake_oxfmt):
+def test_run_oxfmt_reports_formatting_drift(
+    tmp_path: Any, monkeypatch: Any, install_fake_oxfmt: Any
+) -> None:
     monkeypatch.setattr(diag.shutil, "which", lambda name: None)
     install_fake_oxfmt(tmp_path)
 
@@ -45,7 +50,9 @@ def test_run_oxfmt_reports_formatting_drift(tmp_path, monkeypatch, install_fake_
     assert diagnostics[0]["severity"] == "warning"
 
 
-def test_run_oxfmt_skips_declaration_files(tmp_path, monkeypatch, install_fake_oxfmt):
+def test_run_oxfmt_skips_declaration_files(
+    tmp_path: Any, monkeypatch: Any, install_fake_oxfmt: Any
+) -> None:
     monkeypatch.setattr(diag.shutil, "which", lambda name: None)
     install_fake_oxfmt(tmp_path)
 

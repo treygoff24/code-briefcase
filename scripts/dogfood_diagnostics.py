@@ -57,13 +57,20 @@ def run(
 def run_tldr(args: list[str], *, timeout: int = 180) -> dict[str, Any]:
     result = run([sys.executable, "-m", "code_briefcase.cli", *args], timeout=timeout)
     try:
-        return json.loads(result.stdout)
+        payload = json.loads(result.stdout)
     except json.JSONDecodeError as exc:
         raise DogfoodFailure(
             f"Code Briefcase did not emit JSON for args={args}\n"
             f"stdout={result.stdout}\n"
             f"stderr={result.stderr}"
         ) from exc
+    if not isinstance(payload, dict):
+        raise DogfoodFailure(
+            f"Code Briefcase emitted non-object JSON for args={args}\n"
+            f"stdout={result.stdout}\n"
+            f"stderr={result.stderr}"
+        )
+    return payload
 
 
 def write(path: Path, content: str) -> None:
@@ -131,9 +138,7 @@ def prepare_fake_repo() -> Path:
     write(FAKE_REPO / "src" / "other-error.ts", "export const other: string = 42;\n")
     write(
         FAKE_REPO / "src" / "type-error.js",
-        "// @ts-check\n"
-        "/** @type {string} */\n"
-        "export const jsAnswer = 42;\n",
+        "// @ts-check\n" "/** @type {string} */\n" "export const jsAnswer = 42;\n",
     )
     write(
         FAKE_REPO / "src" / "lint.ts",
@@ -142,7 +147,11 @@ def prepare_fake_repo() -> Path:
     write(FAKE_REPO / "src" / "drifted.ts", "export const drifted={value:42}\n")
     write(FAKE_REPO / "src" / "types.d.ts", "declare const answer:{value:number}\n")
 
-    run(["npm", "install", "--no-audit", "--no-fund", "--silent"], cwd=FAKE_REPO, timeout=300)
+    run(
+        ["npm", "install", "--no-audit", "--no-fund", "--silent"],
+        cwd=FAKE_REPO,
+        timeout=300,
+    )
     return FAKE_REPO
 
 
@@ -157,7 +166,9 @@ def rules(result: dict[str, Any]) -> set[str]:
 def assert_tools(result: dict[str, Any], expected: list[str], label: str) -> None:
     actual = result.get("tools")
     if actual != expected:
-        raise DogfoodFailure(f"{label}: tools mismatch; expected={expected}, actual={actual}")
+        raise DogfoodFailure(
+            f"{label}: tools mismatch; expected={expected}, actual={actual}"
+        )
 
 
 def assert_no_diagnostics(result: dict[str, Any], label: str) -> None:
@@ -197,19 +208,29 @@ def run_fake_suite() -> dict[str, Any]:
     ts_error = check("single_file_ts_error_filtered", "src/type-error.ts")
     assert_tools(ts_error, ["tsc", "oxlint", "oxfmt"], "single_file_ts_error_filtered")
     if ts_error.get("error_count") != 1 or "TS2322" not in rules(ts_error):
-        raise DogfoodFailure(f"single_file_ts_error_filtered: expected one TS2322, got={ts_error}")
-    assert_only_file(ts_error, repo / "src" / "type-error.ts", "single_file_ts_error_filtered")
+        raise DogfoodFailure(
+            f"single_file_ts_error_filtered: expected one TS2322, got={ts_error}"
+        )
+    assert_only_file(
+        ts_error, repo / "src" / "type-error.ts", "single_file_ts_error_filtered"
+    )
 
     js_error = check("single_file_js_typecheck", "src/type-error.js")
     assert_tools(js_error, ["tsc", "oxlint", "oxfmt"], "single_file_js_typecheck")
     if js_error.get("error_count") != 1 or "TS2322" not in rules(js_error):
-        raise DogfoodFailure(f"single_file_js_typecheck: expected one TS2322, got={js_error}")
-    assert_only_file(js_error, repo / "src" / "type-error.js", "single_file_js_typecheck")
+        raise DogfoodFailure(
+            f"single_file_js_typecheck: expected one TS2322, got={js_error}"
+        )
+    assert_only_file(
+        js_error, repo / "src" / "type-error.js", "single_file_js_typecheck"
+    )
 
     lint = check("single_file_oxlint", "src/lint.ts")
     assert_tools(lint, ["tsc", "oxlint", "oxfmt"], "single_file_oxlint")
     if "oxlint" not in sources(lint) or "eslint(no-debugger)" not in rules(lint):
-        raise DogfoodFailure(f"single_file_oxlint: expected no-debugger warning, got={lint}")
+        raise DogfoodFailure(
+            f"single_file_oxlint: expected no-debugger warning, got={lint}"
+        )
     assert_only_file(lint, repo / "src" / "lint.ts", "single_file_oxlint")
 
     drift = check("single_file_oxfmt", "src/drifted.ts")
@@ -221,7 +242,9 @@ def run_fake_suite() -> dict[str, Any]:
     declaration = check("single_file_declaration_skips_oxfmt", "src/types.d.ts")
     assert_tools(declaration, ["tsc", "oxlint"], "single_file_declaration_skips_oxfmt")
     if "oxfmt" in sources(declaration):
-        raise DogfoodFailure(f"single_file_declaration_skips_oxfmt: got oxfmt diagnostic={declaration}")
+        raise DogfoodFailure(
+            f"single_file_declaration_skips_oxfmt: got oxfmt diagnostic={declaration}"
+        )
 
     project = run_tldr(
         [
@@ -238,9 +261,13 @@ def run_fake_suite() -> dict[str, Any]:
     report["scenarios"]["project_typescript"] = project
     assert_tools(project, ["tsc", "oxlint", "oxfmt"], "project_typescript")
     if not {"tsc", "oxlint", "oxfmt"}.issubset(sources(project)):
-        raise DogfoodFailure(f"project_typescript: expected all diagnostic sources, got={project}")
+        raise DogfoodFailure(
+            f"project_typescript: expected all diagnostic sources, got={project}"
+        )
     if project.get("error_count", 0) < 2 or project.get("warning_count", 0) < 2:
-        raise DogfoodFailure(f"project_typescript: expected project errors and warnings, got={project}")
+        raise DogfoodFailure(
+            f"project_typescript: expected project errors and warnings, got={project}"
+        )
 
     project_js = run_tldr(
         [
@@ -257,7 +284,9 @@ def run_fake_suite() -> dict[str, Any]:
     report["scenarios"]["project_javascript"] = project_js
     assert_tools(project_js, ["tsc", "oxlint", "oxfmt"], "project_javascript")
     if "tsc" not in sources(project_js) or project_js.get("error_count", 0) < 1:
-        raise DogfoodFailure(f"project_javascript: expected JS tsc errors, got={project_js}")
+        raise DogfoodFailure(
+            f"project_javascript: expected JS tsc errors, got={project_js}"
+        )
 
     return report
 
@@ -305,8 +334,12 @@ def run_real_suite(paths: list[Path]) -> dict[str, Any]:
             None,
         )
         if first_file:
-            single = run_tldr(["diagnostics", str(first_file), "--format", "json"], timeout=300)
-            report["real_repos"].append(summarize_real_result(f"{first_file}:single", single))
+            single = run_tldr(
+                ["diagnostics", str(first_file), "--format", "json"], timeout=300
+            )
+            report["real_repos"].append(
+                summarize_real_result(f"{first_file}:single", single)
+            )
     return report
 
 

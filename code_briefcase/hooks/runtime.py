@@ -68,7 +68,12 @@ EVENT_NAME_ALIASES = {
 # Codex events: fields forbidden from renderer output per spec
 CODEX_FORBIDDEN_FIELDS: dict[str, set[str]] = {
     "PreToolUse": {"continue", "stopReason", "suppressOutput", "updatedPermissions"},
-    "PermissionRequest": {"updatedInput", "updatedPermissions", "interrupt", "permissionDecision"},
+    "PermissionRequest": {
+        "updatedInput",
+        "updatedPermissions",
+        "interrupt",
+        "permissionDecision",
+    },
     "Stop": set(),  # plain text stdout is forbidden at protocol level, not field-level
 }
 
@@ -125,7 +130,9 @@ def canonical_event_name(event_name: str | None) -> str:
     if not event_name:
         return ""
     normalized = str(event_name)
-    return EVENT_NAME_ALIASES.get(normalized, EVENT_NAME_ALIASES.get(normalized.replace("_", ""), normalized))
+    return EVENT_NAME_ALIASES.get(
+        normalized, EVENT_NAME_ALIASES.get(normalized.replace("_", ""), normalized)
+    )
 
 
 def _dict_value(payload: dict[str, Any], *keys: str) -> dict[str, Any]:
@@ -136,7 +143,9 @@ def _dict_value(payload: dict[str, Any], *keys: str) -> dict[str, Any]:
     return {}
 
 
-def parse_hook_event(payload: dict[str, Any] | None, client: str = "generic") -> HookEvent:
+def parse_hook_event(
+    payload: dict[str, Any] | None, client: str = "generic"
+) -> HookEvent:
     payload = payload or {}
     cwd_value = (
         payload.get("cwd")
@@ -144,8 +153,12 @@ def parse_hook_event(payload: dict[str, Any] | None, client: str = "generic") ->
         or payload.get("project")
         or "."
     )
-    event_name = canonical_event_name(str(payload.get("hook_event_name") or payload.get("event") or ""))
-    tool_result = _dict_value(payload, "tool_result", "toolResult", "tool_response", "toolResponse")
+    event_name = canonical_event_name(
+        str(payload.get("hook_event_name") or payload.get("event") or "")
+    )
+    tool_result = _dict_value(
+        payload, "tool_result", "toolResult", "tool_response", "toolResponse"
+    )
 
     return HookEvent(
         client=_client_name(client),
@@ -213,7 +226,9 @@ def _render_codex(response: HookResponse, canonical: str) -> dict[str, Any]:
         if response.permission_decision == "deny" or response.decision == "block":
             behavior = {
                 "behavior": "deny",
-                "message": response.reason or response.message or "blocked by Code Briefcase",
+                "message": response.reason
+                or response.message
+                or "blocked by Code Briefcase",
             }
             hook_specific["hookEventName"] = "PermissionRequest"
             hook_specific["decision"] = behavior
@@ -253,14 +268,18 @@ def _render_codex(response: HookResponse, canonical: str) -> dict[str, Any]:
         hook_specific["permissionDecision"] = "deny"
         if response.reason:
             hook_specific["permissionDecisionReason"] = response.reason
-    if hook_specific.get("additionalContext") or hook_specific.get("permissionDecision"):
+    if hook_specific.get("additionalContext") or hook_specific.get(
+        "permissionDecision"
+    ):
         rendered["hookSpecificOutput"] = hook_specific
     elif response.message:
         rendered["systemMessage"] = response.message
     return rendered
 
 
-def _render_droid(response: HookResponse, canonical: str, *, raw_payload: dict[str, Any] | None = None) -> dict[str, Any]:
+def _render_droid(
+    response: HookResponse, canonical: str, *, raw_payload: dict[str, Any] | None = None
+) -> dict[str, Any]:
     """Droid/Factory event-aware rendering per spec output matrix."""
     # Stop/SubagentStop loop prevention
     if canonical in ("Stop", "SubagentStop"):
@@ -277,7 +296,9 @@ def _render_droid(response: HookResponse, canonical: str, *, raw_payload: dict[s
         # Context via hookSpecificOutput only when context exists
         if response.additional_context or response.message:
             hook_specific: dict[str, Any] = {"hookEventName": "SessionStart"}
-            hook_specific["additionalContext"] = response.additional_context or response.message
+            hook_specific["additionalContext"] = (
+                response.additional_context or response.message
+            )
             return {"hookSpecificOutput": hook_specific}
         return {}
 
@@ -298,7 +319,10 @@ def _render_droid(response: HookResponse, canonical: str, *, raw_payload: dict[s
         # Diagnostics context only; no blocking
         if response.additional_context or response.message:
             context = response.additional_context or response.message
-            hook_specific = {"hookEventName": "PostToolUse", "additionalContext": context}
+            hook_specific = {
+                "hookEventName": "PostToolUse",
+                "additionalContext": context,
+            }
             return {"hookSpecificOutput": hook_specific}
         return {}
 
@@ -316,14 +340,24 @@ def _render_droid(response: HookResponse, canonical: str, *, raw_payload: dict[s
             return rendered
         if response.additional_context or response.message:
             context = response.additional_context or response.message
-            return {"hookSpecificOutput": {"hookEventName": "UserPromptSubmit", "additionalContext": context}}
+            return {
+                "hookSpecificOutput": {
+                    "hookEventName": "UserPromptSubmit",
+                    "additionalContext": context,
+                }
+            }
         return {}
 
     if canonical == "PreCompact":
         # Context only behind opt-in
         if response.additional_context or response.message:
             context = response.additional_context or response.message
-            return {"hookSpecificOutput": {"hookEventName": "PreCompact", "additionalContext": context}}
+            return {
+                "hookSpecificOutput": {
+                    "hookEventName": "PreCompact",
+                    "additionalContext": context,
+                }
+            }
         return {}
 
     # SubagentStart and unknown: no-op
@@ -366,9 +400,14 @@ def _render_opencode(response: HookResponse, canonical: str) -> dict[str, Any]:
     return rendered
 
 
-def _render_claude_generic(response: HookResponse, canonical: str, *, client: str = "generic") -> dict[str, Any]:
+def _render_claude_generic(
+    response: HookResponse, canonical: str, *, client: str = "generic"
+) -> dict[str, Any]:
     """Claude and generic rendering."""
-    rendered: dict[str, Any] = {"continue": True, "suppressOutput": response.suppress_output}
+    rendered: dict[str, Any] = {
+        "continue": True,
+        "suppressOutput": response.suppress_output,
+    }
     if response.message and response.message != response.additional_context:
         rendered["systemMessage"] = response.message
 

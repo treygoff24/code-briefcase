@@ -1,4 +1,5 @@
 from __future__ import annotations
+from typing import Any
 
 import argparse
 import importlib.util
@@ -21,14 +22,14 @@ sys.modules[SPEC.name] = checkpoint
 SPEC.loader.exec_module(checkpoint)
 
 
-def test_percentile_uses_conservative_nearest_rank():
+def test_percentile_uses_conservative_nearest_rank() -> None:
     values = [10, 20, 30, 40]
 
     assert checkpoint.nearest_rank(values, 50) == 20
     assert checkpoint.nearest_rank(values, 95) == 40
 
 
-def test_load_jsonl_tolerates_missing_and_malformed_lines(tmp_path):
+def test_load_jsonl_tolerates_missing_and_malformed_lines(tmp_path: Any) -> None:
     missing = tmp_path / "missing.jsonl"
     assert checkpoint.load_jsonl(missing) == ([], 0)
 
@@ -40,7 +41,9 @@ def test_load_jsonl_tolerates_missing_and_malformed_lines(tmp_path):
     assert errors == 1
 
 
-def test_probe_selection_excludes_generated_and_declaration_files(tmp_path):
+def test_probe_selection_excludes_generated_and_declaration_files(
+    tmp_path: Any,
+) -> None:
     for rel in (
         "node_modules/pkg/a.ts",
         "dist/a.ts",
@@ -55,7 +58,7 @@ def test_probe_selection_excludes_generated_and_declaration_files(tmp_path):
     assert checkpoint.choose_probe_file(tmp_path) == tmp_path / "src" / "app.ts"
 
 
-def test_checkpoint_report_redacts_paths_by_default(tmp_path):
+def test_checkpoint_report_redacts_paths_by_default(tmp_path: Any) -> None:
     repo = tmp_path / "secret-repo-name"
     repo.mkdir()
     probe = repo / "src" / "app.ts"
@@ -91,7 +94,7 @@ def test_checkpoint_report_redacts_paths_by_default(tmp_path):
     assert project_hash(repo.resolve()) in raw
 
 
-def test_dry_run_does_not_modify_repo(tmp_path):
+def test_dry_run_does_not_modify_repo(tmp_path: Any) -> None:
     repo = tmp_path / "repo"
     repo.mkdir()
     probe = repo / "app.ts"
@@ -124,14 +127,16 @@ def test_dry_run_does_not_modify_repo(tmp_path):
     assert report["repos"][0]["skipped_reason"] == "exercise_edits_required"
 
 
-def test_probe_file_is_restored_when_hook_command_fails(tmp_path, monkeypatch):
+def test_probe_file_is_restored_when_hook_command_fails(
+    tmp_path: Any, monkeypatch: Any
+) -> None:
     repo = tmp_path / "repo"
     repo.mkdir()
     probe = repo / "app.ts"
     probe.write_text("const x = 1;\n", encoding="utf-8")
     before = probe.read_bytes()
 
-    def fail_hook(**_kwargs):
+    def fail_hook(**_kwargs: Any) -> None:
         raise RuntimeError("boom")
 
     monkeypatch.setattr(checkpoint, "run_post_edit_hook", fail_hook)
@@ -163,14 +168,16 @@ def test_probe_file_is_restored_when_hook_command_fails(tmp_path, monkeypatch):
     assert report["failures"] == ["boom"]
 
 
-def test_checkpoint_trusts_repo_binaries_only_for_watch_samples(tmp_path, monkeypatch):
+def test_checkpoint_trusts_repo_binaries_only_for_watch_samples(
+    tmp_path: Any, monkeypatch: Any
+) -> None:
     repo = tmp_path / "repo"
     repo.mkdir()
     probe = repo / "app.ts"
     probe.write_text("const x = 1;\n", encoding="utf-8")
     seen_envs = []
 
-    def fake_run(*_args, **kwargs):
+    def fake_run(*_args: Any, **kwargs: Any) -> Any:
         seen_envs.append(kwargs["env"])
         return subprocess.CompletedProcess(args=kwargs.get("args", []), returncode=0)
 
@@ -193,7 +200,7 @@ def test_checkpoint_trusts_repo_binaries_only_for_watch_samples(tmp_path, monkey
     assert seen_envs[1]["CODE_BRIEFCASE_WATCH_DIAGNOSTICS_TRUST_REPO_BINARIES"] == "0"
 
 
-def test_watch_hook_metrics_count_pending_stale_and_fresh():
+def test_watch_hook_metrics_count_pending_stale_and_fresh() -> None:
     samples = [
         {
             "watch_diagnostics_used": True,
@@ -220,7 +227,7 @@ def test_watch_hook_metrics_count_pending_stale_and_fresh():
     assert checkpoint.watch_hook_samples(samples) == samples[:3]
 
 
-def test_fresh_settle_metrics_come_from_recheck_complete_events(tmp_path):
+def test_fresh_settle_metrics_come_from_recheck_complete_events(tmp_path: Any) -> None:
     telemetry = tmp_path / "telemetry.jsonl"
     telemetry.write_text(
         "\n".join(
@@ -258,7 +265,9 @@ def test_fresh_settle_metrics_come_from_recheck_complete_events(tmp_path):
     assert checkpoint.settle_durations(records, "abc") == [240, 410]
 
 
-def test_repo_report_stops_daemon_before_watch_phase(tmp_path, monkeypatch):
+def test_repo_report_stops_daemon_before_watch_phase(
+    tmp_path: Any, monkeypatch: Any
+) -> None:
     repo = tmp_path / "repo"
     repo.mkdir()
     probe = repo / "src" / "app.ts"
@@ -270,7 +279,7 @@ def test_repo_report_stops_daemon_before_watch_phase(tmp_path, monkeypatch):
         checkpoint, "stop_project_daemon", lambda _repo: events.append("stop")
     )
 
-    def fake_run_post_edit_hook(**kwargs):
+    def fake_run_post_edit_hook(**kwargs: Any) -> Any:
         events.append("watch" if kwargs["watch_enabled"] else "baseline")
         return (
             10,
@@ -316,8 +325,8 @@ def test_repo_report_stops_daemon_before_watch_phase(tmp_path, monkeypatch):
     assert events[-1] == "stop"
 
 
-def test_thresholds_fail_without_settle_events():
-    report = {
+def test_thresholds_fail_without_settle_events() -> None:
+    report: Any = {
         "skipped_reason": None,
         "failures": [],
         "metrics": {
@@ -342,8 +351,8 @@ def test_thresholds_fail_without_settle_events():
     assert report["passed"] is False
 
 
-def test_thresholds_fail_on_watcher_runtime_errors():
-    report = {
+def test_thresholds_fail_on_watcher_runtime_errors() -> None:
+    report: Any = {
         "skipped_reason": None,
         "failures": [],
         "metrics": {
@@ -368,7 +377,7 @@ def test_thresholds_fail_on_watcher_runtime_errors():
     assert report["passed"] is False
 
 
-def test_settle_durations_ignores_historical_records():
+def test_settle_durations_ignores_historical_records() -> None:
     records = [
         {
             "event": "watch-diagnostics-event",
@@ -390,7 +399,7 @@ def test_settle_durations_ignores_historical_records():
     assert checkpoint.settle_durations(current_records, "abc") == [120]
 
 
-def test_wait_for_settle_event_since_uses_tail_records(tmp_path):
+def test_wait_for_settle_event_since_uses_tail_records(tmp_path: Any) -> None:
     telemetry = tmp_path / "telemetry.jsonl"
     telemetry.write_text(
         json.dumps(
@@ -435,7 +444,9 @@ def test_wait_for_settle_event_since_uses_tail_records(tmp_path):
     )
 
 
-def test_repo_report_excludes_warmup_settle_events(tmp_path, monkeypatch):
+def test_repo_report_excludes_warmup_settle_events(
+    tmp_path: Any, monkeypatch: Any
+) -> None:
     repo = tmp_path / "repo"
     repo.mkdir()
     probe = repo / "src" / "app.ts"
@@ -450,7 +461,7 @@ def test_repo_report_excludes_warmup_settle_events(tmp_path, monkeypatch):
         with path.open("a", encoding="utf-8") as handle:
             handle.write(json.dumps(record) + "\n")
 
-    def fake_run_post_edit_hook(**kwargs):
+    def fake_run_post_edit_hook(**kwargs: Any) -> Any:
         telemetry_path = kwargs["telemetry_path"]
         watch_enabled = kwargs["watch_enabled"]
         post_edit = {
@@ -510,8 +521,8 @@ def test_repo_report_excludes_warmup_settle_events(tmp_path, monkeypatch):
 
 
 def test_repo_report_fails_when_warmup_settle_never_arrives_before_measurement(
-    tmp_path, monkeypatch
-):
+    tmp_path: Any, monkeypatch: Any
+) -> None:
     repo = tmp_path / "repo"
     repo.mkdir()
     probe = repo / "src" / "app.ts"
@@ -526,7 +537,7 @@ def test_repo_report_fails_when_warmup_settle_never_arrives_before_measurement(
         with path.open("a", encoding="utf-8") as handle:
             handle.write(json.dumps(record) + "\n")
 
-    def fake_run_post_edit_hook(**kwargs):
+    def fake_run_post_edit_hook(**kwargs: Any) -> Any:
         nonlocal watch_calls
         telemetry_path = kwargs["telemetry_path"]
         watch_enabled = kwargs["watch_enabled"]
@@ -595,7 +606,9 @@ def test_repo_report_fails_when_warmup_settle_never_arrives_before_measurement(
     assert watch_calls == 1
 
 
-def test_watch_phase_restores_probe_once_after_accumulated_edits(tmp_path, monkeypatch):
+def test_watch_phase_restores_probe_once_after_accumulated_edits(
+    tmp_path: Any, monkeypatch: Any
+) -> None:
     repo = tmp_path / "repo"
     repo.mkdir()
     probe = repo / "src" / "app.ts"
@@ -606,7 +619,7 @@ def test_watch_phase_restores_probe_once_after_accumulated_edits(tmp_path, monke
     monkeypatch.setattr(checkpoint, "git_clean", lambda _repo: True)
     monkeypatch.setattr(checkpoint, "stop_project_daemon", lambda _repo: None)
 
-    def fake_run_post_edit_hook(**kwargs):
+    def fake_run_post_edit_hook(**kwargs: Any) -> Any:
         seen_contents.append(probe.read_bytes())
         return (
             10,
@@ -657,7 +670,9 @@ def test_watch_phase_restores_probe_once_after_accumulated_edits(tmp_path, monke
     assert probe.read_bytes() == original
 
 
-def test_report_counts_watch_statuses_and_settle_events_consistently(tmp_path):
+def test_report_counts_watch_statuses_and_settle_events_consistently(
+    tmp_path: Any,
+) -> None:
     repo = tmp_path / "repo"
     repo.mkdir()
     digest = checkpoint.project_hash(repo.resolve())
@@ -716,7 +731,7 @@ def test_report_counts_watch_statuses_and_settle_events_consistently(tmp_path):
     assert summary["runtime_errors"] == 1
 
 
-def test_fail_on_threshold_exits_nonzero(tmp_path, monkeypatch):
+def test_fail_on_threshold_exits_nonzero(tmp_path: Any, monkeypatch: Any) -> None:
     report = {
         "summary": {"passed": False, "failures": ["fixture:watch_hook_p50>200"]},
     }

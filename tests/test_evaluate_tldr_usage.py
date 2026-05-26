@@ -1,4 +1,5 @@
 from __future__ import annotations
+from typing import Any
 
 import json
 import subprocess
@@ -37,18 +38,21 @@ from scripts.evaluate_tldr_usage import (  # noqa: E402
 FIXTURES = Path(__file__).parent / "fixtures" / "eval"
 
 
-def test_load_jsonl_tolerates_malformed_lines():
+def test_load_jsonl_tolerates_malformed_lines() -> None:
     records, errors = load_jsonl(FIXTURES / "codex_session.jsonl")
     assert len(records) >= 8
     assert errors == 1
 
 
-def test_parse_codex_fixture_tokens_and_tools():
+def test_parse_codex_fixture_tokens_and_tools() -> None:
     summary = parse_codex_file(FIXTURES / "codex_session.jsonl", cohort="treatment")
     assert summary is not None
     assert summary.session_id == "codex-fixture-1"
     assert summary.tokens.total_tokens > 0
-    assert summary.tokens.non_cached_input_tokens == summary.tokens.input_tokens - summary.tokens.cached_input_tokens
+    assert (
+        summary.tokens.non_cached_input_tokens
+        == summary.tokens.input_tokens - summary.tokens.cached_input_tokens
+    )
     assert summary.tools.by_category["explore"] >= 1
     assert summary.tools.by_category["edit"] >= 1
     assert summary.tools.by_category["verify"] >= 1
@@ -57,13 +61,13 @@ def test_parse_codex_fixture_tokens_and_tools():
     assert summary.unknown_records >= 1
 
 
-def test_codex_ignores_function_call_output_for_tool_counts():
+def test_codex_ignores_function_call_output_for_tool_counts() -> None:
     summary = parse_codex_file(FIXTURES / "codex_session.jsonl", cohort="treatment")
     assert summary is not None
     assert summary.tools.total_calls == 3
 
 
-def test_apply_token_count_treats_monotonic_totals_as_cumulative():
+def test_apply_token_count_treats_monotonic_totals_as_cumulative() -> None:
     tokens = TokenTotals()
     apply_token_count(tokens, {"input_tokens": 1000, "total_tokens": 1500})
     apply_token_count(tokens, {"input_tokens": 1200, "total_tokens": 1800})
@@ -71,7 +75,7 @@ def test_apply_token_count_treats_monotonic_totals_as_cumulative():
     assert tokens.total_tokens == 1800
 
 
-def test_extract_token_usage_reads_current_codex_nested_shape():
+def test_extract_token_usage_reads_current_codex_nested_shape() -> None:
     payload = {
         "type": "token_count",
         "info": {
@@ -95,7 +99,7 @@ def test_extract_token_usage_reads_current_codex_nested_shape():
     assert tokens.total_tokens == 1200
 
 
-def test_cumulative_token_usage_uses_max_observed_total_after_small_dip():
+def test_cumulative_token_usage_uses_max_observed_total_after_small_dip() -> None:
     tokens = TokenTotals()
     apply_cumulative_token_count(tokens, {"input_tokens": 1000, "total_tokens": 1200})
     apply_cumulative_token_count(tokens, {"input_tokens": 990, "total_tokens": 1190})
@@ -104,18 +108,18 @@ def test_cumulative_token_usage_uses_max_observed_total_after_small_dip():
     assert tokens.total_tokens == 1200
 
 
-def test_parse_tool_arguments_accepts_codex_json_string_arguments():
+def test_parse_tool_arguments_accepts_codex_json_string_arguments() -> None:
     parsed = parse_tool_arguments('{"cmd":"rg -n main app.py","yield_time_ms":1000}')
 
     assert parsed["cmd"] == "rg -n main app.py"
 
 
-def test_path_context_hit_avoids_unsafe_substring_matches():
+def test_path_context_hit_avoids_unsafe_substring_matches() -> None:
     assert not path_context_hit("app", {"wrapper/app.py"})
     assert path_context_hit("app.py", {"src/app.py"})
 
 
-def test_redacted_path_context_hit_matches_hashed_session_paths():
+def test_redacted_path_context_hit_matches_hashed_session_paths() -> None:
     codex = parse_codex_file(FIXTURES / "codex_session.jsonl", cohort="treatment")
     assert codex is not None
     repo = normalize_cwd(codex.cwd)
@@ -140,10 +144,12 @@ def test_redacted_path_context_hit_matches_hashed_session_paths():
         session_id=None,
     )
 
-    assert telemetry_context_hit(trigger, session=codex, record=record, later_reads={"src/app.py"})
+    assert telemetry_context_hit(
+        trigger, session=codex, record=record, later_reads={"src/app.py"}
+    )
 
 
-def test_match_telemetry_redacted_project_uses_project_hash():
+def test_match_telemetry_redacted_project_uses_project_hash() -> None:
     codex = parse_codex_file(FIXTURES / "codex_session.jsonl", cohort="treatment")
     assert codex is not None
     repo_hash = project_hash(normalize_cwd(codex.cwd))
@@ -170,7 +176,7 @@ def test_match_telemetry_redacted_project_uses_project_hash():
     assert unmatched == []
 
 
-def test_parse_claude_fixture_hooks_and_tools():
+def test_parse_claude_fixture_hooks_and_tools() -> None:
     summary = parse_claude_file(FIXTURES / "claude_session.jsonl", cohort="treatment")
     assert summary is not None
     assert summary.session_id == "claude-fixture-1"
@@ -181,22 +187,26 @@ def test_parse_claude_fixture_hooks_and_tools():
     assert summary.unknown_records >= 1
 
 
-def test_parse_telemetry_fixture_statuses():
+def test_parse_telemetry_fixture_statuses() -> None:
     records = parse_telemetry_file(FIXTURES / "tldr_telemetry.jsonl")
     statuses = {record.status for record in records}
     assert statuses >= {"ok", "skipped"}
 
 
-def test_match_telemetry_by_session_id():
+def test_match_telemetry_by_session_id() -> None:
     codex = parse_codex_file(FIXTURES / "codex_session.jsonl", cohort="treatment")
     claude = parse_claude_file(FIXTURES / "claude_session.jsonl", cohort="treatment")
+    assert codex is not None
+    assert claude is not None
     telemetry = parse_telemetry_file(FIXTURES / "tldr_telemetry.jsonl")
     matched, unmatched, hit_stats = match_telemetry([codex, claude], telemetry)
     assert len(matched) >= 2
     assert hit_stats["trigger_total"] >= 1
 
 
-def test_resolve_claude_roots_accepts_repeated_and_comma_separated_values(tmp_path):
+def test_resolve_claude_roots_accepts_repeated_and_comma_separated_values(
+    tmp_path: Any,
+) -> None:
     work = tmp_path / "claude-work"
     personal = tmp_path / "claude-personal"
 
@@ -205,10 +215,14 @@ def test_resolve_claude_roots_accepts_repeated_and_comma_separated_values(tmp_pa
     assert roots == [work, personal]
 
 
-def test_discover_sessions_reads_nested_codex_archives(tmp_path):
-    archived_session = tmp_path / "codex" / "archived_sessions" / "old" / "codex_session.jsonl"
+def test_discover_sessions_reads_nested_codex_archives(tmp_path: Any) -> None:
+    archived_session = (
+        tmp_path / "codex" / "archived_sessions" / "old" / "codex_session.jsonl"
+    )
     archived_session.parent.mkdir(parents=True)
-    archived_session.write_text((FIXTURES / "codex_session.jsonl").read_text(encoding="utf-8"), encoding="utf-8")
+    archived_session.write_text(
+        (FIXTURES / "codex_session.jsonl").read_text(encoding="utf-8"), encoding="utf-8"
+    )
 
     sessions = discover_sessions(
         codex_root=tmp_path / "codex",
@@ -221,28 +235,35 @@ def test_discover_sessions_reads_nested_codex_archives(tmp_path):
     assert [session.session_id for session in sessions] == ["codex-fixture-1"]
 
 
-def test_session_path_may_overlap_window_skips_dated_old_archives():
+def test_session_path_may_overlap_window_skips_dated_old_archives() -> None:
     start = datetime(2026, 5, 19, tzinfo=timezone.utc)
     end = datetime(2026, 5, 21, tzinfo=timezone.utc)
 
     assert session_path_may_overlap_window(
-        Path("archived_sessions/keep-codex-fast/2026/05/20/rollout-2026-05-20T12-00-00.jsonl"),
+        Path(
+            "archived_sessions/keep-codex-fast/2026/05/20/rollout-2026-05-20T12-00-00.jsonl"
+        ),
         start,
         end,
     )
     assert not session_path_may_overlap_window(
-        Path("archived_sessions/keep-codex-fast/2025/11/04/rollout-2025-11-04T12-00-00.jsonl"),
+        Path(
+            "archived_sessions/keep-codex-fast/2025/11/04/rollout-2025-11-04T12-00-00.jsonl"
+        ),
         start,
         end,
     )
 
 
-def test_verdict_insufficient_data_with_small_sample():
+def test_verdict_insufficient_data_with_small_sample() -> None:
     codex = parse_codex_file(FIXTURES / "codex_session.jsonl", cohort="baseline")
+    assert codex is not None
     assert verdict_for([codex], [], has_annotations=False) == "insufficient data"
 
 
-def test_build_report_filters_telemetry_outside_window(tmp_path, monkeypatch):
+def test_build_report_filters_telemetry_outside_window(
+    tmp_path: Any, monkeypatch: Any
+) -> None:
     from scripts.evaluate_tldr_usage import TelemetryRecord, build_report
     from argparse import Namespace
 
@@ -310,7 +331,7 @@ def test_build_report_filters_telemetry_outside_window(tmp_path, monkeypatch):
     assert matched[0]["session_id"] == "codex-fixture-1"
 
 
-def test_parse_telemetry_v2_candidate_metadata():
+def test_parse_telemetry_v2_candidate_metadata() -> None:
     records = parse_telemetry_file(FIXTURES / "backfill_tldr_telemetry.jsonl")
     v2 = [record for record in records if (record.schema_version or 1) >= 2]
     assert v2
@@ -319,7 +340,7 @@ def test_parse_telemetry_v2_candidate_metadata():
     assert v2[0].context_kind == "read_nav_map"
 
 
-def test_parse_telemetry_tolerates_malformed_schema_fields(tmp_path):
+def test_parse_telemetry_tolerates_malformed_schema_fields(tmp_path: Any) -> None:
     telemetry = tmp_path / "telemetry.jsonl"
     telemetry.write_text(
         json.dumps(
@@ -350,13 +371,13 @@ def test_parse_telemetry_tolerates_malformed_schema_fields(tmp_path):
     assert records[0].candidate_files == [{"path": "src/auth.py"}]
 
 
-def test_parse_telemetry_v1_fixture_without_schema_version():
+def test_parse_telemetry_v1_fixture_without_schema_version() -> None:
     records = parse_telemetry_file(FIXTURES / "tldr_telemetry.jsonl")
     assert records
     assert all(record.schema_version is None for record in records)
 
 
-def test_evaluate_script_writes_markdown_and_json(tmp_path):
+def test_evaluate_script_writes_markdown_and_json(tmp_path: Any) -> None:
     script = Path(__file__).resolve().parents[1] / "scripts" / "evaluate_tldr_usage.py"
     out_md = tmp_path / "report.md"
     out_json = tmp_path / "report.json"

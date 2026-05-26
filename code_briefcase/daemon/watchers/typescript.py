@@ -165,7 +165,9 @@ class TypeScriptWatchAdapter(WatchAdapter):
                 "env": env,
             }
             if os.name == "nt":  # pragma: no cover - exercised on Windows
-                kwargs["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
+                kwargs["creationflags"] = getattr(
+                    subprocess, "CREATE_NEW_PROCESS_GROUP", 0
+                )
             else:
                 kwargs["start_new_session"] = True
             try:
@@ -258,7 +260,7 @@ class TypeScriptWatchAdapter(WatchAdapter):
             return
         try:
             if os.name == "nt":  # pragma: no cover - exercised on Windows
-                process.send_signal(signal.CTRL_BREAK_EVENT)
+                process.send_signal(getattr(signal, "CTRL_BREAK_EVENT", signal.SIGTERM))
             else:
                 os.killpg(process.pid, signal.SIGTERM)
         except Exception:
@@ -810,8 +812,11 @@ def _write_registry(project: Path, entries: list[dict[str, Any]]) -> None:
 
 
 def _entry_pid(entry: dict[str, Any]) -> int | None:
+    raw_pid = entry.get("pid")
+    if raw_pid is None:
+        return None
     try:
-        return int(entry.get("pid"))
+        return int(raw_pid)
     except (TypeError, ValueError):
         return None
 
@@ -900,8 +905,11 @@ def _looks_like_registered_watcher(pid: int, entry: dict[str, Any]) -> bool:
 
 
 def _entry_started_at(entry: dict[str, Any]) -> float | None:
+    raw_started_at = entry.get("started_at")
+    if raw_started_at is None:
+        return None
     try:
-        return float(entry.get("started_at"))
+        return float(raw_started_at)
     except (TypeError, ValueError):
         return None
 

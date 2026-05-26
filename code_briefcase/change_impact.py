@@ -207,7 +207,7 @@ def find_affected_tests(
             )
 
             # Walk the caller tree and collect test files
-            def collect_test_files(node: dict):
+            def collect_test_files(node: dict) -> None:
                 if not node:
                     return
                 file_path = node.get("file", "")

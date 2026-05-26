@@ -40,9 +40,27 @@ EXPLORE_PATTERNS = (
     r"\bopen\b",
 )
 EDIT_PATTERNS = (r"\bapply_patch\b", r"\bwrite\b", r"\bedit\b", r"\bpython\b.*\.py")
-VERIFY_PATTERNS = (r"\bpytest\b", r"\bnpm test\b", r"\bpnpm\b", r"\bruff\b", r"\bmypy\b", r"\bnpm run\b")
-GIT_PATTERNS = (r"\bgit status\b", r"\bgit diff\b", r"\bgit log\b", r"\bgit add\b", r"\bgit commit\b")
-CODE_BRIEFCASE_PATTERNS = (r"\btldr\b", r"\bcode-briefcase-mcp\b", r"Code Briefcase", r"hook_success")
+VERIFY_PATTERNS = (
+    r"\bpytest\b",
+    r"\bnpm test\b",
+    r"\bpnpm\b",
+    r"\bruff\b",
+    r"\bmypy\b",
+    r"\bnpm run\b",
+)
+GIT_PATTERNS = (
+    r"\bgit status\b",
+    r"\bgit diff\b",
+    r"\bgit log\b",
+    r"\bgit add\b",
+    r"\bgit commit\b",
+)
+CODE_BRIEFCASE_PATTERNS = (
+    r"\btldr\b",
+    r"\bcode-briefcase-mcp\b",
+    r"Code Briefcase",
+    r"hook_success",
+)
 
 
 @dataclass
@@ -71,7 +89,9 @@ class ToolMetrics:
     _seen_commands: list[str] = field(default_factory=list)
     _normalized_commands: list[str] = field(default_factory=list)
 
-    def record_command(self, command: str, category: str, ts: datetime | None, repo_token: str) -> None:
+    def record_command(
+        self, command: str, category: str, ts: datetime | None, repo_token: str
+    ) -> None:
         normalized = normalize_command(command, repo_token)
         if normalized in self._normalized_commands:
             self.repeated_calls += 1
@@ -216,9 +236,13 @@ def iter_session_files(root: Path, patterns: Iterable[str]) -> Iterator[Path]:
 def session_path_may_overlap_window(path: Path, start: datetime, end: datetime) -> bool:
     """Cheaply skip dated archive files that are clearly outside the report window."""
     dates = []
-    for year, month, day in re.findall(r"(?<!\d)(20\d{2})[-/](\d{2})[-/](\d{2})(?!\d)", path.as_posix()):
+    for year, month, day in re.findall(
+        r"(?<!\d)(20\d{2})[-/](\d{2})[-/](\d{2})(?!\d)", path.as_posix()
+    ):
         try:
-            dates.append(datetime(int(year), int(month), int(day), tzinfo=timezone.utc).date())
+            dates.append(
+                datetime(int(year), int(month), int(day), tzinfo=timezone.utc).date()
+            )
         except ValueError:
             continue
     if not dates:
@@ -433,7 +457,9 @@ def parse_codex_file(path: Path, cohort: str) -> SessionSummary | None:
             continue
         unknown += 1
 
-    rework.repeated_file_reads = sum(count - 1 for count in rework._file_read_counts.values() if count > 1)
+    rework.repeated_file_reads = sum(
+        count - 1 for count in rework._file_read_counts.values() if count > 1
+    )
     if start is None:
         return None
     return SessionSummary(
@@ -487,7 +513,9 @@ def parse_claude_file(path: Path, cohort: str) -> SessionSummary | None:
         if ts is not None:
             start = ts if start is None or ts < start else start
             end = ts if end is None or ts > end else end
-        session_id = str(record.get("sessionId") or record.get("session_id") or session_id)
+        session_id = str(
+            record.get("sessionId") or record.get("session_id") or session_id
+        )
         cwd = str(record.get("cwd") or record.get("project_dir") or cwd)
         repo_token = cwd
         attachment = record.get("attachment")
@@ -505,24 +533,34 @@ def parse_claude_file(path: Path, cohort: str) -> SessionSummary | None:
         for tool in _claude_tool_uses(record):
             name = str(tool.get("name") or "")
             tool_input = tool.get("input") or {}
-            command = json.dumps(tool_input) if isinstance(tool_input, dict) else str(tool_input)
+            command = (
+                json.dumps(tool_input)
+                if isinstance(tool_input, dict)
+                else str(tool_input)
+            )
             category = categorize_command(command, name)
             tools.record_command(command, category, ts, repo_token)
             if category == "edit":
                 rework.patch_attempts += 1
                 file_path = ""
                 if isinstance(tool_input, dict):
-                    file_path = str(tool_input.get("file_path") or tool_input.get("path") or "")
+                    file_path = str(
+                        tool_input.get("file_path") or tool_input.get("path") or ""
+                    )
                 if file_path:
                     tools.record_file_edit(file_path)
             if category == "explore":
                 if isinstance(tool_input, dict):
-                    file_path = str(tool_input.get("file_path") or tool_input.get("path") or "")
+                    file_path = str(
+                        tool_input.get("file_path") or tool_input.get("path") or ""
+                    )
                     if file_path:
                         tools.record_file_read(file_path)
                         rework._file_read_counts[file_path] += 1
 
-    rework.repeated_file_reads = sum(count - 1 for count in rework._file_read_counts.values() if count > 1)
+    rework.repeated_file_reads = sum(
+        count - 1 for count in rework._file_read_counts.values() if count > 1
+    )
     if start is None:
         return None
     return SessionSummary(
@@ -561,7 +599,9 @@ def parse_telemetry_file(path: Path) -> list[TelemetryRecord]:
                 error_kind=record.get("error_kind"),
                 injected_bytes=safe_int(record.get("injected_bytes")),
                 trigger_files=str_list(record.get("trigger_files")),
-                recommended_related_files=str_list(record.get("recommended_related_files")),
+                recommended_related_files=str_list(
+                    record.get("recommended_related_files")
+                ),
                 surfaced_files=str_list(record.get("surfaced_files")),
                 diagnostics_count=safe_int(record.get("diagnostics_count")),
                 daemon_state=record.get("daemon_state"),
@@ -606,7 +646,10 @@ def redacted_path_context_hit(
     target_hash = trigger.removeprefix(prefix)
     if not target_hash:
         return False
-    return any(telemetry_path_hash(session_project, item) == target_hash for item in later_reads)
+    return any(
+        telemetry_path_hash(session_project, item) == target_hash
+        for item in later_reads
+    )
 
 
 def telemetry_context_hit(
@@ -626,7 +669,9 @@ def telemetry_context_hit(
     return path_context_hit(trigger, later_reads)
 
 
-def session_matches_telemetry_project(session: SessionSummary, record: TelemetryRecord) -> bool:
+def session_matches_telemetry_project(
+    session: SessionSummary, record: TelemetryRecord
+) -> bool:
     session_project = normalize_cwd(session.cwd)
     record_project = normalize_cwd(record.project)
     if session_project == record_project:
@@ -646,7 +691,12 @@ def normalize_cwd(cwd: str) -> str:
         return str(path)
 
 
-def assign_cohort(ts: datetime, baseline_start: datetime, baseline_end: datetime, treatment_end: datetime) -> str | None:
+def assign_cohort(
+    ts: datetime,
+    baseline_start: datetime,
+    baseline_end: datetime,
+    treatment_end: datetime,
+) -> str | None:
     if baseline_start <= ts < baseline_end:
         return "baseline"
     if baseline_end <= ts < treatment_end:
@@ -664,7 +714,9 @@ def discover_sessions(
 ) -> list[SessionSummary]:
     sessions: list[SessionSummary] = []
     seen_codex_files: set[Path] = set()
-    for path in iter_session_files(codex_root, ("sessions/**/*.jsonl", "archived_sessions/**/*.jsonl")):
+    for path in iter_session_files(
+        codex_root, ("sessions/**/*.jsonl", "archived_sessions/**/*.jsonl")
+    ):
         if not session_path_may_overlap_window(path, baseline_start, treatment_end):
             continue
         try:
@@ -677,7 +729,9 @@ def discover_sessions(
         summary = parse_codex_file(path, cohort="baseline")
         if summary is None:
             continue
-        cohort = assign_cohort(summary.start, baseline_start, baseline_end, treatment_end)
+        cohort = assign_cohort(
+            summary.start, baseline_start, baseline_end, treatment_end
+        )
         if cohort is None:
             continue
         summary.cohort = cohort
@@ -695,7 +749,9 @@ def discover_sessions(
             summary = parse_claude_file(path, cohort="baseline")
             if summary is None:
                 continue
-            cohort = assign_cohort(summary.start, baseline_start, baseline_end, treatment_end)
+            cohort = assign_cohort(
+                summary.start, baseline_start, baseline_end, treatment_end
+            )
             if cohort is None:
                 continue
             summary.cohort = cohort
@@ -709,7 +765,12 @@ def match_telemetry(
     by_session = {session.session_id: session for session in sessions}
     matched: list[TelemetryRecord] = []
     unmatched: list[TelemetryRecord] = []
-    hit_stats = {"trigger_hits": 0, "trigger_total": 0, "recommended_hits": 0, "recommended_total": 0}
+    hit_stats = {
+        "trigger_hits": 0,
+        "trigger_total": 0,
+        "recommended_hits": 0,
+        "recommended_total": 0,
+    }
 
     for record in telemetry:
         session = None
@@ -721,7 +782,11 @@ def match_telemetry(
                     continue
                 if not session_matches_telemetry_project(candidate, record):
                     continue
-                if candidate.start <= record.timestamp <= (candidate.end or candidate.start):
+                if (
+                    candidate.start
+                    <= record.timestamp
+                    <= (candidate.end or candidate.start)
+                ):
                     session = candidate
                     break
         if session is None:
@@ -729,14 +794,20 @@ def match_telemetry(
             continue
         matched.append(record)
         session.tldr_hook_events += 1
-        later_reads = session.tools.unique_files_read | session.tools.unique_files_edited
+        later_reads = (
+            session.tools.unique_files_read | session.tools.unique_files_edited
+        )
         for path in record.trigger_files:
             hit_stats["trigger_total"] += 1
-            if telemetry_context_hit(path, session=session, record=record, later_reads=later_reads):
+            if telemetry_context_hit(
+                path, session=session, record=record, later_reads=later_reads
+            ):
                 hit_stats["trigger_hits"] += 1
         for path in record.recommended_related_files:
             hit_stats["recommended_total"] += 1
-            if telemetry_context_hit(path, session=session, record=record, later_reads=later_reads):
+            if telemetry_context_hit(
+                path, session=session, record=record, later_reads=later_reads
+            ):
                 hit_stats["recommended_hits"] += 1
     return matched, unmatched, hit_stats
 
@@ -746,39 +817,76 @@ def median(values: list[float]) -> float | None:
 
 
 def ratio_delta(baseline: float | None, treatment: float | None) -> str:
-    if baseline in (None, 0) or treatment is None:
+    if baseline is None or baseline == 0 or treatment is None:
         return "n/a"
     delta = (treatment - baseline) / baseline
     return f"{delta:+.1%}"
 
 
-def cohort_sessions(sessions: list[SessionSummary], client: str, cohort: str) -> list[SessionSummary]:
-    return [session for session in sessions if session.client == client and session.cohort == cohort]
+def cohort_sessions(
+    sessions: list[SessionSummary], client: str, cohort: str
+) -> list[SessionSummary]:
+    return [
+        session
+        for session in sessions
+        if session.client == client and session.cohort == cohort
+    ]
 
 
 def verdict_for(
-  sessions: list[SessionSummary],
-  telemetry: list[TelemetryRecord],
-  *,
-  has_annotations: bool,
+    sessions: list[SessionSummary],
+    telemetry: list[TelemetryRecord],
+    *,
+    has_annotations: bool,
 ) -> str:
     baseline = [session for session in sessions if session.cohort == "baseline"]
     treatment = [session for session in sessions if session.cohort == "treatment"]
-    if len(baseline) < MIN_COMPARABLE_SESSIONS or len(treatment) < MIN_COMPARABLE_SESSIONS:
+    if (
+        len(baseline) < MIN_COMPARABLE_SESSIONS
+        or len(treatment) < MIN_COMPARABLE_SESSIONS
+    ):
         return "insufficient data"
     if not has_annotations and not telemetry:
         return "proxy-only"
-    base_explore = median([session.tools.by_category["explore"] for session in baseline])
-    treat_explore = median([session.tools.by_category["explore"] for session in treatment])
-    base_tokens = median([session.tokens.total_tokens for session in baseline if session.tokens.total_tokens])
-    treat_tokens = median([session.tokens.total_tokens for session in treatment if session.tokens.total_tokens])
+    base_explore = median(
+        [session.tools.by_category["explore"] for session in baseline]
+    )
+    treat_explore = median(
+        [session.tools.by_category["explore"] for session in treatment]
+    )
+    base_tokens = median(
+        [
+            session.tokens.total_tokens
+            for session in baseline
+            if session.tokens.total_tokens
+        ]
+    )
+    treat_tokens = median(
+        [
+            session.tokens.total_tokens
+            for session in treatment
+            if session.tokens.total_tokens
+        ]
+    )
     hook_errors = sum(1 for record in telemetry if record.status == "error")
     if hook_errors and hook_errors / max(1, len(telemetry)) > 0.1:
         return "harmful"
-    if base_explore is not None and treat_explore is not None and treat_explore < base_explore * 0.9:
-        if base_tokens is None or treat_tokens is None or treat_tokens <= base_tokens * 1.05:
+    if (
+        base_explore is not None
+        and treat_explore is not None
+        and treat_explore < base_explore * 0.9
+    ):
+        if (
+            base_tokens is None
+            or treat_tokens is None
+            or treat_tokens <= base_tokens * 1.05
+        ):
             return "helpful"
-    if base_tokens is not None and treat_tokens is not None and treat_tokens > base_tokens * 1.15:
+    if (
+        base_tokens is not None
+        and treat_tokens is not None
+        and treat_tokens > base_tokens * 1.15
+    ):
         return "harmful"
     return "neutral"
 
@@ -822,7 +930,12 @@ def render_markdown(
 def _client_section(sessions: list[SessionSummary], client: str) -> list[str]:
     base = cohort_sessions(sessions, client, "baseline")
     treat = cohort_sessions(sessions, client, "treatment")
-    lines = [f"## {client.title()}", "", f"- Baseline sessions: {len(base)}", f"- Treatment sessions: {len(treat)}"]
+    lines = [
+        f"## {client.title()}",
+        "",
+        f"- Baseline sessions: {len(base)}",
+        f"- Treatment sessions: {len(treat)}",
+    ]
     if client == "codex":
         lines.append(
             f"- Median total tokens: baseline={median([s.tokens.total_tokens for s in base])}, "
@@ -840,7 +953,12 @@ def _client_section(sessions: list[SessionSummary], client: str) -> list[str]:
 
 
 def _repo_table(sessions: list[SessionSummary]) -> list[str]:
-    lines = ["## Per-repo breakdown", "", "| repo | baseline sessions | treatment sessions |", "| --- | ---: | ---: |"]
+    lines = [
+        "## Per-repo breakdown",
+        "",
+        "| repo | baseline sessions | treatment sessions |",
+        "| --- | ---: | ---: |",
+    ]
     repos: dict[str, Counter] = defaultdict(Counter)
     for session in sessions:
         repos[normalize_cwd(session.cwd)][session.cohort] += 1
@@ -851,20 +969,29 @@ def _repo_table(sessions: list[SessionSummary]) -> list[str]:
 
 
 def _daily_trends(sessions: list[SessionSummary]) -> list[str]:
-    lines = ["## Per-day trends", "", "| day | cohort | sessions | median tool calls |", "| --- | --- | ---: | ---: |"]
+    lines = [
+        "## Per-day trends",
+        "",
+        "| day | cohort | sessions | median tool calls |",
+        "| --- | --- | ---: | ---: |",
+    ]
     buckets: dict[tuple[str, str], list[SessionSummary]] = defaultdict(list)
     for session in sessions:
         buckets[(session.day, session.cohort)].append(session)
     for (day, cohort), items in sorted(buckets.items()):
         med = median([float(item.tools.total_calls) for item in items])
-        lines.append(f"| {day} | {cohort} | {len(items)} | {med if med is not None else 'n/a'} |")
+        lines.append(
+            f"| {day} | {cohort} | {len(items)} | {med if med is not None else 'n/a'} |"
+        )
     lines.append("")
     return lines
 
 
 def _top_sessions(sessions: list[SessionSummary]) -> list[str]:
     lines = ["## Highest-cost sessions", ""]
-    ranked = sorted(sessions, key=lambda session: session.tokens.total_tokens, reverse=True)[:10]
+    ranked = sorted(
+        sessions, key=lambda session: session.tokens.total_tokens, reverse=True
+    )[:10]
     for session in ranked:
         lines.append(
             f"- `{session.session_id}` ({session.client}, {session.cohort}): "
@@ -872,7 +999,9 @@ def _top_sessions(sessions: list[SessionSummary]) -> list[str]:
         )
     lines.append("")
     lines.extend(["## Most repeated-read sessions", ""])
-    ranked_reads = sorted(sessions, key=lambda session: session.rework.repeated_file_reads, reverse=True)[:10]
+    ranked_reads = sorted(
+        sessions, key=lambda session: session.rework.repeated_file_reads, reverse=True
+    )[:10]
     for session in ranked_reads:
         lines.append(
             f"- `{session.session_id}` ({session.client}, {session.cohort}): "
@@ -882,9 +1011,16 @@ def _top_sessions(sessions: list[SessionSummary]) -> list[str]:
     return lines
 
 
-def _telemetry_section(telemetry: list[TelemetryRecord], hit_stats: dict[str, Any]) -> list[str]:
+def _telemetry_section(
+    telemetry: list[TelemetryRecord], hit_stats: dict[str, Any]
+) -> list[str]:
     if not telemetry:
-        return ["## Code Briefcase hook reliability", "", "_No telemetry found (proxy-only from agent logs)._", ""]
+        return [
+            "## Code Briefcase hook reliability",
+            "",
+            "_No telemetry found (proxy-only from agent logs)._",
+            "",
+        ]
     durations = [record.duration_ms for record in telemetry]
     statuses = Counter(record.status for record in telemetry)
     lines = [
@@ -902,16 +1038,24 @@ def _telemetry_section(telemetry: list[TelemetryRecord], hit_stats: dict[str, An
     return lines
 
 
-def _recommendations(sessions: list[SessionSummary], telemetry: list[TelemetryRecord]) -> list[str]:
+def _recommendations(
+    sessions: list[SessionSummary], telemetry: list[TelemetryRecord]
+) -> list[str]:
     lines = ["## What to try next", ""]
     if any(record.status == "error" for record in telemetry):
         lines.append("- Investigate hook errors in telemetry before expanding rollout.")
     if any(session.tools.by_category["explore"] > 20 for session in sessions):
-        lines.append("- High explore volume: tighten pre-read bypass rules or increase nav-map budgets.")
+        lines.append(
+            "- High explore volume: tighten pre-read bypass rules or increase nav-map budgets."
+        )
     if not telemetry:
-        lines.append("- Enable `CODE_BRIEFCASE_TELEMETRY=1` during dogfood to unlock hook latency and injection metrics.")
+        lines.append(
+            "- Enable `CODE_BRIEFCASE_TELEMETRY=1` during dogfood to unlock hook latency and injection metrics."
+        )
     if not lines[-1].startswith("-"):
-        lines.append("- Continue proxy-only monitoring until sample sizes reach 20+ sessions per cohort.")
+        lines.append(
+            "- Continue proxy-only monitoring until sample sizes reach 20+ sessions per cohort."
+        )
     lines.append("")
     return lines
 
@@ -921,8 +1065,14 @@ def build_report(args: argparse.Namespace) -> dict[str, Any]:
     treatment_start = parse_timestamp(args.treatment_start)
     if baseline_start is None or treatment_start is None:
         raise SystemExit("Invalid baseline or treatment timestamp")
-    baseline_end = parse_timestamp(args.baseline_end) if args.baseline_end else treatment_start
-    treatment_end = parse_timestamp(args.treatment_end) if args.treatment_end else datetime.now(timezone.utc)
+    baseline_end = (
+        parse_timestamp(args.baseline_end) if args.baseline_end else treatment_start
+    )
+    treatment_end = (
+        parse_timestamp(args.treatment_end)
+        if args.treatment_end
+        else datetime.now(timezone.utc)
+    )
     if baseline_end is None or treatment_end is None:
         raise SystemExit("Invalid end timestamp")
 
@@ -952,6 +1102,7 @@ def build_report(args: argparse.Namespace) -> dict[str, Any]:
         treatment_end=treatment_end,
         has_annotations=has_annotations,
     )
+
     def session_payload(session: SessionSummary) -> dict[str, Any]:
         data = asdict(session)
         data["tools"]["by_category"] = dict(session.tools.by_category)
@@ -986,7 +1137,9 @@ def _outcome_rollup_summary(
         for session in sessions
         if session.rework.failed_commands >= 3 or session.parse_errors > 2
     )
-    telemetry_session_ids = {record.session_id for record in telemetry if record.session_id}
+    telemetry_session_ids = {
+        record.session_id for record in telemetry if record.session_id
+    }
     proxy_only_sessions = sum(
         1 for session in sessions if session.session_id not in telemetry_session_ids
     )
@@ -994,12 +1147,16 @@ def _outcome_rollup_summary(
         "recommendation_hit_rate": _safe_rate(
             hit_stats["recommended_hits"], hit_stats["recommended_total"]
         ),
-        "surfaced_hit_rate": _safe_rate(hit_stats["surfaced_hits"], hit_stats["surfaced_total"]),
+        "surfaced_hit_rate": _safe_rate(
+            hit_stats["surfaced_hits"], hit_stats["surfaced_total"]
+        ),
         "proxy_only_sessions": proxy_only_sessions,
         "harmful_sessions": harmful_sessions,
         "telemetry_records": len(telemetry),
         "candidate_records": sum(1 for record in telemetry if record.candidate_files),
-        "v2_records": sum(1 for record in telemetry if (record.schema_version or 1) >= 2),
+        "v2_records": sum(
+            1 for record in telemetry if (record.schema_version or 1) >= 2
+        ),
     }
 
 
@@ -1017,14 +1174,20 @@ def _rollup_hit_stats(
         session = by_session.get(record.session_id or "")
         if session is None:
             continue
-        later_reads = session.tools.unique_files_read | session.tools.unique_files_edited
+        later_reads = (
+            session.tools.unique_files_read | session.tools.unique_files_edited
+        )
         for path in record.recommended_related_files:
             stats["recommended_total"] += 1
-            if telemetry_context_hit(path, session=session, record=record, later_reads=later_reads):
+            if telemetry_context_hit(
+                path, session=session, record=record, later_reads=later_reads
+            ):
                 stats["recommended_hits"] += 1
         for path in record.surfaced_files:
             stats["surfaced_total"] += 1
-            if telemetry_context_hit(path, session=session, record=record, later_reads=later_reads):
+            if telemetry_context_hit(
+                path, session=session, record=record, later_reads=later_reads
+            ):
                 stats["surfaced_hits"] += 1
     return stats
 
@@ -1036,7 +1199,9 @@ def _safe_rate(hits: int, total: int) -> float | None:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Evaluate Code Briefcase efficacy from local agent logs.")
+    parser = argparse.ArgumentParser(
+        description="Evaluate Code Briefcase efficacy from local agent logs."
+    )
     parser.add_argument("--baseline-start", required=True)
     parser.add_argument("--treatment-start", required=True)
     parser.add_argument("--baseline-end")
@@ -1056,7 +1221,9 @@ def main() -> int:
         dest="tldr_telemetry",
         default="~/.code-briefcase/telemetry.jsonl",
     )
-    parser.add_argument("--annotations", default="reports/code-briefcase-efficacy-annotations.jsonl")
+    parser.add_argument(
+        "--annotations", default="reports/code-briefcase-efficacy-annotations.jsonl"
+    )
     parser.add_argument("--out", required=True)
     parser.add_argument("--json-out")
     parser.add_argument("--rollups-json")
@@ -1069,7 +1236,9 @@ def main() -> int:
     if args.json_out:
         json_path = Path(args.json_out).expanduser()
         json_path.parent.mkdir(parents=True, exist_ok=True)
-        json_path.write_text(json.dumps(report["json"], indent=2, default=str), encoding="utf-8")
+        json_path.write_text(
+            json.dumps(report["json"], indent=2, default=str), encoding="utf-8"
+        )
     return 0
 
 

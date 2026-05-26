@@ -9,6 +9,7 @@ These operate on the call graph from cross_file_calls.py.
 """
 
 from __future__ import annotations
+from typing import Any
 
 from collections import defaultdict
 from dataclasses import dataclass
@@ -26,15 +27,15 @@ class FunctionRef:
     file: str
     name: str
 
-    def __hash__(self):
+    def __hash__(self) -> Any:
         return hash((self.file, self.name))
 
-    def __eq__(self, other):
+    def __eq__(self, other: Any) -> Any:
         if not isinstance(other, FunctionRef):
             return False
         return self.file == other.file and self.name == other.name
 
-    def __repr__(self):
+    def __repr__(self) -> Any:
         return f"{self.file}:{self.name}"
 
 
@@ -165,7 +166,7 @@ def _build_caller_tree(
 
     visited.add(func)
 
-    tree = {
+    tree: dict[str, Any] = {
         "function": func.name,
         "file": func.file,
         "caller_count": len(callers),
@@ -301,7 +302,9 @@ def architecture_analysis(call_graph: "ProjectCallGraph") -> dict:
             middle_layer.append(func)
 
     # Analyze directory patterns
-    dir_stats = defaultdict(lambda: {"calls_out": 0, "calls_in": 0, "functions": []})
+    dir_stats: Any = defaultdict(
+        lambda: {"calls_out": 0, "calls_in": 0, "functions": []}
+    )
 
     for func in all_in_graph:
         dir_name = str(Path(func.file).parent) if "/" in func.file else "."

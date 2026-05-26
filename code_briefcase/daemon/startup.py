@@ -118,8 +118,11 @@ def _is_process_running(pid: int) -> bool:
         # Windows: use tasklist or ctypes
         try:
             import ctypes
+
             kernel32 = ctypes.windll.kernel32
-            handle = kernel32.OpenProcess(0x1000, False, pid)  # PROCESS_QUERY_LIMITED_INFORMATION
+            handle = kernel32.OpenProcess(
+                0x1000, False, pid
+            )  # PROCESS_QUERY_LIMITED_INFORMATION
             if handle:
                 kernel32.CloseHandle(handle)
                 return True
@@ -232,7 +235,6 @@ def _is_socket_connectable(project: Path, timeout: float = 1.0) -> bool:
         return False
 
 
-
 def _is_daemon_alive(project: Path, retries: int = 3, delay: float = 0.1) -> bool:
     """Check if daemon is alive using file lock on PID file.
 
@@ -295,7 +297,9 @@ def _is_daemon_alive(project: Path, retries: int = 3, delay: float = 0.1) -> boo
     return False
 
 
-def _create_client_socket(daemon: "TLDRDaemon", *, connect_timeout_ms: int | None = None) -> socket.socket:
+def _create_client_socket(
+    daemon: "TLDRDaemon", *, connect_timeout_ms: int | None = None
+) -> socket.socket:
     """Create appropriate client socket for platform.
 
     Args:
@@ -384,6 +388,7 @@ def start_daemon(
             # Windows: Use subprocess to run in background
             # Release our lock - the subprocess will acquire its own
             import subprocess
+
             try:
                 msvcrt.locking(pidfile.fileno(), msvcrt.LK_UNLCK, 1)
             except Exception:
@@ -399,7 +404,7 @@ def start_daemon(
             try:
                 with open(lock_path, "w") as lock_file:
                     # Windows locking: try to acquire lock
-                    # msvcrt.locking raises OSError if locked when using LK_NBLCK, 
+                    # msvcrt.locking raises OSError if locked when using LK_NBLCK,
                     # or blocks 10s with LK_RLCK. We want to wait until acquired.
                     start_lock = time.time()
                     while True:
@@ -412,7 +417,7 @@ def start_daemon(
                                 announce("Timeout waiting for daemon lock")
                                 return
                             time.sleep(0.1)
-                    
+
                     try:
                         # Re-check if daemon is alive (race condition handling)
                         if _is_daemon_alive(project):
@@ -428,9 +433,16 @@ def start_daemon(
                         startupinfo.wShowWindow = subprocess.SW_HIDE
 
                         proc = subprocess.Popen(
-                            [sys.executable, "-m", "code_briefcase.daemon", str(project), "--foreground"],
+                            [
+                                sys.executable,
+                                "-m",
+                                "code_briefcase.daemon",
+                                str(project),
+                                "--foreground",
+                            ],
                             startupinfo=startupinfo,
-                            creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NO_WINDOW,
+                            creationflags=subprocess.DETACHED_PROCESS
+                            | subprocess.CREATE_NO_WINDOW,
                             stdout=subprocess.DEVNULL,
                             stderr=subprocess.DEVNULL,
                         )
@@ -441,7 +453,9 @@ def start_daemon(
                         connected = False
                         while time.time() - start_wait < 5.0:
                             try:
-                                with socket.create_connection((addr, port), timeout=0.5):
+                                with socket.create_connection(
+                                    (addr, port), timeout=0.5
+                                ):
                                     connected = True
                                     break
                             except (OSError, ConnectionRefusedError):
@@ -450,7 +464,9 @@ def start_daemon(
                         if connected:
                             announce(f"Listening on {addr}:{port}")
                         else:
-                            logger.error("Daemon started but failed to accept connections")
+                            logger.error(
+                                "Daemon started but failed to accept connections"
+                            )
                             # Should we kill it? Maybe not strictly required but logging is good.
 
                     finally:
@@ -491,14 +507,18 @@ def start_daemon(
                 timeout = 10.0
                 socket_path = _get_socket_path(project)
                 while time.time() - start_time < timeout:
-                    if socket_path.exists() and _is_socket_connectable(project, timeout=0.5):
+                    if socket_path.exists() and _is_socket_connectable(
+                        project, timeout=0.5
+                    ):
                         announce(f"Daemon started with PID {pid}")
                         announce(f"Socket: {daemon.socket_path}")
                         return
                     time.sleep(0.1)
 
                 # Daemon started but socket not ready - warn but don't fail
-                announce(f"Warning: Daemon (PID {pid}) socket not ready within {timeout}s")
+                announce(
+                    f"Warning: Daemon (PID {pid}) socket not ready within {timeout}s"
+                )
                 announce(f"Socket: {daemon.socket_path}")
 
 
@@ -539,7 +559,10 @@ def _query_daemon_v2(
         client.settimeout(response_timeout_ms / 1000)
         send_json_line(client, {"cmd": "hello", "protocol_version": PROTOCOL_VERSION})
         hello = recv_framed_json(client)
-        if hello.get("status") != "ok" or hello.get("protocol_version") != PROTOCOL_VERSION:
+        if (
+            hello.get("status") != "ok"
+            or hello.get("protocol_version") != PROTOCOL_VERSION
+        ):
             raise DaemonProtocolError("daemon did not acknowledge protocol v2")
 
         command_v2 = {**command, "protocol_version": PROTOCOL_VERSION}
@@ -643,7 +666,9 @@ def query_or_start_daemon(
         if response.kind != DaemonResponseKind.UNREACHABLE:
             return response
         time.sleep(0.05)
-    return DaemonResponse(DaemonResponseKind.UNREACHABLE, message="daemon startup budget exceeded")
+    return DaemonResponse(
+        DaemonResponseKind.UNREACHABLE, message="daemon startup budget exceeded"
+    )
 
 
 def query_daemon(
@@ -674,13 +699,15 @@ def query_daemon(
     raise RuntimeError(_daemon_failure_message(response))
 
 
-def main():
+def main() -> None:
     """CLI entry point for daemon management."""
     import argparse
 
     parser = argparse.ArgumentParser(description="Code Briefcase Daemon")
     parser.add_argument("project", help="Project path")
-    parser.add_argument("--foreground", "-f", action="store_true", help="Run in foreground")
+    parser.add_argument(
+        "--foreground", "-f", action="store_true", help="Run in foreground"
+    )
     parser.add_argument("--stop", action="store_true", help="Stop the daemon")
     parser.add_argument("--status", action="store_true", help="Get daemon status")
 

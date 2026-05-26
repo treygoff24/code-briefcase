@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -62,7 +62,7 @@ class SessionStats:
     raw_tokens: int = 0
     tldr_tokens: int = 0
     requests: int = 0
-    started_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+    started_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
     def record_request(self, raw_tokens: int, tldr_tokens: int) -> None:
         """Record a request's token usage.
@@ -96,7 +96,7 @@ class SessionStats:
             "requests": self.requests,
             "savings_tokens": self.savings_tokens,
             "savings_percent": round(self.savings_percent, 2),
-            "timestamp": datetime.now(UTC).isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "started_at": self.started_at.isoformat(),
         }
 
@@ -113,9 +113,11 @@ class HookStats:
     successes: int = 0
     failures: int = 0
     metrics: dict[str, int | float] = field(default_factory=dict)
-    started_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+    started_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
-    def record_invocation(self, success: bool = True, metrics: dict | None = None) -> None:
+    def record_invocation(
+        self, success: bool = True, metrics: dict | None = None
+    ) -> None:
         """Record a hook invocation.
 
         Args:
@@ -163,7 +165,7 @@ class StatsStore:
     and easy querying.
     """
 
-    def __init__(self, path: Path | str):
+    def __init__(self, path: Path | str) -> None:
         """Initialize stats store.
 
         Args:
@@ -283,7 +285,7 @@ class HookStatsStore:
     Location: {project}/.code-briefcase/stats/hook_activity.jsonl
     """
 
-    def __init__(self, project_path: Path | str):
+    def __init__(self, project_path: Path | str) -> None:
         """Initialize hook stats store for a project.
 
         Args:
@@ -350,7 +352,7 @@ class HookStatsStore:
         self.stats_dir.mkdir(parents=True, exist_ok=True)
 
         # Append each hook's current stats as a record
-        timestamp = datetime.now(UTC).isoformat()
+        timestamp = datetime.now(timezone.utc).isoformat()
         with open(self.path, "a") as f:
             for stats in hook_stats.values():
                 if stats.invocations > 0:
@@ -364,7 +366,9 @@ class HookStatsStore:
                     }
                     f.write(json.dumps(record) + "\n")
 
-    def flush_delta(self, current: dict[str, HookStats], baseline: dict[str, HookStats]) -> None:
+    def flush_delta(
+        self, current: dict[str, HookStats], baseline: dict[str, HookStats]
+    ) -> None:
         """Flush only the delta (new activity) since baseline.
 
         This allows multiple instances to append without double-counting.
@@ -378,7 +382,7 @@ class HookStatsStore:
 
         self.stats_dir.mkdir(parents=True, exist_ok=True)
 
-        timestamp = datetime.now(UTC).isoformat()
+        timestamp = datetime.now(timezone.utc).isoformat()
         with open(self.path, "a") as f:
             for hook_name, stats in current.items():
                 base = baseline.get(hook_name)

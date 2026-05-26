@@ -9,24 +9,31 @@ Usage:
 """
 
 import hashlib
+import os
 import subprocess
 import sys
 import tempfile
 import time
-import os
 
 from pathlib import Path
-
-# Conditional imports for file locking
-if os.name == "nt":
-    import msvcrt
-else:
-    import fcntl
+from typing import Any
 
 from mcp.server.fastmcp import FastMCP
 
 from code_briefcase.daemon.protocol import decode_response_bytes
 from code_briefcase.daemon.startup import query_daemon_response
+
+# Conditional imports for file locking
+msvcrt_module: Any = None
+fcntl_module: Any = None
+if os.name == "nt":
+    import msvcrt as _msvcrt
+
+    msvcrt_module = _msvcrt
+else:
+    import fcntl as _fcntl
+
+    fcntl_module = _fcntl
 
 mcp = FastMCP("code-briefcase")
 
@@ -96,11 +103,11 @@ def _get_connection_info(project: str) -> tuple[str, int | None]:
 def _ping_daemon(project: str) -> bool:
     """Check if daemon is alive and responding."""
     addr, port = _get_connection_info(project)
-    
+
     # On Unix, check if socket file exists first
     if port is None and not Path(addr).exists():
         return False
-    
+
     try:
         result = _send_raw(project, {"cmd": "ping"})
         return result.get("status") == "ok"
@@ -132,7 +139,9 @@ def _ensure_daemon(project: str, timeout: float = 10.0) -> None:
                 lock_timeout = 10.0  # Same as startup.py
                 while True:
                     try:
-                        msvcrt.locking(lock_file.fileno(), msvcrt.LK_NBLCK, 1)
+                        msvcrt_module.locking(
+                            lock_file.fileno(), msvcrt_module.LK_NBLCK, 1
+                        )
                         break
                     except OSError as e:
                         if time.time() - lock_start > lock_timeout:
@@ -142,7 +151,7 @@ def _ensure_daemon(project: str, timeout: float = 10.0) -> None:
                         time.sleep(0.1)
             else:
                 # Unix locking
-                fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+                fcntl_module.flock(lock_file.fileno(), fcntl_module.LOCK_EX)
 
             # Re-check after acquiring lock (another process may have started daemon)
             if _ping_daemon(project):
@@ -154,6 +163,7 @@ def _ensure_daemon(project: str, timeout: float = 10.0) -> None:
                 if not is_win:
                     # Unix: check if it's a socket
                     import stat
+
                     try:
                         if stat.S_ISSOCK(socket_path.stat().st_mode):
                             socket_path.unlink(missing_ok=True)
@@ -164,7 +174,15 @@ def _ensure_daemon(project: str, timeout: float = 10.0) -> None:
 
             # Start daemon
             subprocess.Popen(
-                [sys.executable, "-m", "code_briefcase.cli", "daemon", "start", "--project", project],
+                [
+                    sys.executable,
+                    "-m",
+                    "code_briefcase.cli",
+                    "daemon",
+                    "start",
+                    "--project",
+                    project,
+                ],
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
                 start_new_session=True,
@@ -181,11 +199,11 @@ def _ensure_daemon(project: str, timeout: float = 10.0) -> None:
         finally:
             if os.name == "nt":
                 try:
-                    msvcrt.locking(lock_file.fileno(), msvcrt.LK_UNLCK, 1)
+                    msvcrt_module.locking(lock_file.fileno(), msvcrt_module.LK_UNLCK, 1)
                 except OSError:
                     pass
             else:
-                fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+                fcntl_module.flock(lock_file.fileno(), fcntl_module.LOCK_UN)
 
 
 def _send_raw(project: str, command: dict) -> dict:
@@ -255,7 +273,7 @@ def search(pattern: str, project: str = "auto", max_results: int = 100) -> dict:
     """
     return _send_command(
         _resolve_project(project),
-        {"cmd": "search", "pattern": pattern, "max_results": max_results}
+        {"cmd": "search", "pattern": pattern, "max_results": max_results},
     )
 
 
@@ -301,7 +319,7 @@ def context(
     if result.get("status") == "ok":
         ctx = result.get("result", {})
         if hasattr(ctx, "to_llm_string"):
-            return ctx.to_llm_string()
+            return str(ctx.to_llm_string())
         return str(ctx)
     return str(result)
 
@@ -310,7 +328,9 @@ def context(
 
 
 @mcp.tool()
-def cfg(file: str, function: str, language: str = "python", project: str = "auto") -> dict:
+def cfg(
+    file: str, function: str, language: str = "python", project: str = "auto"
+) -> dict:
     """Get control flow graph for a function.
 
     Returns basic blocks, control flow edges, and cyclomatic complexity.
@@ -323,12 +343,19 @@ def cfg(file: str, function: str, language: str = "python", project: str = "auto
     resolved_project, resolved_file = _resolve_tool_file(file, project)
     return _send_command(
         resolved_project,
-        {"cmd": "cfg", "file": resolved_file, "function": function, "language": language},
+        {
+            "cmd": "cfg",
+            "file": resolved_file,
+            "function": function,
+            "language": language,
+        },
     )
 
 
 @mcp.tool()
-def dfg(file: str, function: str, language: str = "python", project: str = "auto") -> dict:
+def dfg(
+    file: str, function: str, language: str = "python", project: str = "auto"
+) -> dict:
     """Get data flow graph for a function.
 
     Returns variable references and def-use chains.
@@ -341,7 +368,12 @@ def dfg(file: str, function: str, language: str = "python", project: str = "auto
     resolved_project, resolved_file = _resolve_tool_file(file, project)
     return _send_command(
         resolved_project,
-        {"cmd": "dfg", "file": resolved_file, "function": function, "language": language},
+        {
+            "cmd": "dfg",
+            "file": resolved_file,
+            "function": function,
+            "language": language,
+        },
     )
 
 
@@ -429,7 +461,9 @@ def arch(project: str = "auto", language: str = "python") -> dict:
         project: Project root directory
         language: Programming language
     """
-    return _send_command(_resolve_project(project), {"cmd": "arch", "language": language})
+    return _send_command(
+        _resolve_project(project), {"cmd": "arch", "language": language}
+    )
 
 
 @mcp.tool()
@@ -440,7 +474,9 @@ def calls(project: str = "auto", language: str = "python") -> dict:
         project: Project root directory
         language: Programming language
     """
-    return _send_command(_resolve_project(project), {"cmd": "calls", "language": language})
+    return _send_command(
+        _resolve_project(project), {"cmd": "calls", "language": language}
+    )
 
 
 # === IMPORT ANALYSIS ===
@@ -456,7 +492,8 @@ def imports(file: str, language: str = "python", project: str = "auto") -> dict:
     """
     resolved_project, resolved_file = _resolve_tool_file(file, project)
     return _send_command(
-        resolved_project, {"cmd": "imports", "file": resolved_file, "language": language}
+        resolved_project,
+        {"cmd": "imports", "file": resolved_file, "language": language},
     )
 
 
@@ -470,7 +507,8 @@ def importers(module: str, project: str = "auto", language: str = "python") -> d
         language: Programming language
     """
     return _send_command(
-        _resolve_project(project), {"cmd": "importers", "module": module, "language": language}
+        _resolve_project(project),
+        {"cmd": "importers", "module": module, "language": language},
     )
 
 
@@ -510,7 +548,8 @@ def diagnostics(path: str, language: str = "python", project: str = "auto") -> d
     """
     resolved_project, resolved_path = _resolve_tool_file(path, project)
     return _send_command(
-        resolved_project, {"cmd": "diagnostics", "file": resolved_path, "language": language}
+        resolved_project,
+        {"cmd": "diagnostics", "file": resolved_path, "language": language},
     )
 
 
@@ -524,7 +563,9 @@ def change_impact(project: str = "auto", files: list[str] | None = None) -> dict
         project: Project root directory
         files: List of changed files (auto-detects from git if None)
     """
-    return _send_command(_resolve_project(project), {"cmd": "change_impact", "files": files})
+    return _send_command(
+        _resolve_project(project), {"cmd": "change_impact", "files": files}
+    )
 
 
 # === DAEMON MANAGEMENT ===
@@ -540,7 +581,7 @@ def status(project: str = "auto") -> dict:
     return _send_command(_resolve_project(project), {"cmd": "status"})
 
 
-def main():
+def main() -> None:
     """Entry point for code-briefcase-mcp command."""
     import argparse
 

@@ -99,13 +99,17 @@ def format_targeted_read_orientation(
         for imp in imports[:5]:
             prefix = "from " if imp.get("is_from") else ""
             sample_imports.append(f"{prefix}{imp.get('module', '')}".strip())
-        lines.append(f"- imports: {', '.join(item for item in sample_imports if item) or '(none)'}")
+        lines.append(
+            f"- imports: {', '.join(item for item in sample_imports if item) or '(none)'}"
+        )
 
     symbols: list[tuple[int, str]] = []
     for func in info.get("functions") or []:
         line_number = _safe_line_number(func)
         if line_number is not None:
-            symbols.append((line_number, str(func.get("signature") or func.get("name") or "")))
+            symbols.append(
+                (line_number, str(func.get("signature") or func.get("name") or ""))
+            )
     for cls in info.get("classes") or []:
         class_line = _safe_line_number(cls)
         class_name = str(cls.get("signature") or cls.get("name") or "")
@@ -116,7 +120,12 @@ def format_targeted_read_orientation(
             if method_line is None:
                 continue
             method_name = str(method.get("signature") or method.get("name") or "")
-            symbols.append((method_line, f"{class_name}.{method_name}" if class_name else method_name))
+            symbols.append(
+                (
+                    method_line,
+                    f"{class_name}.{method_name}" if class_name else method_name,
+                )
+            )
 
     if symbols:
         if target_line is None:
@@ -135,11 +144,15 @@ def format_targeted_read_orientation(
 
 
 def _safe_line_number(item: dict[str, Any]) -> int | None:
+    raw_value = item.get("line_number")
+    if raw_value is None:
+        return None
     try:
-        value = int(item.get("line_number"))
+        value = int(raw_value)
     except (TypeError, ValueError):
         return None
     return value if value > 0 else None
+
 
 FileContextMode = Literal["read", "edit", "shell"]
 STRUCTURED_READ_MAX_BYTES = 64 * 1024
@@ -174,8 +187,11 @@ def _target_line(tool_input: dict[str, Any] | None) -> int | None:
     if not tool_input:
         return None
     for key in ("offset", "line", "line_number", "start_line"):
+        raw_value = tool_input.get(key)
+        if raw_value is None:
+            continue
         try:
-            value = int(tool_input.get(key))
+            value = int(raw_value)
         except (TypeError, ValueError):
             continue
         if value > 0:
@@ -224,7 +240,9 @@ def _prune_targeted_state(data: dict[str, Any]) -> None:
     if len(sessions) > TARGETED_READ_MAX_SESSIONS:
         ordered = sorted(
             sessions.items(),
-            key=lambda item: str(item[1].get("updated_at", "")) if isinstance(item[1], dict) else "",
+            key=lambda item: (
+                str(item[1].get("updated_at", "")) if isinstance(item[1], dict) else ""
+            ),
             reverse=True,
         )
         data["sessions"] = dict(ordered[:TARGETED_READ_MAX_SESSIONS])
@@ -233,9 +251,14 @@ def _prune_targeted_state(data: dict[str, Any]) -> None:
         if not isinstance(session, dict):
             continue
         files = session.get("files")
-        if not isinstance(files, dict) or len(files) <= TARGETED_READ_MAX_FILES_PER_SESSION:
+        if (
+            not isinstance(files, dict)
+            or len(files) <= TARGETED_READ_MAX_FILES_PER_SESSION
+        ):
             continue
-        ordered_files = sorted(files.items(), key=lambda item: str(item[1]), reverse=True)
+        ordered_files = sorted(
+            files.items(), key=lambda item: str(item[1]), reverse=True
+        )
         session["files"] = dict(ordered_files[:TARGETED_READ_MAX_FILES_PER_SESSION])
 
 
@@ -270,7 +293,9 @@ def mark_targeted_read_surfaced(event: HookEvent, path: Path) -> None:
     sessions = data.setdefault("sessions", {})
     if not isinstance(sessions, dict):
         return
-    session = sessions.setdefault(event.session_id, {"files": {}, "updated_at": _now_iso()})
+    session = sessions.setdefault(
+        event.session_id, {"files": {}, "updated_at": _now_iso()}
+    )
     if not isinstance(session, dict):
         session = {"files": {}, "updated_at": _now_iso()}
         sessions[event.session_id] = session
@@ -370,7 +395,9 @@ def format_data_summary(path: Path, text: str, budget: int) -> str:
 
 def format_shell_summary(path: Path, text: str, budget: int) -> str:
     shebang = text.splitlines()[0].strip() if text else ""
-    functions = re.findall(r"^\s*(?:function\s+)?([A-Za-z_][\w]*)\s*\(\)\s*\{", text, re.M)[:12]
+    functions = re.findall(
+        r"^\s*(?:function\s+)?([A-Za-z_][\w]*)\s*\(\)\s*\{", text, re.M
+    )[:12]
     commands = re.findall(
         r"^\s*(?:sudo\s+)?([A-Za-z_][\w-]+)\b",
         text,
@@ -381,7 +408,9 @@ def format_shell_summary(path: Path, text: str, budget: int) -> str:
         if command in {"if", "then", "else", "fi", "for", "do", "done", "case", "esac"}:
             continue
         command_counts[command] = command_counts.get(command, 0) + 1
-    top_commands = sorted(command_counts, key=command_counts.get, reverse=True)[:8]
+    top_commands = sorted(
+        command_counts, key=lambda command: command_counts[command], reverse=True
+    )[:8]
     lines = [
         f"[Code Briefcase shell summary: {path.name}]",
         f"- shebang: {shebang or '(none)'}",
@@ -418,9 +447,13 @@ def _format_edit_structure(file_path: Path, info: dict[str, Any], budget: int) -
         "Pre-existing file structure:",
     ]
     for func in (info.get("functions") or [])[:30]:
-        lines.append(f"- {func.get('signature') or func.get('name')} [L{func.get('line_number', '?')}]")
+        lines.append(
+            f"- {func.get('signature') or func.get('name')} [L{func.get('line_number', '?')}]"
+        )
     for cls in (info.get("classes") or [])[:15]:
-        lines.append(f"- {cls.get('signature') or cls.get('name')} [L{cls.get('line_number', '?')}]")
+        lines.append(
+            f"- {cls.get('signature') or cls.get('name')} [L{cls.get('line_number', '?')}]"
+        )
         for method in (cls.get("methods") or [])[:8]:
             lines.append(
                 f"  - {method.get('signature') or method.get('name')} [L{method.get('line_number', '?')}]"
@@ -449,7 +482,9 @@ def _format_edit_structure(file_path: Path, info: dict[str, Any], budget: int) -
     return text
 
 
-def _structured_summary(path: Path, text: str, decision_reason: str, budget: int) -> tuple[str, str]:
+def _structured_summary(
+    path: Path, text: str, decision_reason: str, budget: int
+) -> tuple[str, str]:
     suffix = path.suffix.lower()
     if suffix in {".html", ".htm"}:
         return format_html_summary(path, text, budget), "html_summary"
@@ -511,7 +546,11 @@ def build_file_context_for_path(
                 surfaced_files=[],
                 candidate_files=[],
             )
-        if mode == "read" and tool_input is not None and should_bypass_read(path, tool_input):
+        if (
+            mode == "read"
+            and tool_input is not None
+            and should_bypass_read(path, tool_input)
+        ):
             return FileContextResult(
                 status="skipped",
                 reason="bypass",
@@ -536,7 +575,9 @@ def build_file_context_for_path(
                 candidate_files=[],
             )
         if targeted_read:
-            context = format_targeted_read_orientation(path, info, tool_input, budget=budget)
+            context = format_targeted_read_orientation(
+                path, info, tool_input, budget=budget
+            )
             context_kind = "targeted_read_orientation"
             mark_targeted_read_surfaced(event, path)
             return FileContextResult(
@@ -550,11 +591,13 @@ def build_file_context_for_path(
                 candidate_files=[],
             )
 
-        candidate_files, recommended_files, surfaced_files = discover_related_candidates(
-            event,
-            path,
-            info,
-            context_kind="read_nav_map" if mode == "read" else "edit_structure",
+        candidate_files, recommended_files, surfaced_files = (
+            discover_related_candidates(
+                event,
+                path,
+                info,
+                context_kind="read_nav_map" if mode == "read" else "edit_structure",
+            )
         )
         if mode == "read":
             context = format_nav_map(path, info, budget=budget)
@@ -578,7 +621,9 @@ def build_file_context_for_path(
     text = _read_bounded_text(path)
     context, context_kind = _structured_summary(path, text, decision.reason, budget)
     if mode == "edit":
-        context = context.replace("[Code Briefcase ", "[Code Briefcase pre-edit context — ", 1)
+        context = context.replace(
+            "[Code Briefcase ", "[Code Briefcase pre-edit context — ", 1
+        )
         context += (
             "\n(Pre-edit snapshot only. This hook does NOT block or modify "
             "your edit. The post-edit hook will confirm completion.)"

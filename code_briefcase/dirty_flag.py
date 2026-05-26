@@ -121,7 +121,10 @@ def get_dirty_files(project_path: Union[str, Path]) -> List[str]:
 
     try:
         data = json.loads(dirty_path.read_text())
-        return data.get("dirty_files", [])
+        dirty_files = data.get("dirty_files", []) if isinstance(data, dict) else []
+        if not isinstance(dirty_files, list):
+            return []
+        return [str(file_path) for file_path in dirty_files]
     except (json.JSONDecodeError, IOError):
         return []
 

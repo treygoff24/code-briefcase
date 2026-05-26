@@ -9,23 +9,22 @@ from Luau code, including Luau-specific features:
 The function `extract_luau_dfg` does NOT exist yet - these tests must FAIL.
 """
 
-
-
 # =============================================================================
 # Test 1: Basic Definition and Use
 # =============================================================================
 
-def test_luau_dfg_basic_def_use():
+
+def test_luau_dfg_basic_def_use() -> None:
     """Basic variable definition and use should be tracked."""
     from code_briefcase.dfg_extractor import extract_luau_dfg
 
-    code = '''
+    code = """
 function example(): number
     local x = 10
     local y = x + 5
     return y
 end
-'''
+"""
     dfg = extract_luau_dfg(code, "example")
 
     assert dfg is not None
@@ -50,17 +49,18 @@ end
 # Test 2: Typed Variable Declaration
 # =============================================================================
 
-def test_luau_dfg_typed_declaration():
+
+def test_luau_dfg_typed_declaration() -> None:
     """Type annotations should not affect DFG structure."""
     from code_briefcase.dfg_extractor import extract_luau_dfg
 
-    code = '''
+    code = """
 function typed(): ()
     local name: string = "test"
     local count: number = 0
     print(name, count)
 end
-'''
+"""
     dfg = extract_luau_dfg(code, "typed")
 
     assert dfg is not None
@@ -75,7 +75,8 @@ end
 # Test 3: Compound Assignment (Luau-specific, critical)
 # =============================================================================
 
-def test_luau_dfg_compound_assignment():
+
+def test_luau_dfg_compound_assignment() -> None:
     """Compound assignment (+=, -=, *=) must create both USE and DEF.
 
     This is CRITICAL for Luau - compound assignment is syntactic sugar for
@@ -85,7 +86,7 @@ def test_luau_dfg_compound_assignment():
     """
     from code_briefcase.dfg_extractor import extract_luau_dfg
 
-    code = '''
+    code = """
 function compound(): number
     local x = 5
     x += 3
@@ -93,7 +94,7 @@ function compound(): number
     x *= 2
     return x
 end
-'''
+"""
     dfg = extract_luau_dfg(code, "compound")
 
     assert dfg is not None
@@ -117,24 +118,29 @@ end
 # Test 4: Function Parameters as Definitions
 # =============================================================================
 
-def test_luau_dfg_parameters():
+
+def test_luau_dfg_parameters() -> None:
     """Typed function parameters should be tracked as definitions."""
     from code_briefcase.dfg_extractor import extract_luau_dfg
 
-    code = '''
+    code = """
 function greet(name: string, count: number): ()
     for i = 1, count do
         print(name)
     end
 end
-'''
+"""
     dfg = extract_luau_dfg(code, "greet")
 
     assert dfg is not None
 
     # Parameters are definitions
-    name_defs = [r for r in dfg.var_refs if r.name == "name" and r.ref_type == "definition"]
-    count_defs = [r for r in dfg.var_refs if r.name == "count" and r.ref_type == "definition"]
+    name_defs = [
+        r for r in dfg.var_refs if r.name == "name" and r.ref_type == "definition"
+    ]
+    count_defs = [
+        r for r in dfg.var_refs if r.name == "count" and r.ref_type == "definition"
+    ]
 
     assert len(name_defs) >= 1, "name parameter should be a definition"
     assert len(count_defs) >= 1, "count parameter should be a definition"
@@ -151,11 +157,12 @@ end
 # Test 5: For Loop Variable
 # =============================================================================
 
-def test_luau_dfg_for_variable():
+
+def test_luau_dfg_for_variable() -> None:
     """Numeric for loop variable should be tracked."""
     from code_briefcase.dfg_extractor import extract_luau_dfg
 
-    code = '''
+    code = """
 function sumRange(): number
     local total = 0
     for i = 1, 10 do
@@ -163,7 +170,7 @@ function sumRange(): number
     end
     return total
 end
-'''
+"""
     dfg = extract_luau_dfg(code, "sumRange")
 
     assert dfg is not None
@@ -181,25 +188,30 @@ end
 # Test 6: Generic For Variables
 # =============================================================================
 
-def test_luau_dfg_generic_for():
+
+def test_luau_dfg_generic_for() -> None:
     """Generic for-in loop should define iterator variables."""
     from code_briefcase.dfg_extractor import extract_luau_dfg
 
-    code = '''
+    code = """
 function process(items: {Item}): ()
     for index, item in items do
         item:process()
         print(index)
     end
 end
-'''
+"""
     dfg = extract_luau_dfg(code, "process")
 
     assert dfg is not None
 
     # index and item are defined by for-in
-    index_defs = [r for r in dfg.var_refs if r.name == "index" and r.ref_type == "definition"]
-    item_defs = [r for r in dfg.var_refs if r.name == "item" and r.ref_type == "definition"]
+    index_defs = [
+        r for r in dfg.var_refs if r.name == "index" and r.ref_type == "definition"
+    ]
+    item_defs = [
+        r for r in dfg.var_refs if r.name == "item" and r.ref_type == "definition"
+    ]
 
     assert len(index_defs) >= 1, "index should be defined by for-in"
     assert len(item_defs) >= 1, "item should be defined by for-in"
@@ -209,28 +221,35 @@ end
 # Test 7: Table Field Access
 # =============================================================================
 
-def test_luau_dfg_table_access():
+
+def test_luau_dfg_table_access() -> None:
     """Table field access should track the table variable."""
     from code_briefcase.dfg_extractor import extract_luau_dfg
 
-    code = '''
+    code = """
 function updatePlayer(player: Player): ()
     local oldHealth = player.health
     player.health = 100
     print(oldHealth)
 end
-'''
+"""
     dfg = extract_luau_dfg(code, "updatePlayer")
 
     assert dfg is not None
 
     # player is used (accessing .health)
-    player_uses = [r for r in dfg.var_refs if r.name == "player" and r.ref_type == "use"]
+    player_uses = [
+        r for r in dfg.var_refs if r.name == "player" and r.ref_type == "use"
+    ]
     assert len(player_uses) >= 1, "player should be used when accessing fields"
 
     # oldHealth is defined and used
-    old_defs = [r for r in dfg.var_refs if r.name == "oldHealth" and r.ref_type == "definition"]
-    old_uses = [r for r in dfg.var_refs if r.name == "oldHealth" and r.ref_type == "use"]
+    old_defs = [
+        r for r in dfg.var_refs if r.name == "oldHealth" and r.ref_type == "definition"
+    ]
+    old_uses = [
+        r for r in dfg.var_refs if r.name == "oldHealth" and r.ref_type == "use"
+    ]
     assert len(old_defs) >= 1
     assert len(old_uses) >= 1
 
@@ -239,11 +258,12 @@ end
 # Test 8: Closure Capture
 # =============================================================================
 
-def test_luau_dfg_closure():
+
+def test_luau_dfg_closure() -> None:
     """Closure should capture variables from outer scope."""
     from code_briefcase.dfg_extractor import extract_luau_dfg
 
-    code = '''
+    code = """
 function makeCounter(): () -> number
     local count = 0
     return function()
@@ -251,13 +271,15 @@ function makeCounter(): () -> number
         return count
     end
 end
-'''
+"""
     dfg = extract_luau_dfg(code, "makeCounter")
 
     assert dfg is not None
 
     # count is defined in outer function
-    count_defs = [r for r in dfg.var_refs if r.name == "count" and r.ref_type == "definition"]
+    count_defs = [
+        r for r in dfg.var_refs if r.name == "count" and r.ref_type == "definition"
+    ]
     assert len(count_defs) >= 1, "count should be defined"
 
     # count is used in inner function (closure capture)
@@ -269,17 +291,18 @@ end
 # Test 9: Multiple Assignment
 # =============================================================================
 
-def test_luau_dfg_multiple_assignment():
+
+def test_luau_dfg_multiple_assignment() -> None:
     """Multiple assignment should track all variables."""
     from code_briefcase.dfg_extractor import extract_luau_dfg
 
-    code = '''
+    code = """
 function swap(): ()
     local a, b = 1, 2
     a, b = b, a
     print(a, b)
 end
-'''
+"""
     dfg = extract_luau_dfg(code, "swap")
 
     assert dfg is not None
@@ -297,11 +320,12 @@ end
 # Test 10: Optional Type Annotation
 # =============================================================================
 
-def test_luau_dfg_optional_type():
+
+def test_luau_dfg_optional_type() -> None:
     """Optional type (number?) should not affect DFG."""
     from code_briefcase.dfg_extractor import extract_luau_dfg
 
-    code = '''
+    code = """
 function maybeValue(x: number?): number
     if x then
         return x
@@ -309,7 +333,7 @@ function maybeValue(x: number?): number
         return 0
     end
 end
-'''
+"""
     dfg = extract_luau_dfg(code, "maybeValue")
 
     assert dfg is not None
@@ -327,14 +351,15 @@ end
 # Test: Function Not Found
 # =============================================================================
 
-def test_luau_dfg_function_not_found():
+
+def test_luau_dfg_function_not_found() -> None:
     """Should return empty DFG when function not found (not raise)."""
     from code_briefcase.dfg_extractor import extract_luau_dfg
 
-    code = '''
+    code = """
 function exists(): ()
 end
-'''
+"""
     dfg = extract_luau_dfg(code, "nonexistent")
 
     # Following Lua pattern: return empty DFG, not raise
@@ -347,11 +372,12 @@ end
 # Test: Continue Does Not Break DFG
 # =============================================================================
 
-def test_luau_dfg_with_continue():
+
+def test_luau_dfg_with_continue() -> None:
     """Continue statement should not break variable tracking."""
     from code_briefcase.dfg_extractor import extract_luau_dfg
 
-    code = '''
+    code = """
 function sumOdd(n: number): number
     local total = 0
     for i = 1, n do
@@ -360,13 +386,15 @@ function sumOdd(n: number): number
     end
     return total
 end
-'''
+"""
     dfg = extract_luau_dfg(code, "sumOdd")
 
     assert dfg is not None
 
     # total should have def (initial) and uses (compound, return)
-    total_defs = [r for r in dfg.var_refs if r.name == "total" and r.ref_type == "definition"]
+    total_defs = [
+        r for r in dfg.var_refs if r.name == "total" and r.ref_type == "definition"
+    ]
     total_uses = [r for r in dfg.var_refs if r.name == "total" and r.ref_type == "use"]
 
     assert len(total_defs) >= 1, "total should be defined"

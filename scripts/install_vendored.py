@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Install vendored dependencies based on current platform."""
+from typing import Any
 
 import platform
 import subprocess
@@ -9,7 +10,7 @@ from pathlib import Path
 VENDOR_DIR = Path(__file__).parent.parent / "vendor"
 
 
-def get_platform_tag():
+def get_platform_tag() -> Any:
     """Get the platform tag for wheel matching."""
     system = platform.system().lower()
     machine = platform.machine().lower()
@@ -31,7 +32,7 @@ def get_platform_tag():
     return None
 
 
-def install_vendored():
+def install_vendored() -> Any:
     """Install vendored wheels for current platform."""
     platform_tag = get_platform_tag()
 
@@ -47,20 +48,31 @@ def install_vendored():
     for wheel in VENDOR_DIR.glob("*.whl"):
         if platform_tag in wheel.name or "abi3" in wheel.name:
             # abi3 wheels are compatible across Python versions
-            if platform_tag.split("_")[0] in wheel.name or "macosx" in wheel.name and "darwin" in platform.system().lower():
+            if (
+                platform_tag.split("_")[0] in wheel.name
+                or "macosx" in wheel.name
+                and "darwin" in platform.system().lower()
+            ):
                 print(f"Installing: {wheel.name}")
                 # Try uv first, fall back to pip
                 result = subprocess.run(
                     ["uv", "pip", "install", "--force-reinstall", str(wheel)],
                     capture_output=True,
-                    text=True
+                    text=True,
                 )
                 if result.returncode != 0:
                     # Fall back to pip
                     result = subprocess.run(
-                        [sys.executable, "-m", "pip", "install", "--force-reinstall", str(wheel)],
+                        [
+                            sys.executable,
+                            "-m",
+                            "pip",
+                            "install",
+                            "--force-reinstall",
+                            str(wheel),
+                        ],
                         capture_output=True,
-                        text=True
+                        text=True,
                     )
                 if result.returncode == 0:
                     print("  Installed successfully")

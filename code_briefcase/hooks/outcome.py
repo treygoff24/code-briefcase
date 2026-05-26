@@ -1,4 +1,5 @@
 from __future__ import annotations
+from typing import Any
 
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -47,11 +48,11 @@ class HookExecutionResult:
         return self.response.additional_context
 
     @property
-    def permission_decision(self):
+    def permission_decision(self) -> Any:
         return self.response.permission_decision
 
     @property
-    def updated_input(self):
+    def updated_input(self) -> Any:
         return self.response.updated_input
 
     @property
@@ -59,7 +60,7 @@ class HookExecutionResult:
         return self.response.suppress_output
 
 
-def event_relative_path(event: HookEvent, path) -> str | None:
+def event_relative_path(event: HookEvent, path: Any) -> str | None:
     if path is None:
         return None
     try:
@@ -75,7 +76,7 @@ def event_relative_path(event: HookEvent, path) -> str | None:
         return str(path)
 
 
-def _rel_path(event: HookEvent, path) -> str | None:
+def _rel_path(event: HookEvent, path: Any) -> str | None:
     return event_relative_path(event, path)
 
 
@@ -89,7 +90,7 @@ def skipped(
     *,
     reason: str,
     trigger_files: list[str] | None = None,
-    **kwargs,
+    **kwargs: Any,
 ) -> HookExecutionResult:
     return HookExecutionResult(
         response=response or HookResponse.noop(),
@@ -100,7 +101,7 @@ def skipped(
     )
 
 
-def noop(reason: str | None = None, **kwargs) -> HookExecutionResult:
+def noop(reason: str | None = None, **kwargs: Any) -> HookExecutionResult:
     return HookExecutionResult(
         response=HookResponse.noop(),
         status="noop",
@@ -115,7 +116,7 @@ def ok(
     trigger_files: list[str] | None = None,
     recommended_files: list[str] | None = None,
     surfaced_files: list[str] | None = None,
-    **kwargs,
+    **kwargs: Any,
 ) -> HookExecutionResult:
     if surfaced_files is not None:
         surfaced = list(surfaced_files)
@@ -131,7 +132,9 @@ def ok(
     )
 
 
-def error(error_kind: str, response: HookResponse | None = None, **kwargs) -> HookExecutionResult:
+def error(
+    error_kind: str, response: HookResponse | None = None, **kwargs: Any
+) -> HookExecutionResult:
     return HookExecutionResult(
         response=response or HookResponse.noop(),
         status="error",

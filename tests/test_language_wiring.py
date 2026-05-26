@@ -11,6 +11,8 @@ To test a specific language:
     pytest tests/test_language_wiring.py -v -k "luau"
 """
 
+from typing import Any
+
 import pytest
 from pathlib import Path
 
@@ -39,9 +41,23 @@ SUPPORTED_LANGUAGES = {
 # Languages with tree-sitter support in incremental_parse.py
 # Note: swift tree-sitter-swift is not on PyPI yet
 INCREMENTAL_PARSE_LANGUAGES = {
-    "python", "typescript", "tsx", "javascript", "go", "rust",
-    "lua", "luau", "java", "c", "cpp", "ruby", "php", "csharp",
-    "kotlin", "scala", "elixir"
+    "python",
+    "typescript",
+    "tsx",
+    "javascript",
+    "go",
+    "rust",
+    "lua",
+    "luau",
+    "java",
+    "c",
+    "cpp",
+    "ruby",
+    "php",
+    "csharp",
+    "kotlin",
+    "scala",
+    "elixir",
 }
 
 
@@ -49,39 +65,39 @@ class TestLanguageWiring:
     """Test that each language is properly wired in all modules."""
 
     @pytest.mark.parametrize("language", INCREMENTAL_PARSE_LANGUAGES)
-    def test_incremental_parse_supported_languages(self, language):
+    def test_incremental_parse_supported_languages(self, language: Any) -> None:
         """Language should be in IncrementalParser.SUPPORTED_LANGUAGES."""
         from code_briefcase.incremental_parse import IncrementalParser
 
-        assert language in IncrementalParser.SUPPORTED_LANGUAGES, (
-            f"{language} missing from incremental_parse.py SUPPORTED_LANGUAGES"
-        )
+        assert (
+            language in IncrementalParser.SUPPORTED_LANGUAGES
+        ), f"{language} missing from incremental_parse.py SUPPORTED_LANGUAGES"
 
     @pytest.mark.parametrize("language", SUPPORTED_LANGUAGES.keys())
-    def test_cli_extension_to_language(self, language):
+    def test_cli_extension_to_language(self, language: Any) -> None:
         """Language extensions should be in cli.py EXTENSION_TO_LANGUAGE."""
         from code_briefcase.cli import EXTENSION_TO_LANGUAGE
 
         extensions = SUPPORTED_LANGUAGES[language]
         for ext in extensions:
-            assert ext in EXTENSION_TO_LANGUAGE, (
-                f"Extension {ext} for {language} missing from cli.py EXTENSION_TO_LANGUAGE"
-            )
-            assert EXTENSION_TO_LANGUAGE[ext] == language, (
-                f"Extension {ext} maps to {EXTENSION_TO_LANGUAGE[ext]}, expected {language}"
-            )
+            assert (
+                ext in EXTENSION_TO_LANGUAGE
+            ), f"Extension {ext} for {language} missing from cli.py EXTENSION_TO_LANGUAGE"
+            assert (
+                EXTENSION_TO_LANGUAGE[ext] == language
+            ), f"Extension {ext} maps to {EXTENSION_TO_LANGUAGE[ext]}, expected {language}"
 
     @pytest.mark.parametrize("language", SUPPORTED_LANGUAGES.keys())
-    def test_semantic_all_languages(self, language):
+    def test_semantic_all_languages(self, language: Any) -> None:
         """Language should be in semantic.py ALL_LANGUAGES."""
         from code_briefcase.semantic import ALL_LANGUAGES
 
-        assert language in ALL_LANGUAGES, (
-            f"{language} missing from semantic.py ALL_LANGUAGES"
-        )
+        assert (
+            language in ALL_LANGUAGES
+        ), f"{language} missing from semantic.py ALL_LANGUAGES"
 
     @pytest.mark.parametrize("language", SUPPORTED_LANGUAGES.keys())
-    def test_scan_project_extensions(self, language):
+    def test_scan_project_extensions(self, language: Any) -> None:
         """Language should be recognized by scan_project()."""
         from code_briefcase.cross_file_calls import scan_project
         import tempfile
@@ -98,11 +114,13 @@ class TestLanguageWiring:
                 assert isinstance(files, list), f"scan_project failed for {language}"
             except ValueError as e:
                 if "Unsupported language" in str(e):
-                    pytest.fail(f"{language} not supported in cross_file_calls.scan_project()")
+                    pytest.fail(
+                        f"{language} not supported in cross_file_calls.scan_project()"
+                    )
                 raise
 
     @pytest.mark.parametrize("language", SUPPORTED_LANGUAGES.keys())
-    def test_api_get_code_structure(self, language):
+    def test_api_get_code_structure(self, language: Any) -> None:
         """Language should work with get_code_structure()."""
         from code_briefcase.api import get_code_structure
         import tempfile
@@ -121,7 +139,7 @@ class TestLanguageWiring:
                 raise
 
     @pytest.mark.parametrize("language", SUPPORTED_LANGUAGES.keys())
-    def test_hybrid_extractor_detect_language(self, language):
+    def test_hybrid_extractor_detect_language(self, language: Any) -> None:
         """Language should be detected by HybridExtractor._detect_language()."""
         from code_briefcase.hybrid_extractor import HybridExtractor
         import tempfile
@@ -137,7 +155,9 @@ class TestLanguageWiring:
             detected = extractor._detect_language(test_file)
             # Some languages may map to "unknown" if not in the ext_map
             # We just ensure it doesn't crash
-            assert detected is not None, f"_detect_language returned None for {language}"
+            assert (
+                detected is not None
+            ), f"_detect_language returned None for {language}"
         finally:
             test_file.unlink()
 
@@ -148,32 +168,43 @@ class TestCFGExtractors:
     # Languages that have dedicated CFG extractors
     # Note: javascript uses typescript extractor
     CFG_LANGUAGES = [
-        "python", "typescript", "go", "rust", "java",
-        "c", "cpp", "ruby", "php", "kotlin", "swift", "csharp",
-        "scala", "lua", "luau", "elixir"
+        "python",
+        "typescript",
+        "go",
+        "rust",
+        "java",
+        "c",
+        "cpp",
+        "ruby",
+        "php",
+        "kotlin",
+        "swift",
+        "csharp",
+        "scala",
+        "lua",
+        "luau",
+        "elixir",
     ]
 
     @pytest.mark.parametrize("language", CFG_LANGUAGES)
-    def test_cfg_extractor_exists(self, language):
+    def test_cfg_extractor_exists(self, language: Any) -> None:
         """CFG extractor function should exist for language."""
         from code_briefcase import cfg_extractor as cfg_mod
 
         func_name = f"extract_{language}_cfg"
-        assert hasattr(cfg_mod, func_name), (
-            f"Missing {func_name} in cfg_extractor.py"
-        )
+        assert hasattr(cfg_mod, func_name), f"Missing {func_name} in cfg_extractor.py"
 
     @pytest.mark.parametrize("language", CFG_LANGUAGES)
-    def test_cfg_extractor_in_api_map(self, language):
+    def test_cfg_extractor_in_api_map(self, language: Any) -> None:
         """CFG extractor should be in api.py cfg_extractors map."""
         # Read api.py and check the cfg_extractors dict
         api_path = Path(__file__).parent.parent / "code_briefcase" / "api.py"
         content = api_path.read_text()
 
         # Look for the language in cfg_extractors
-        assert f'"{language}"' in content or f"'{language}'" in content, (
-            f"{language} may be missing from api.py cfg_extractors"
-        )
+        assert (
+            f'"{language}"' in content or f"'{language}'" in content
+        ), f"{language} may be missing from api.py cfg_extractors"
 
 
 class TestDFGExtractors:
@@ -182,20 +213,31 @@ class TestDFGExtractors:
     # Languages that have dedicated DFG extractors
     # Note: javascript uses typescript extractor
     DFG_LANGUAGES = [
-        "python", "typescript", "go", "rust", "java",
-        "c", "cpp", "ruby", "php", "kotlin", "swift", "csharp",
-        "scala", "lua", "luau", "elixir"
+        "python",
+        "typescript",
+        "go",
+        "rust",
+        "java",
+        "c",
+        "cpp",
+        "ruby",
+        "php",
+        "kotlin",
+        "swift",
+        "csharp",
+        "scala",
+        "lua",
+        "luau",
+        "elixir",
     ]
 
     @pytest.mark.parametrize("language", DFG_LANGUAGES)
-    def test_dfg_extractor_exists(self, language):
+    def test_dfg_extractor_exists(self, language: Any) -> None:
         """DFG extractor function should exist for language."""
         from code_briefcase import dfg_extractor as dfg_mod
 
         func_name = f"extract_{language}_dfg"
-        assert hasattr(dfg_mod, func_name), (
-            f"Missing {func_name} in dfg_extractor.py"
-        )
+        assert hasattr(dfg_mod, func_name), f"Missing {func_name} in dfg_extractor.py"
 
 
 class TestPDGExtractors:
@@ -203,20 +245,31 @@ class TestPDGExtractors:
 
     # Languages that have PDG extractors
     PDG_LANGUAGES = [
-        "python", "typescript", "go", "rust", "java",
-        "c", "cpp", "ruby", "php", "kotlin", "swift", "csharp",
-        "scala", "lua", "luau", "elixir"
+        "python",
+        "typescript",
+        "go",
+        "rust",
+        "java",
+        "c",
+        "cpp",
+        "ruby",
+        "php",
+        "kotlin",
+        "swift",
+        "csharp",
+        "scala",
+        "lua",
+        "luau",
+        "elixir",
     ]
 
     @pytest.mark.parametrize("language", PDG_LANGUAGES)
-    def test_pdg_extractor_exists(self, language):
+    def test_pdg_extractor_exists(self, language: Any) -> None:
         """PDG extractor function should exist for language."""
         from code_briefcase import pdg_extractor as pdg_mod
 
         func_name = f"extract_{language}_pdg"
-        assert hasattr(pdg_mod, func_name), (
-            f"Missing {func_name} in pdg_extractor.py"
-        )
+        assert hasattr(pdg_mod, func_name), f"Missing {func_name} in pdg_extractor.py"
 
 
 class TestImportParsers:
@@ -232,20 +285,20 @@ class TestImportParsers:
     ]
 
     @pytest.mark.parametrize("language,func_name", IMPORT_PARSERS)
-    def test_import_parser_exists(self, language, func_name):
+    def test_import_parser_exists(self, language: Any, func_name: Any) -> None:
         """Import parser function should exist for language."""
         from code_briefcase import cross_file_calls as cfc_mod
 
-        assert hasattr(cfc_mod, func_name), (
-            f"Missing {func_name} in cross_file_calls.py"
-        )
+        assert hasattr(
+            cfc_mod, func_name
+        ), f"Missing {func_name} in cross_file_calls.py"
 
 
 class TestCLIArguments:
     """Test that languages are in CLI argument choices."""
 
     @pytest.mark.parametrize("language", SUPPORTED_LANGUAGES.keys())
-    def test_language_in_cli_help(self, language):
+    def test_language_in_cli_help(self, language: Any) -> None:
         """Language should be accepted by CLI --lang argument."""
         import subprocess
         import sys
@@ -254,7 +307,7 @@ class TestCLIArguments:
         result = subprocess.run(
             [sys.executable, "-m", "code_briefcase.cli", "structure", "--help"],
             capture_output=True,
-            text=True
+            text=True,
         )
 
         # The help should mention the language in choices
@@ -286,7 +339,7 @@ class TestTreeSitterGrammars:
     }
 
     @pytest.mark.parametrize("language,module", GRAMMAR_MODULES.items())
-    def test_grammar_importable(self, language, module):
+    def test_grammar_importable(self, language: Any, module: Any) -> None:
         """Tree-sitter grammar module should be importable."""
         try:
             __import__(module)

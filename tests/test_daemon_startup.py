@@ -1,4 +1,5 @@
 from __future__ import annotations
+from typing import Any
 
 from pathlib import Path
 
@@ -15,7 +16,7 @@ class FakePidFile:
     def fileno(self) -> int:
         return 12345
 
-    def seek(self, *_args) -> None:
+    def seek(self, *_args: Any) -> None:
         pass
 
     def truncate(self) -> None:
@@ -34,14 +35,22 @@ class FakePidFile:
         self.closed = True
 
 
-def test_start_daemon_uses_live_socket_as_duplicate_guard(monkeypatch, tmp_path, capsys):
+def test_start_daemon_uses_live_socket_as_duplicate_guard(
+    monkeypatch: Any, tmp_path: Any, capsys: Any
+) -> None:
     pidfile = FakePidFile()
     monkeypatch.setattr(startup, "_try_acquire_pidfile_lock", lambda _path: pidfile)
-    monkeypatch.setattr(startup, "_is_socket_connectable", lambda *_args, **_kwargs: True)
-    monkeypatch.setattr("code_briefcase.tldrignore.ensure_tldrignore", lambda _project: (False, ""))
+    monkeypatch.setattr(
+        startup, "_is_socket_connectable", lambda *_args, **_kwargs: True
+    )
+    monkeypatch.setattr(
+        "code_briefcase.tldrignore.ensure_tldrignore", lambda _project: (False, "")
+    )
 
     def fail_if_constructed(_project: Path) -> None:
-        raise AssertionError("daemon should not be constructed when a live socket exists")
+        raise AssertionError(
+            "daemon should not be constructed when a live socket exists"
+        )
 
     monkeypatch.setattr("code_briefcase.daemon.core.TLDRDaemon", fail_if_constructed)
 
@@ -51,7 +60,9 @@ def test_start_daemon_uses_live_socket_as_duplicate_guard(monkeypatch, tmp_path,
     assert pidfile.closed
 
 
-def test_unix_parent_does_not_unlock_child_pidfile_after_fork(monkeypatch, tmp_path):
+def test_unix_parent_does_not_unlock_child_pidfile_after_fork(
+    monkeypatch: Any, tmp_path: Any
+) -> None:
     pidfile = FakePidFile()
     socket_path = tmp_path / "daemon.sock"
     socket_path.touch()
@@ -64,9 +75,13 @@ def test_unix_parent_does_not_unlock_child_pidfile_after_fork(monkeypatch, tmp_p
             self.socket_path = socket_path
 
     monkeypatch.setattr(startup, "_try_acquire_pidfile_lock", lambda _path: pidfile)
-    monkeypatch.setattr(startup, "_is_socket_connectable", lambda *_args, **_kwargs: next(connectable))
+    monkeypatch.setattr(
+        startup, "_is_socket_connectable", lambda *_args, **_kwargs: next(connectable)
+    )
     monkeypatch.setattr(startup, "_get_socket_path", lambda _project: socket_path)
-    monkeypatch.setattr("code_briefcase.tldrignore.ensure_tldrignore", lambda _project: (False, ""))
+    monkeypatch.setattr(
+        "code_briefcase.tldrignore.ensure_tldrignore", lambda _project: (False, "")
+    )
     monkeypatch.setattr("code_briefcase.daemon.core.TLDRDaemon", FakeDaemon)
     monkeypatch.setattr(startup.os, "fork", lambda: 12345)
     monkeypatch.setattr(startup.time, "sleep", lambda _seconds: None)
@@ -78,11 +93,17 @@ def test_unix_parent_does_not_unlock_child_pidfile_after_fork(monkeypatch, tmp_p
     assert startup.fcntl.LOCK_UN not in flock_calls
 
 
-def test_daemon_child_stdio_redirects_to_devnull(monkeypatch):
-    calls = []
+def test_daemon_child_stdio_redirects_to_devnull(monkeypatch: Any) -> None:
+    calls: list[tuple[Any, ...]] = []
 
-    monkeypatch.setattr(startup.os, "open", lambda path, flags: calls.append(("open", path, flags)) or 99)
-    monkeypatch.setattr(startup.os, "dup2", lambda src, dst: calls.append(("dup2", src, dst)))
+    def fake_open(path: str, flags: int) -> int:
+        calls.append(("open", path, flags))
+        return 99
+
+    monkeypatch.setattr(startup.os, "open", fake_open)
+    monkeypatch.setattr(
+        startup.os, "dup2", lambda src, dst: calls.append(("dup2", src, dst))
+    )
     monkeypatch.setattr(startup.os, "close", lambda fd: calls.append(("close", fd)))
 
     startup._redirect_standard_streams_to_devnull()
@@ -94,7 +115,7 @@ def test_daemon_child_stdio_redirects_to_devnull(monkeypatch):
     assert ("close", 99) in calls
 
 
-def test_configure_daemon_file_logging_writes_errors(tmp_path):
+def test_configure_daemon_file_logging_writes_errors(tmp_path: Any) -> None:
     log_path = startup._get_daemon_log_path(tmp_path)
     startup._configure_daemon_file_logging(tmp_path)
     import logging
@@ -106,7 +127,7 @@ def test_configure_daemon_file_logging_writes_errors(tmp_path):
     assert "daemon child failure" in log_path.read_text()
 
 
-def test_fork_child_configures_file_logging(monkeypatch, tmp_path):
+def test_fork_child_configures_file_logging(monkeypatch: Any, tmp_path: Any) -> None:
     pidfile = FakePidFile()
     configured = []
 
@@ -119,8 +140,12 @@ def test_fork_child_configures_file_logging(monkeypatch, tmp_path):
             startup.sys.exit(0)
 
     monkeypatch.setattr(startup, "_try_acquire_pidfile_lock", lambda _path: pidfile)
-    monkeypatch.setattr(startup, "_is_socket_connectable", lambda *_args, **_kwargs: False)
-    monkeypatch.setattr("code_briefcase.tldrignore.ensure_tldrignore", lambda _project: (False, ""))
+    monkeypatch.setattr(
+        startup, "_is_socket_connectable", lambda *_args, **_kwargs: False
+    )
+    monkeypatch.setattr(
+        "code_briefcase.tldrignore.ensure_tldrignore", lambda _project: (False, "")
+    )
     monkeypatch.setattr("code_briefcase.daemon.core.TLDRDaemon", FakeDaemon)
     monkeypatch.setattr(
         startup,
@@ -130,7 +155,9 @@ def test_fork_child_configures_file_logging(monkeypatch, tmp_path):
     monkeypatch.setattr(startup.os, "fork", lambda: 0)
     monkeypatch.setattr(startup.os, "setsid", lambda: None)
     monkeypatch.setattr(startup, "_redirect_standard_streams_to_devnull", lambda: None)
-    monkeypatch.setattr(startup.sys, "exit", lambda _code: (_ for _ in ()).throw(SystemExit(0)))
+    monkeypatch.setattr(
+        startup.sys, "exit", lambda _code: (_ for _ in ()).throw(SystemExit(0))
+    )
 
     with pytest.raises(SystemExit):
         startup.start_daemon(tmp_path)

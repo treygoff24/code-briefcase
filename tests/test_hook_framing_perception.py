@@ -1,3 +1,4 @@
+from typing import Any
 import json
 
 import pytest
@@ -7,7 +8,7 @@ from code_briefcase.hooks.post_edit import build_post_edit_response
 from code_briefcase.hooks.runtime import parse_hook_event, render_hook_response
 
 
-def _code_fixture(tmp_path):
+def _code_fixture(tmp_path: Any) -> Any:
     path = tmp_path / "auth.py"
     path.write_text(
         "import os\n\n"
@@ -19,7 +20,9 @@ def _code_fixture(tmp_path):
     return path
 
 
-def _pre_edit_event(tmp_path, tool_name: str, tool_input: dict | None = None):
+def _pre_edit_event(
+    tmp_path: Any, tool_name: str, tool_input: dict | None = None
+) -> Any:
     payload = {
         "hook_event_name": "PreToolUse",
         "tool_name": tool_name,
@@ -38,7 +41,11 @@ def _tool_input_for(tool_name: str) -> dict:
             "edits": [{"old_string": "return True", "new_string": "return False"}],
         }
     if tool_name == "Update":
-        return {"file_path": "auth.py", "old_string": "return True", "new_string": "return False"}
+        return {
+            "file_path": "auth.py",
+            "old_string": "return True",
+            "new_string": "return False",
+        }
     return {
         "file_path": "auth.py",
         "old_string": "return True",
@@ -48,11 +55,15 @@ def _tool_input_for(tool_name: str) -> dict:
 
 class TestPreEditFraming:
     @pytest.mark.parametrize("tool_name", sorted(EDIT_TOOLS - {"apply_patch"}))
-    def test_rendered_context_includes_temporal_framing(self, tmp_path, tool_name):
+    def test_rendered_context_includes_temporal_framing(
+        self, tmp_path: Any, tool_name: Any
+    ) -> None:
         _code_fixture(tmp_path)
         event = _pre_edit_event(tmp_path, tool_name, _tool_input_for(tool_name))
         execution = build_pre_edit_response(event)
-        assert execution.status == "ok", f"{tool_name} should emit context, got {execution.status}"
+        assert (
+            execution.status == "ok"
+        ), f"{tool_name} should emit context, got {execution.status}"
 
         rendered = render_hook_response(
             execution.response,
@@ -65,14 +76,18 @@ class TestPreEditFraming:
 
 
 class TestPostEditFraming:
-    def test_clean_edit_confirmation_framing(self, tmp_path, monkeypatch):
+    def test_clean_edit_confirmation_framing(
+        self, tmp_path: Any, monkeypatch: Any
+    ) -> None:
         source = tmp_path / "app.py"
         source.write_text("def main():\n    return 1\n")
         monkeypatch.setattr(
             "code_briefcase.hooks.post_edit.get_diagnostics",
             lambda *a, **k: {"diagnostics": [], "error_count": 0, "warning_count": 0},
         )
-        monkeypatch.setattr("code_briefcase.hooks.post_edit.notify_daemon", lambda *a, **k: None)
+        monkeypatch.setattr(
+            "code_briefcase.hooks.post_edit.notify_daemon", lambda *a, **k: None
+        )
 
         event = parse_hook_event(
             {
@@ -98,7 +113,7 @@ class TestNonCodeFileEditFraming:
     (the `[Code Briefcase pre-edit context — ...]` rewrite around L580).
     """
 
-    def test_yaml_edit_includes_pre_edit_disclaimer(self, tmp_path):
+    def test_yaml_edit_includes_pre_edit_disclaimer(self, tmp_path: Any) -> None:
         (tmp_path / "config.yaml").write_text(
             "name: example\nversion: 1\nfeatures:\n  - alpha\n  - beta\n"
         )
@@ -127,7 +142,7 @@ class TestNonCodeFileEditFraming:
 
 
 class TestApplyPatchSkip:
-    def test_codex_apply_patch_pre_edit_is_suppressed(self, tmp_path):
+    def test_codex_apply_patch_pre_edit_is_suppressed(self, tmp_path: Any) -> None:
         source = tmp_path / "app.py"
         source.write_text("def main():\n    return 1\n")
         event = parse_hook_event(

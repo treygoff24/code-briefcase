@@ -28,7 +28,7 @@ import subprocess
 import tempfile
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from typing import Callable, TypedDict
+from typing import Callable, TypedDict, Any
 from xml.etree import ElementTree
 
 from code_briefcase.command_exec import expand_shebang_command
@@ -317,6 +317,7 @@ PROJECT_OXLINT_IGNORE_PATTERNS = (
 )
 JS_TS_PROJECT_CONFIG_NAMES = ("tsconfig.json", "jsconfig.json")
 
+
 def _detect_language(file_path: str) -> str:
     """Detect language from file extension."""
     ext = Path(file_path).suffix.lower()
@@ -464,7 +465,7 @@ def _write_javascript_project_tsconfig(
     return temp_dir
 
 
-def _parse_pyright_output(stdout: str) -> list[dict]:
+def _parse_pyright_output(stdout: str) -> list[dict[str, Any]]:
     """Parse pyright JSON output into structured diagnostics."""
     try:
         data = json.loads(stdout)
@@ -487,7 +488,7 @@ def _parse_pyright_output(stdout: str) -> list[dict]:
         return []
 
 
-def _parse_ruff_output(stdout: str) -> list[dict]:
+def _parse_ruff_output(stdout: str) -> list[dict[str, Any]]:
     """Parse ruff JSON output into structured diagnostics."""
     try:
         data = json.loads(stdout)
@@ -509,7 +510,7 @@ def _parse_ruff_output(stdout: str) -> list[dict]:
         return []
 
 
-def _parse_tsc_output(output: str) -> list[dict]:
+def _parse_tsc_output(output: str) -> list[dict[str, Any]]:
     """Parse tsc output into structured diagnostics.
 
     With --pretty false, tsc writes diagnostics to stdout, not stderr; all
@@ -536,7 +537,7 @@ def _parse_tsc_output(output: str) -> list[dict]:
     return diagnostics
 
 
-def _parse_oxlint_output(stdout: str) -> list[dict]:
+def _parse_oxlint_output(stdout: str) -> list[dict[str, Any]]:
     """Parse oxlint JSON output into structured diagnostics."""
     try:
         data = json.loads(stdout)
@@ -546,7 +547,7 @@ def _parse_oxlint_output(stdout: str) -> list[dict]:
     diagnostics = []
     for diag in data.get("diagnostics", []):
         labels = diag.get("labels") or []
-        span = {}
+        span: Any = {}
         if labels and isinstance(labels[0], dict):
             span = labels[0].get("span") or {}
 
@@ -565,9 +566,9 @@ def _parse_oxlint_output(stdout: str) -> list[dict]:
     return diagnostics
 
 
-def _parse_go_vet_output(stderr: str) -> list[dict]:
+def _parse_go_vet_output(stderr: str) -> list[dict[str, Any]]:
     """Parse go vet output into structured diagnostics."""
-    diagnostics = []
+    diagnostics: list[dict[str, Any]] = []
     if not stderr.strip():
         return diagnostics
     # go vet format: file.go:line:col: message
@@ -589,7 +590,7 @@ def _parse_go_vet_output(stderr: str) -> list[dict]:
     return diagnostics
 
 
-def _parse_golangci_lint_output(stdout: str) -> list[dict]:
+def _parse_golangci_lint_output(stdout: str) -> list[dict[str, Any]]:
     """Parse golangci-lint JSON output into structured diagnostics."""
     try:
         data = json.loads(stdout)
@@ -612,9 +613,9 @@ def _parse_golangci_lint_output(stdout: str) -> list[dict]:
         return []
 
 
-def _parse_cargo_check_output(stdout: str) -> list[dict]:
+def _parse_cargo_check_output(stdout: str) -> list[dict[str, Any]]:
     """Parse cargo check JSON output into structured diagnostics."""
-    diagnostics = []
+    diagnostics: list[dict[str, Any]] = []
     if not stdout.strip():
         return diagnostics
     # cargo outputs one JSON object per line
@@ -645,9 +646,9 @@ def _parse_cargo_check_output(stdout: str) -> list[dict]:
     return diagnostics
 
 
-def _parse_clippy_output(stdout: str) -> list[dict]:
+def _parse_clippy_output(stdout: str) -> list[dict[str, Any]]:
     """Parse cargo clippy JSON output into structured diagnostics."""
-    diagnostics = []
+    diagnostics: list[dict[str, Any]] = []
     if not stdout.strip():
         return diagnostics
     # clippy uses the same format as cargo check
@@ -678,7 +679,7 @@ def _parse_clippy_output(stdout: str) -> list[dict]:
     return diagnostics
 
 
-def _parse_rubocop_output(stdout: str) -> list[dict]:
+def _parse_rubocop_output(stdout: str) -> list[dict[str, Any]]:
     """Parse rubocop JSON output into structured diagnostics."""
     try:
         data = json.loads(stdout)
@@ -703,7 +704,7 @@ def _parse_rubocop_output(stdout: str) -> list[dict]:
         return []
 
 
-def _parse_phpstan_output(stdout: str) -> list[dict]:
+def _parse_phpstan_output(stdout: str) -> list[dict[str, Any]]:
     """Parse phpstan JSON output into structured diagnostics."""
     try:
         data = json.loads(stdout)
@@ -726,7 +727,7 @@ def _parse_phpstan_output(stdout: str) -> list[dict]:
         return []
 
 
-def _parse_ktlint_output(stdout: str) -> list[dict]:
+def _parse_ktlint_output(stdout: str) -> list[dict[str, Any]]:
     """Parse ktlint JSON output into structured diagnostics."""
     try:
         data = json.loads(stdout)
@@ -750,7 +751,7 @@ def _parse_ktlint_output(stdout: str) -> list[dict]:
         return []
 
 
-def _parse_swiftlint_output(stdout: str) -> list[dict]:
+def _parse_swiftlint_output(stdout: str) -> list[dict[str, Any]]:
     """Parse swiftlint JSON output into structured diagnostics."""
     try:
         data = json.loads(stdout)
@@ -772,9 +773,9 @@ def _parse_swiftlint_output(stdout: str) -> list[dict]:
         return []
 
 
-def _parse_cppcheck_output(stdout: str) -> list[dict]:
+def _parse_cppcheck_output(stdout: str) -> list[dict[str, Any]]:
     """Parse cppcheck XML output into structured diagnostics."""
-    diagnostics = []
+    diagnostics: list[dict[str, Any]] = []
     if not stdout.strip():
         return diagnostics
     try:
@@ -798,7 +799,7 @@ def _parse_cppcheck_output(stdout: str) -> list[dict]:
         return []
 
 
-def _parse_credo_output(stdout: str) -> list[dict]:
+def _parse_credo_output(stdout: str) -> list[dict[str, Any]]:
     """Parse credo JSON output into structured diagnostics."""
     try:
         data = json.loads(stdout)
@@ -820,9 +821,9 @@ def _parse_credo_output(stdout: str) -> list[dict]:
         return []
 
 
-def _parse_javac_output(stderr: str) -> list[dict]:
+def _parse_javac_output(stderr: str) -> list[dict[str, Any]]:
     """Parse javac output into structured diagnostics."""
-    diagnostics = []
+    diagnostics: list[dict[str, Any]] = []
     if not stderr.strip():
         return diagnostics
     # javac format: file.java:line: error: message
@@ -844,9 +845,9 @@ def _parse_javac_output(stderr: str) -> list[dict]:
     return diagnostics
 
 
-def _parse_checkstyle_output(stdout: str) -> list[dict]:
+def _parse_checkstyle_output(stdout: str) -> list[dict[str, Any]]:
     """Parse checkstyle XML output into structured diagnostics."""
-    diagnostics = []
+    diagnostics: list[dict[str, Any]] = []
     if not stdout.strip():
         return diagnostics
     try:
@@ -870,9 +871,9 @@ def _parse_checkstyle_output(stdout: str) -> list[dict]:
         return []
 
 
-def _parse_gcc_output(stderr: str) -> list[dict]:
+def _parse_gcc_output(stderr: str) -> list[dict[str, Any]]:
     """Parse gcc/g++/clang output into structured diagnostics."""
-    diagnostics = []
+    diagnostics: list[dict[str, Any]] = []
     if not stderr.strip():
         return diagnostics
     # gcc format: file.c:line:col: error: message
@@ -894,9 +895,9 @@ def _parse_gcc_output(stderr: str) -> list[dict]:
     return diagnostics
 
 
-def _parse_kotlinc_output(stderr: str) -> list[dict]:
+def _parse_kotlinc_output(stderr: str) -> list[dict[str, Any]]:
     """Parse kotlinc output into structured diagnostics."""
-    diagnostics = []
+    diagnostics: list[dict[str, Any]] = []
     if not stderr.strip():
         return diagnostics
     # kotlinc format: file.kt:line:col: error: message
@@ -918,9 +919,9 @@ def _parse_kotlinc_output(stderr: str) -> list[dict]:
     return diagnostics
 
 
-def _parse_swiftc_output(stderr: str) -> list[dict]:
+def _parse_swiftc_output(stderr: str) -> list[dict[str, Any]]:
     """Parse swiftc output into structured diagnostics."""
-    diagnostics = []
+    diagnostics: list[dict[str, Any]] = []
     if not stderr.strip():
         return diagnostics
     # swiftc format: file.swift:line:col: error: message
@@ -942,9 +943,9 @@ def _parse_swiftc_output(stderr: str) -> list[dict]:
     return diagnostics
 
 
-def _parse_dotnet_build_output(stderr: str) -> list[dict]:
+def _parse_dotnet_build_output(stderr: str) -> list[dict[str, Any]]:
     """Parse dotnet build output into structured diagnostics."""
-    diagnostics = []
+    diagnostics: list[dict[str, Any]] = []
     if not stderr.strip():
         return diagnostics
     # dotnet format: file.cs(line,col): error CS0000: message
@@ -966,9 +967,9 @@ def _parse_dotnet_build_output(stderr: str) -> list[dict]:
     return diagnostics
 
 
-def _parse_scalac_output(stderr: str) -> list[dict]:
+def _parse_scalac_output(stderr: str) -> list[dict[str, Any]]:
     """Parse scalac output into structured diagnostics."""
-    diagnostics = []
+    diagnostics: list[dict[str, Any]] = []
     if not stderr.strip():
         return diagnostics
     # scalac format varies, common: file.scala:line: error: message
@@ -990,9 +991,9 @@ def _parse_scalac_output(stderr: str) -> list[dict]:
     return diagnostics
 
 
-def _parse_mix_compile_output(stderr: str) -> list[dict]:
+def _parse_mix_compile_output(stderr: str) -> list[dict[str, Any]]:
     """Parse mix compile output into structured diagnostics."""
-    diagnostics = []
+    diagnostics: list[dict[str, Any]] = []
     if not stderr.strip():
         return diagnostics
     # mix compile format: warning: message
@@ -1028,7 +1029,7 @@ def _oxfmt_drift_diagnostic(path: Path) -> dict:
     }
 
 
-def _run_oxfmt(file_path: Path) -> list[dict]:
+def _run_oxfmt(file_path: Path) -> list[dict[str, Any]]:
     """Run oxfmt --check and convert formatting drift into one diagnostic."""
     if file_path.name.endswith(".d.ts"):
         # oxfmt --check has false positives on .d.ts files in the beta
@@ -1054,7 +1055,7 @@ def _run_oxfmt(file_path: Path) -> list[dict]:
     return [_oxfmt_drift_diagnostic(file_path)]
 
 
-def _run_project_oxfmt(project_path: Path) -> list[dict]:
+def _run_project_oxfmt(project_path: Path) -> list[dict[str, Any]]:
     """Run oxfmt --check for a project without checking .d.ts files."""
     oxfmt = _resolve_tool("oxfmt", project_path)
     if not oxfmt:
@@ -1265,7 +1266,7 @@ def _filter_diagnostics_to_file(
     diagnostics: list[dict],
     target_path: Path,
     cwd: Path | None,
-) -> list[dict]:
+) -> list[dict[str, Any]]:
     """Keep only diagnostics that belong to target_path.
 
     Project-aware tsc is the correct way to respect path aliases, JSX settings,
@@ -1355,8 +1356,7 @@ def _run_js_ts_project_diagnostics(
     if oxlint:
         oxlint_cmd = [oxlint, "--format=json", "--no-error-on-unmatched-pattern"]
         oxlint_cmd.extend(
-            f"--ignore-pattern={pattern}"
-            for pattern in PROJECT_OXLINT_IGNORE_PATTERNS
+            f"--ignore-pattern={pattern}" for pattern in PROJECT_OXLINT_IGNORE_PATTERNS
         )
         oxlint_cmd.append(".")
         tasks.append(("oxlint", oxlint_cmd, 60))
@@ -1715,7 +1715,7 @@ def _run_elixir_diagnostics(
     return diagnostics, tools_used
 
 
-def _parse_luacheck_output(output: str) -> list[dict]:
+def _parse_luacheck_output(output: str) -> list[dict[str, Any]]:
     """Parse luacheck --formatter plain output: `file:line:col: (CODE) message`."""
     diagnostics = []
     pattern = re.compile(r"^\s*(.+?):(\d+):(\d+):\s*(?:\((\w+)\)\s*)?(.+)$")
@@ -1747,7 +1747,14 @@ def _run_lua_diagnostics(
     if include_lint and shutil.which("luacheck"):
         try:
             result = subprocess.run(
-                ["luacheck", "--codes", "--no-color", "--formatter", "plain", str(path)],
+                [
+                    "luacheck",
+                    "--codes",
+                    "--no-color",
+                    "--formatter",
+                    "plain",
+                    str(path),
+                ],
                 capture_output=True,
                 text=True,
                 timeout=15,

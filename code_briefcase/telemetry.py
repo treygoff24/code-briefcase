@@ -145,7 +145,9 @@ def _redact_secret_path(value: str) -> str:
 
 def _normalize_path(project: Path, value: str) -> str:
     if redact_paths_enabled():
-        return f"<redacted>/{project_hash(project)}/{telemetry_path_hash(project, value)}"
+        return (
+            f"<redacted>/{project_hash(project)}/{telemetry_path_hash(project, value)}"
+        )
     try:
         local = _redact_secret_path(_path_key(project, value))
         if local == "[redacted-secret-path]":
@@ -180,6 +182,7 @@ def _redact_secret_string(value: str) -> str:
         for token in re.split(r"(\s+|[;&|])", value)
     )
     for pattern in SECRET_VALUE_PATTERNS:
+
         def repl(match: re.Match[str]) -> str:
             if match.lastindex and match.lastindex >= 1:
                 prefix = match.group(1)
@@ -190,12 +193,17 @@ def _redact_secret_string(value: str) -> str:
         redacted = pattern.sub(repl, redacted)
     try:
         limit = int(
-            os.environ.get("CODE_BRIEFCASE_TELEMETRY_LOCAL_STRING_LIMIT", LOCAL_EVIDENCE_STRING_LIMIT)
+            os.environ.get(
+                "CODE_BRIEFCASE_TELEMETRY_LOCAL_STRING_LIMIT",
+                LOCAL_EVIDENCE_STRING_LIMIT,
+            )
         )
     except (TypeError, ValueError):
         limit = LOCAL_EVIDENCE_STRING_LIMIT
     if len(redacted) > limit:
-        return redacted[:limit].rstrip() + f"... [truncated {len(redacted) - limit} chars]"
+        return (
+            redacted[:limit].rstrip() + f"... [truncated {len(redacted) - limit} chars]"
+        )
     return redacted
 
 
@@ -349,14 +357,20 @@ def record_hook_execution(
         "version": __version__,
         "client": client,
         "event": hook_event,
-        "project": str(project) if not redact_paths_enabled() else f"<redacted>/{project_hash(project)}",
+        "project": (
+            str(project)
+            if not redact_paths_enabled()
+            else f"<redacted>/{project_hash(project)}"
+        ),
         "project_hash": project_hash(project),
         "duration_ms": duration_ms,
         "status": status,
         "error_kind": error_kind,
         "injected_bytes": injected_bytes,
         "trigger_files": _prepare_paths(project, list(trigger_files or [])),
-        "recommended_related_files": _prepare_paths(project, list(recommended_files or [])),
+        "recommended_related_files": _prepare_paths(
+            project, list(recommended_files or [])
+        ),
         "surfaced_files": _prepare_paths(project, list(surfaced_files or [])),
         "diagnostics_count": diagnostics_count,
         "daemon_state": daemon_state,
@@ -390,12 +404,18 @@ def record_hook_execution(
             "warning": "local-rich evidence may contain private project details; do not commit or share",
             "tool_name": sanitize_local_evidence(tool_name),
             "tool_input": sanitize_local_evidence(tool_input or {}),
-            "raw_trigger_files": [_local_path(project, item) for item in list(trigger_files or [])],
+            "raw_trigger_files": [
+                _local_path(project, item) for item in list(trigger_files or [])
+            ],
             "raw_recommended_related_files": [
                 _local_path(project, item) for item in list(recommended_files or [])
             ],
-            "raw_surfaced_files": [_local_path(project, item) for item in list(surfaced_files or [])],
-            "raw_candidate_files": _prepare_local_candidate_files(project, candidate_files),
+            "raw_surfaced_files": [
+                _local_path(project, item) for item in list(surfaced_files or [])
+            ],
+            "raw_candidate_files": _prepare_local_candidate_files(
+                project, candidate_files
+            ),
         }
     write_telemetry_record(record)
 
@@ -422,7 +442,11 @@ def record_watch_diagnostics_event(
         "timestamp": datetime.now(timezone.utc).astimezone().isoformat(),
         "version": __version__,
         "event": "watch-diagnostics-event",
-        "project": str(project) if not redact_paths_enabled() else f"<redacted>/{project_hash(project)}",
+        "project": (
+            str(project)
+            if not redact_paths_enabled()
+            else f"<redacted>/{project_hash(project)}"
+        ),
         "project_hash": project_hash(project),
         "action": action,
         "adapter_key_hash": adapter_key_hash,

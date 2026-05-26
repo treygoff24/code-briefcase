@@ -1,9 +1,10 @@
+from typing import Any
 import subprocess
 import sys
 from pathlib import Path
 
 
-def test_pack_help_smoke():
+def test_pack_help_smoke() -> None:
     result = subprocess.run(
         [sys.executable, "-m", "code_briefcase.cli", "pack", "--help"],
         capture_output=True,
@@ -14,7 +15,7 @@ def test_pack_help_smoke():
     assert "context pack" in result.stdout.lower()
 
 
-def test_hooks_help_smoke():
+def test_hooks_help_smoke() -> None:
     result = subprocess.run(
         [sys.executable, "-m", "code_briefcase.cli", "hooks", "--help"],
         capture_output=True,
@@ -25,13 +26,17 @@ def test_hooks_help_smoke():
     assert "hooks" in result.stdout.lower()
 
 
-def test_outcome_backfill_fixture_command(tmp_path):
+def test_outcome_backfill_fixture_command(tmp_path: Any) -> None:
     out_json = tmp_path / "rollups.json"
     fixtures = Path(__file__).resolve().parent / "fixtures" / "eval"
     result = subprocess.run(
         [
             sys.executable,
-            str(Path(__file__).resolve().parents[1] / "scripts" / "backfill_tldr_outcomes.py"),
+            str(
+                Path(__file__).resolve().parents[1]
+                / "scripts"
+                / "backfill_tldr_outcomes.py"
+            ),
             "--start",
             "2026-05-20T00:00:00Z",
             "--end",
@@ -52,13 +57,17 @@ def test_outcome_backfill_fixture_command(tmp_path):
     assert result.returncode == 0, result.stderr
 
 
-def test_outcome_render_fixture_command(tmp_path):
+def test_outcome_render_fixture_command(tmp_path: Any) -> None:
     fixtures = Path(__file__).resolve().parent / "fixtures" / "eval"
     backfill_json = tmp_path / "rollups.json"
     subprocess.run(
         [
             sys.executable,
-            str(Path(__file__).resolve().parents[1] / "scripts" / "backfill_tldr_outcomes.py"),
+            str(
+                Path(__file__).resolve().parents[1]
+                / "scripts"
+                / "backfill_tldr_outcomes.py"
+            ),
             "--start",
             "2026-05-20T00:00:00Z",
             "--end",
@@ -77,7 +86,11 @@ def test_outcome_render_fixture_command(tmp_path):
     result = subprocess.run(
         [
             sys.executable,
-            str(Path(__file__).resolve().parents[1] / "scripts" / "render_tldr_outcome_report.py"),
+            str(
+                Path(__file__).resolve().parents[1]
+                / "scripts"
+                / "render_tldr_outcome_report.py"
+            ),
             "--input",
             str(backfill_json),
             "--markdown-out",
@@ -92,7 +105,7 @@ def test_outcome_render_fixture_command(tmp_path):
     assert result.returncode == 0, result.stderr
 
 
-def test_tldr_mcp_help_smoke():
+def test_tldr_mcp_help_smoke() -> None:
     result = subprocess.run(
         [sys.executable, "-m", "code_briefcase.mcp_server", "--help"],
         capture_output=True,

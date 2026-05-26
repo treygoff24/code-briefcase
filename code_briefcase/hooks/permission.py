@@ -12,12 +12,30 @@ _RF_FLAGS = r"-(?=[A-Za-z]*[rR])(?=[A-Za-z]*f)[A-Za-z]*"
 
 _DESTRUCTIVE_PATTERNS: list[tuple[re.Pattern[str], str]] = [
     # rm -rf /, rm -fr /, and sudo-wrapped variants.
-    (re.compile(rf"\brm\s+({_RF_FLAGS}\s+|--\s+)\/\s*$"), "recursive forced deletion of /"),
-    (re.compile(rf"\brm\s+({_RF_FLAGS}\s+|--\s+)~\s*$"), "recursive forced deletion of home directory"),
-    (re.compile(rf"\bsudo\s+.*\brm\s+({_RF_FLAGS}\s+|--\s+)\/\s*$"), "recursive forced deletion of / with sudo"),
-    (re.compile(rf"\bsudo\s+.*\brm\s+({_RF_FLAGS}\s+|--\s+)~\s*$"), "recursive forced deletion of home directory with sudo"),
-    (re.compile(rf"\brm\s+({_RF_FLAGS}\s+|--\s+)\$HOME\b"), "recursive forced deletion of $HOME"),
-    (re.compile(rf"\bsudo\s+.*\brm\s+.*{_RF_FLAGS}.*\$HOME\s*$"), "recursive forced deletion of $HOME with sudo"),
+    (
+        re.compile(rf"\brm\s+({_RF_FLAGS}\s+|--\s+)\/\s*$"),
+        "recursive forced deletion of /",
+    ),
+    (
+        re.compile(rf"\brm\s+({_RF_FLAGS}\s+|--\s+)~\s*$"),
+        "recursive forced deletion of home directory",
+    ),
+    (
+        re.compile(rf"\bsudo\s+.*\brm\s+({_RF_FLAGS}\s+|--\s+)\/\s*$"),
+        "recursive forced deletion of / with sudo",
+    ),
+    (
+        re.compile(rf"\bsudo\s+.*\brm\s+({_RF_FLAGS}\s+|--\s+)~\s*$"),
+        "recursive forced deletion of home directory with sudo",
+    ),
+    (
+        re.compile(rf"\brm\s+({_RF_FLAGS}\s+|--\s+)\$HOME\b"),
+        "recursive forced deletion of $HOME",
+    ),
+    (
+        re.compile(rf"\bsudo\s+.*\brm\s+.*{_RF_FLAGS}.*\$HOME\s*$"),
+        "recursive forced deletion of $HOME with sudo",
+    ),
     # Disk erase/format
     (re.compile(r"\bmkfs\b"), "disk format command"),
     (re.compile(r"\bdd\s+.*of=/dev/"), "disk erase via dd"),
@@ -26,69 +44,131 @@ _DESTRUCTIVE_PATTERNS: list[tuple[re.Pattern[str], str]] = [
 
 # Known-safe command prefixes that should never be blocked
 _SAFE_COMMAND_PREFIXES = (
-    "npm ", "npm\t",
-    "npx ", "npx\t",
-    "yarn ", "yarn\t",
-    "pnpm ", "pnpm\t",
-    "pip ", "pip\t",
-    "pip3 ", "pip3\t",
-    "python ", "python\t",
-    "python3 ", "python3\t",
-    "pytest ", "pytest\t",
+    "npm ",
+    "npm\t",
+    "npx ",
+    "npx\t",
+    "yarn ",
+    "yarn\t",
+    "pnpm ",
+    "pnpm\t",
+    "pip ",
+    "pip\t",
+    "pip3 ",
+    "pip3\t",
+    "python ",
+    "python\t",
+    "python3 ",
+    "python3\t",
+    "pytest ",
+    "pytest\t",
     "pytest",  # bare pytest
-    "tox ", "tox\t",
-    "make ", "make\t",
-    "cargo ", "cargo\t",
-    "go ", "go\t",
-    "git ", "git\t",
-    "docker ", "docker\t",
-    "echo ", "echo\t",
-    "cat ", "cat\t",
-    "ls ", "ls\t",
-    "head ", "head\t",
-    "tail ", "tail\t",
-    "grep ", "grep\t",
-    "rg ", "rg\t",
-    "find ", "find\t",
-    "which ", "which\t",
-    "type ", "type\t",
-    "wc ", "wc\t",
-    "sort ", "sort\t",
-    "curl ", "curl\t",
-    "wget ", "wget\t",
-    "mkdir ", "mkdir\t",
-    "cp ", "cp\t",
-    "mv ", "mv\t",
-    "touch ", "touch\t",
-    "chmod ", "chmod\t",
-    "chown ", "chown\t",
-    "stat ", "stat\t",
-    "file ", "file\t",
-    "tree ", "tree\t",
-    "diff ", "diff\t",
-    "patch ", "patch\t",
-    "node ", "node\t",
-    "tsc ", "tsc\t",
-    "eslint ", "eslint\t",
-    "prettier ", "prettier\t",
-    "black ", "black\t",
-    "ruff ", "ruff\t",
-    "mypy ", "mypy\t",
-    "flake8 ", "flake8\t",
-    "isort ", "isort\t",
-    "terraform ", "terraform\t",
-    "helm ", "helm\t",
-    "kubectl ", "kubectl\t",
-    "az ", "az\t",
-    "gcloud ", "gcloud\t",
-    "aws ", "aws\t",
-    "rustc ", "rustc\t",
-    "javac ", "javac\t",
-    "java ", "java\t",
-    "dotnet ", "dotnet\t",
-    "msbuild ", "msbuild\t",
-    "gradle ", "gradle\t",
-    "mvn ", "mvn\t",
+    "tox ",
+    "tox\t",
+    "make ",
+    "make\t",
+    "cargo ",
+    "cargo\t",
+    "go ",
+    "go\t",
+    "git ",
+    "git\t",
+    "docker ",
+    "docker\t",
+    "echo ",
+    "echo\t",
+    "cat ",
+    "cat\t",
+    "ls ",
+    "ls\t",
+    "head ",
+    "head\t",
+    "tail ",
+    "tail\t",
+    "grep ",
+    "grep\t",
+    "rg ",
+    "rg\t",
+    "find ",
+    "find\t",
+    "which ",
+    "which\t",
+    "type ",
+    "type\t",
+    "wc ",
+    "wc\t",
+    "sort ",
+    "sort\t",
+    "curl ",
+    "curl\t",
+    "wget ",
+    "wget\t",
+    "mkdir ",
+    "mkdir\t",
+    "cp ",
+    "cp\t",
+    "mv ",
+    "mv\t",
+    "touch ",
+    "touch\t",
+    "chmod ",
+    "chmod\t",
+    "chown ",
+    "chown\t",
+    "stat ",
+    "stat\t",
+    "file ",
+    "file\t",
+    "tree ",
+    "tree\t",
+    "diff ",
+    "diff\t",
+    "patch ",
+    "patch\t",
+    "node ",
+    "node\t",
+    "tsc ",
+    "tsc\t",
+    "eslint ",
+    "eslint\t",
+    "prettier ",
+    "prettier\t",
+    "black ",
+    "black\t",
+    "ruff ",
+    "ruff\t",
+    "mypy ",
+    "mypy\t",
+    "flake8 ",
+    "flake8\t",
+    "isort ",
+    "isort\t",
+    "terraform ",
+    "terraform\t",
+    "helm ",
+    "helm\t",
+    "kubectl ",
+    "kubectl\t",
+    "az ",
+    "az\t",
+    "gcloud ",
+    "gcloud\t",
+    "aws ",
+    "aws\t",
+    "rustc ",
+    "rustc\t",
+    "javac ",
+    "javac\t",
+    "java ",
+    "java\t",
+    "dotnet ",
+    "dotnet\t",
+    "msbuild ",
+    "msbuild\t",
+    "gradle ",
+    "gradle\t",
+    "mvn ",
+    "mvn\t",
 )
 
 
@@ -113,7 +193,11 @@ def _is_safe_command(command: str) -> bool:
 
 
 def _split_shell_segments(command: str) -> list[str]:
-    return [segment.strip() for segment in re.split(r"\s*(?:&&|\|\||[;|])\s*", command) if segment.strip()]
+    return [
+        segment.strip()
+        for segment in re.split(r"\s*(?:&&|\|\||[;|])\s*", command)
+        if segment.strip()
+    ]
 
 
 def _sudo_command_tokens(tokens: list[str]) -> list[str]:
@@ -144,7 +228,9 @@ def _target_is_project_root(target: str, project: Path | None) -> bool:
         return False
 
 
-def _check_single_destructive_command(command: str, *, project: Path | None = None) -> str | None:
+def _check_single_destructive_command(
+    command: str, *, project: Path | None = None
+) -> str | None:
     if not command or not command.strip():
         return None
 
@@ -203,7 +289,9 @@ def _check_single_destructive_command(command: str, *, project: Path | None = No
     return None
 
 
-def check_destructive_command(command: str, *, project: Path | None = None) -> str | None:
+def check_destructive_command(
+    command: str, *, project: Path | None = None
+) -> str | None:
     """Return a reason string if a high-confidence destructive command is detected."""
     if not command or not command.strip():
         return None

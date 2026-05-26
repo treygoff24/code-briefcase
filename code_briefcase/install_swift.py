@@ -9,6 +9,7 @@ Swift requires a separate installation step because the upstream PyPI package
 (tree-sitter-swift) is broken. This script installs a pre-built wheel for
 macOS ARM64, or provides instructions for other platforms.
 """
+from typing import Any
 
 import platform
 import subprocess
@@ -21,7 +22,7 @@ def get_vendor_dir() -> Path:
     return Path(__file__).parent.parent / "vendor"
 
 
-def install_swift():
+def install_swift() -> Any:
     """Install tree-sitter-swift for Swift language support."""
     print("Installing Swift support for Code Briefcase...")
     print()

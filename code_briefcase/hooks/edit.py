@@ -4,7 +4,12 @@ import re
 from pathlib import Path
 
 from code_briefcase.hooks.file_context import build_file_context_for_path
-from code_briefcase.hooks.outcome import HookExecutionResult, event_relative_path, ok, skipped
+from code_briefcase.hooks.outcome import (
+    HookExecutionResult,
+    event_relative_path,
+    ok,
+    skipped,
+)
 from code_briefcase.hooks.path_policy import resolve_event_path
 from code_briefcase.hooks.runtime import HookEvent, HookResponse
 
@@ -31,7 +36,12 @@ def extract_apply_patch_paths(event: HookEvent) -> list[Path]:
     if event.tool_name != "apply_patch":
         return []
 
-    command = str(event.tool_input.get("command") or event.tool_input.get("cmd") or event.tool_input.get("patch") or "")
+    command = str(
+        event.tool_input.get("command")
+        or event.tool_input.get("cmd")
+        or event.tool_input.get("patch")
+        or ""
+    )
     paths: list[Path] = []
     seen: set[Path] = set()
     patterns = (
@@ -89,7 +99,9 @@ def _likely_symbol(tool_input: dict) -> str | None:
     return None
 
 
-def build_pre_edit_response(event: HookEvent, budget: int = 2000) -> HookExecutionResult:
+def build_pre_edit_response(
+    event: HookEvent, budget: int = 2000
+) -> HookExecutionResult:
     if event.tool_name not in EDIT_TOOLS:
         return skipped(reason="wrong_tool")
     if event.tool_name == "apply_patch":
@@ -107,7 +119,9 @@ def build_pre_edit_response(event: HookEvent, budget: int = 2000) -> HookExecuti
 
     result = build_file_context_for_path(event, file_path, mode="edit", budget=budget)
     if result.status != "ok":
-        return skipped(reason=result.reason or "bypass", trigger_files=result.trigger_files)
+        return skipped(
+            reason=result.reason or "bypass", trigger_files=result.trigger_files
+        )
 
     context = result.context or ""
     symbol = _likely_symbol(event.tool_input)
@@ -118,7 +132,9 @@ def build_pre_edit_response(event: HookEvent, budget: int = 2000) -> HookExecuti
         )
 
     return ok(
-        HookResponse(message=context, additional_context=context, suppress_output=False),
+        HookResponse(
+            message=context, additional_context=context, suppress_output=False
+        ),
         trigger_files=result.trigger_files,
         recommended_files=result.recommended_files,
         surfaced_files=result.surfaced_files,

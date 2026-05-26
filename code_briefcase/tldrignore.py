@@ -234,7 +234,7 @@ def load_ignore_patterns(project_dir: str | Path) -> "PathSpec":
 
     if tldrignore_path.exists():
         content = tldrignore_path.read_text()
-        patterns: list[str] = content.splitlines()
+        patterns = content.splitlines()
     else:
         # Use defaults if no .code-briefcaseignore exists
         patterns = list(DEFAULT_TEMPLATE.splitlines())
@@ -254,7 +254,7 @@ class IgnoreSpec:
         project_dir: str | Path,
         use_gitignore: bool = True,
         cli_patterns: list[str] | None = None,
-    ):
+    ) -> None:
         import pathspec
 
         self.project_path = Path(project_dir).resolve()
@@ -439,7 +439,7 @@ def _has_negation_for_file(spec: "PathSpec", rel_path: str) -> bool:
     for pattern in spec.patterns:
         # Check if this is a negation (include) pattern
         # pathspec uses 'include' attribute: True = negation (! pattern)
-        if getattr(pattern, 'include', None) is True:
+        if getattr(pattern, "include", None) is True:
             # This is a negation pattern - check if it matches
             if pattern.match_file(rel_path):
                 return True
@@ -499,7 +499,11 @@ def filter_files(
     # Second pass: batch check gitignore for files that passed tldrignore
     if use_gitignore and tldr_passed and is_git_repo(str(project_path)):
         gitignored = batch_gitignored(tldr_passed, project_path)
-        return [f for f in tldr_passed
-                if str(f.relative_to(project_path) if f.is_absolute() else f) not in gitignored]
+        return [
+            f
+            for f in tldr_passed
+            if str(f.relative_to(project_path) if f.is_absolute() else f)
+            not in gitignored
+        ]
 
     return tldr_passed

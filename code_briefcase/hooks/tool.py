@@ -163,7 +163,9 @@ def extract_shell_file_candidates(event: HookEvent, command: str) -> list[Path]:
             i = j
             continue
 
-        if token in WRITE_REDIRECT_MARKERS or (token == ">" and i > 0 and tokens[i - 1] == "cat"):
+        if token in WRITE_REDIRECT_MARKERS or (
+            token == ">" and i > 0 and tokens[i - 1] == "cat"
+        ):
             if i + 1 < len(tokens):
                 add(_resolve_command_path(event, tokens[i + 1]))
             i += 1
@@ -193,10 +195,14 @@ def extract_shell_file_candidates(event: HookEvent, command: str) -> list[Path]:
 
 def _command_looks_write_like(command: str) -> bool:
     lowered = command.lower()
-    return any(marker in lowered for marker in (">>", " >", " tee ", "apply_patch", " sed -i"))
+    return any(
+        marker in lowered for marker in (">>", " >", " tee ", "apply_patch", " sed -i")
+    )
 
 
-def build_pre_tool_response(event: HookEvent, budget: int = 1200) -> HookExecutionResult:
+def build_pre_tool_response(
+    event: HookEvent, budget: int = 1200
+) -> HookExecutionResult:
     """Destructive command guard for shell tool calls.
 
     The shell file-context fan-out was disabled 2026-05-24 — it emitted

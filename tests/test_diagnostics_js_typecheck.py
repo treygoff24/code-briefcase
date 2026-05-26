@@ -1,16 +1,15 @@
+from typing import Any
 from code_briefcase import diagnostics as diag
 
 
-def test_javascript_diagnostics_runs_tsc_with_allow_js(tmp_path, monkeypatch, make_executable):
+def test_javascript_diagnostics_runs_tsc_with_allow_js(
+    tmp_path: Any, monkeypatch: Any, make_executable: Any
+) -> None:
     monkeypatch.setattr(diag.shutil, "which", lambda name: None)
 
     source = tmp_path / "src" / "type_error.js"
     source.parent.mkdir()
-    source.write_text(
-        "// @ts-check\n"
-        "/** @type {string} */\n"
-        "const answer = 42;\n"
-    )
+    source.write_text("// @ts-check\n" "/** @type {string} */\n" "const answer = 42;\n")
     args_file = tmp_path / "tsc-args.txt"
 
     make_executable(
@@ -33,8 +32,8 @@ exit 2
 
 
 def test_single_file_typescript_uses_project_config_and_filters_output(
-    tmp_path, monkeypatch, make_executable
-):
+    tmp_path: Any, monkeypatch: Any, make_executable: Any
+) -> None:
     monkeypatch.setenv("CODE_BRIEFCASE_TSC_CACHE_ROOT", str(tmp_path / "tldr-cache"))
     monkeypatch.setattr(diag.shutil, "which", lambda name: None)
 
@@ -82,8 +81,8 @@ exit 2
 
 
 def test_single_file_javascript_uses_project_config_without_direct_file_arg(
-    tmp_path, monkeypatch, make_executable
-):
+    tmp_path: Any, monkeypatch: Any, make_executable: Any
+) -> None:
     monkeypatch.setenv("CODE_BRIEFCASE_TSC_CACHE_ROOT", str(tmp_path / "tldr-cache"))
     monkeypatch.setattr(diag.shutil, "which", lambda name: None)
 

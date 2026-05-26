@@ -1,3 +1,4 @@
+from typing import Any
 from pathlib import Path
 
 import pytest
@@ -19,13 +20,13 @@ _LEAKY_ENV_VARS = (
 
 
 @pytest.fixture(autouse=True)
-def _scrub_leaky_env(monkeypatch):
+def _scrub_leaky_env(monkeypatch: Any) -> None:
     for name in _LEAKY_ENV_VARS:
         monkeypatch.delenv(name, raising=False)
 
 
 @pytest.fixture
-def make_executable():
+def make_executable() -> Any:
     def _make(path: Path, body: str = "#!/bin/sh\nexit 0\n") -> Path:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(body)
