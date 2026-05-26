@@ -203,8 +203,8 @@ def resolve_event_path(event: HookEvent, value: str | None) -> Path | None:
     return path.resolve()
 
 
-_TS_JS_SUFFIXES = (".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs")
-_TS_JS_SOURCE_SUFFIXES = {suffix for suffix in _TS_JS_SUFFIXES}
+_TS_JS_CANDIDATE_SUFFIXES = (".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs")
+_TS_JS_SUFFIX_SET = frozenset(_TS_JS_CANDIDATE_SUFFIXES)
 _MAX_IMPORT_MODULE_LEN = 256
 
 
@@ -237,15 +237,12 @@ def _resolve_import_module_python(
 
 def _ts_js_import_candidates(base: Path) -> list[Path]:
     resolved = base.resolve()
-    suffix = resolved.suffix.lower()
-    candidates: list[Path] = []
-    if suffix in _TS_JS_SOURCE_SUFFIXES:
-        candidates.append(resolved)
-        return candidates
-    for ext in _TS_JS_SUFFIXES:
-        candidates.append(Path(f"{resolved}{ext}"))
-    for ext in _TS_JS_SUFFIXES:
-        candidates.append(resolved / f"index{ext}")
+    if resolved.suffix.lower() in _TS_JS_SUFFIX_SET:
+        return [resolved]
+    candidates: list[Path] = [
+        Path(f"{resolved}{ext}") for ext in _TS_JS_CANDIDATE_SUFFIXES
+    ]
+    candidates.extend(resolved / f"index{ext}" for ext in _TS_JS_CANDIDATE_SUFFIXES)
     return candidates
 
 
@@ -285,7 +282,7 @@ def _resolve_import_module(event: HookEvent, source: Path, module: str) -> Path 
     suffix = source.suffix.lower()
     if suffix == ".py":
         return _resolve_import_module_python(event, source, module)
-    if suffix in _TS_JS_SOURCE_SUFFIXES:
+    if suffix in _TS_JS_SUFFIX_SET:
         return _resolve_import_module_ts_js(event, source, module)
     return _resolve_import_module_other(event, source, module)
 
@@ -308,7 +305,7 @@ def _test_neighbor(source: Path) -> Path | None:
     stem = source.stem
     parent = source.parent
     suffix = source.suffix.lower()
-    if suffix in _TS_JS_SOURCE_SUFFIXES:
+    if suffix in _TS_JS_SUFFIX_SET:
         candidates = [
             parent / f"{stem}.test.ts",
             parent / f"{stem}.test.tsx",
