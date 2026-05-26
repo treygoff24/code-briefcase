@@ -5,6 +5,26 @@ from pathlib import Path
 
 _SIGNATURE_MAX_LEN = 160
 
+# The hybrid extractor normalizes function signatures to Python's
+# "def name(...)" / "async def name(...)" form across all languages, so this
+# module rewrites that canonical prefix to something idiomatic for the source
+# language. Mapping per language: (sync_keyword, async_keyword). When either is
+# the empty string, the prefix is stripped without replacement — used for class
+# methods in TS/JS where the bare `name(...)` form is correct.
+_PY_SYNC_PREFIX = "def "
+_PY_ASYNC_PREFIX = "async def "
+
+_LANGUAGE_KEYWORDS: dict[tuple[str, bool], tuple[str, str]] = {
+    ("typescript", False): ("function ", "async function "),
+    ("typescript", True): ("", ""),
+    ("javascript", False): ("function ", "async function "),
+    ("javascript", True): ("", ""),
+    ("go", False): ("func ", "func "),
+    ("go", True): ("func ", "func "),
+    ("rust", False): ("fn ", "async fn "),
+    ("rust", True): ("fn ", "async fn "),
+}
+
 
 def collapse_signature_whitespace(signature: str) -> str:
     return re.sub(r"\s+", " ", signature).strip()
@@ -40,30 +60,14 @@ def adapt_signature_for_language(
     is_method: bool = False,
 ) -> str:
     text = collapse_signature_whitespace(signature)
-    if language in {"typescript", "javascript"}:
-        if is_method:
-            if text.startswith("async def "):
-                return text[len("async def ") :]
-            if text.startswith("def "):
-                return text[len("def ") :]
-            return text
-        if text.startswith("async def "):
-            return "async function " + text[len("async def ") :]
-        if text.startswith("def "):
-            return "function " + text[len("def ") :]
+    keywords = _LANGUAGE_KEYWORDS.get((language, is_method))
+    if keywords is None:
         return text
-    if language == "go":
-        if text.startswith("async def "):
-            return "func " + text[len("async def ") :]
-        if text.startswith("def "):
-            return "func " + text[len("def ") :]
-        return text
-    if language == "rust":
-        if text.startswith("async def "):
-            return "async fn " + text[len("async def ") :]
-        if text.startswith("def "):
-            return "fn " + text[len("def ") :]
-        return text
+    sync_keyword, async_keyword = keywords
+    if text.startswith(_PY_ASYNC_PREFIX):
+        return async_keyword + text[len(_PY_ASYNC_PREFIX) :]
+    if text.startswith(_PY_SYNC_PREFIX):
+        return sync_keyword + text[len(_PY_SYNC_PREFIX) :]
     return text
 
 
