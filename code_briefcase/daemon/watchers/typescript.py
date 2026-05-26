@@ -228,19 +228,20 @@ class TypeScriptWatchAdapter(WatchAdapter):
                     )
                 if self._is_fresh_locked(target, version):
                     return self._response(QueryStatus.FRESH, target, started)
-                if target in self._diagnostics_by_file and (
-                    target not in self._pending_versions
-                    or self._project_file_status_locked(target) == "unknown"
+                if (
+                    target in self._diagnostics_by_file
+                    and target not in self._pending_versions
                 ):
                     return self._response(QueryStatus.STALE, target, started)
 
                 remaining = deadline - time.monotonic()
                 if remaining <= 0:
-                    status = (
-                        QueryStatus.STALE
-                        if target in self._diagnostics_by_file
-                        else QueryStatus.PENDING
-                    )
+                    status = QueryStatus.PENDING
+                    if (
+                        target in self._diagnostics_by_file
+                        and self._project_file_status_locked(target) != "unknown"
+                    ):
+                        status = QueryStatus.STALE
                     return self._response(status, target, started)
                 self._condition.wait(timeout=min(remaining, 0.1))
 

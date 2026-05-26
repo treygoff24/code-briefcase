@@ -94,7 +94,7 @@ python3 scripts/watch_diagnostics_checkpoint.py \
 
 **Hook response latency** (`watch_hook_ms`): measured from post-edit hook samples where `watch_diagnostics_used` is true and status is `fresh`, `stale`, or `pending`. A fast `pending` hook response counts toward hook thresholds; it is not proof the watcher has settled. Do not mix these with sync baseline samples.
 
-**Fresh-settle latency** (`fresh_settle_ms`): measured from current-run `watch-diagnostics-event` records with `action == recheck_complete` and numeric `duration_ms`, scoped to the measured watch phase (after warmups). Historical JSONL lines and warmup settle events do not satisfy `--min-settle-events`.
+**Fresh-settle latency** (`fresh_settle_ms`): measured from current-run `watch-diagnostics-event` records with `action == recheck_complete` and numeric `duration_ms`, scoped to the measured watch phase (after all warmup edits have settled). Historical JSONL lines and warmup settle events do not satisfy `--min-settle-events`.
 
 Telemetry summary fields count the current run only: `fresh_records`, `stale_records`, `pending_records`, `fallback_records`, `watch_used_records`, `settle_event_records`, `runtime_errors`.
 
@@ -107,6 +107,6 @@ Threshold defaults:
 - minimum measured hook samples: 5 (`--min-watch-samples`)
 - minimum measured settle events: 1 (`--min-settle-events`)
 
-Failure reasons include `insufficient_watch_hook_samples`, `insufficient_settle_events`, and `watcher_runtime_errors` when telemetry reports watcher `error_kind` during the run.
+Failure reasons include `warmup_settle_timeout`, `insufficient_watch_hook_samples`, `insufficient_settle_events`, and `watcher_runtime_errors` when telemetry reports watcher `error_kind` during the run.
 
 Interpret results conservatively: do not mix sync samples with watcher-used hook samples, and do not treat `fallback_required` or `unhealthy` as warm success.

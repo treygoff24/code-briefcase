@@ -328,9 +328,7 @@ def test_unknown_project_clean_batch_clears_pending_for_previous_diagnostics(
     assert source.resolve() not in adapter._pending_versions
 
 
-def test_unknown_project_previous_diagnostics_return_stale_while_pending(
-    tmp_path, monkeypatch
-):
+def test_unknown_project_previous_diagnostics_remain_pending_after_new_edit(tmp_path):
     source = tmp_path / "src" / "previous-known-pending.ts"
     source.parent.mkdir()
     source.write_text("const answer: number = 42;\n", encoding="utf-8")
@@ -340,17 +338,10 @@ def test_unknown_project_previous_diagnostics_return_stale_while_pending(
     version = file_version(source)
 
     adapter.notify_edit(source, version)
-    monkeypatch.setattr(
-        adapter._condition,
-        "wait",
-        lambda *args, **kwargs: (_ for _ in ()).throw(
-            AssertionError("unknown stale diagnostics should not wait for freshness")
-        ),
-    )
 
-    response = adapter.query(source, version, budget_ms=1000)
+    response = adapter.query(source, version, budget_ms=0)
 
-    assert response.status == QueryStatus.STALE
+    assert response.status == QueryStatus.PENDING
     assert source.resolve() in adapter._pending_versions
 
 

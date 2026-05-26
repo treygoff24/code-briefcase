@@ -149,11 +149,16 @@ def wait_for_settle_event_since(
     start_len: int,
     *,
     timeout_ms: int,
+    min_events: int = 1,
 ) -> bool:
     deadline = time.monotonic() + max(0, timeout_ms) / 1000
+    required_events = max(1, min_events)
     while True:
         records, _errors = load_jsonl(telemetry_path)
-        if settle_durations(records[start_len:], project_digest):
+        if (
+            len(settle_durations(records[start_len:], project_digest))
+            >= required_events
+        ):
             return True
         if time.monotonic() >= deadline:
             return False
@@ -449,12 +454,17 @@ def repo_report(
         for index in range(total_watch):
             if index == args.warmups:
                 if args.warmups:
-                    wait_for_settle_event_since(
+                    warmups_settled = wait_for_settle_event_since(
                         telemetry_path,
                         digest,
                         watch_measurement_start_len,
                         timeout_ms=args.warmup_settle_timeout_ms,
+                        min_events=args.warmups,
                     )
+                    if not warmups_settled:
+                        report["passed"] = False
+                        report["failures"].append("warmup_settle_timeout")
+                        break
                 records_before_measured_watch, _ = load_jsonl(telemetry_path)
                 watch_measurement_start_len = len(records_before_measured_watch)
             append_reversible_edit(probe, f"watch-{index}")

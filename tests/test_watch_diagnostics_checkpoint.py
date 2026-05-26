@@ -509,6 +509,92 @@ def test_repo_report_excludes_warmup_settle_events(tmp_path, monkeypatch):
     }
 
 
+def test_repo_report_fails_when_warmup_settle_never_arrives_before_measurement(
+    tmp_path, monkeypatch
+):
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    probe = repo / "src" / "app.ts"
+    probe.parent.mkdir()
+    probe.write_text("const x = 1;\n", encoding="utf-8")
+    digest = checkpoint.project_hash(repo.resolve())
+    watch_calls = 0
+    monkeypatch.setattr(checkpoint, "git_clean", lambda _repo: True)
+    monkeypatch.setattr(checkpoint, "stop_project_daemon", lambda _repo: None)
+
+    def append_record(path: Path, record: dict[str, object]) -> None:
+        with path.open("a", encoding="utf-8") as handle:
+            handle.write(json.dumps(record) + "\n")
+
+    def fake_run_post_edit_hook(**kwargs):
+        nonlocal watch_calls
+        telemetry_path = kwargs["telemetry_path"]
+        watch_enabled = kwargs["watch_enabled"]
+        if watch_enabled:
+            watch_calls += 1
+        post_edit = {
+            "event": "post-edit",
+            "project_hash": digest,
+            "status": "ok",
+            "duration_ms": 10,
+            "watch_diagnostics_used": watch_enabled,
+            "watch_diagnostics_status": "stale" if watch_enabled else None,
+        }
+        append_record(telemetry_path, post_edit)
+        if watch_calls == 2:
+            append_record(
+                telemetry_path,
+                {
+                    "event": "watch-diagnostics-event",
+                    "project_hash": digest,
+                    "action": "recheck_complete",
+                    "duration_ms": 999,
+                },
+            )
+            append_record(
+                telemetry_path,
+                {
+                    "event": "watch-diagnostics-event",
+                    "project_hash": digest,
+                    "action": "recheck_complete",
+                    "duration_ms": 100,
+                },
+            )
+        return 10, post_edit, 0
+
+    monkeypatch.setattr(checkpoint, "run_post_edit_hook", fake_run_post_edit_hook)
+    args = checkpoint.build_arg_parser().parse_args(
+        [
+            "--repo",
+            f"r={repo}",
+            "--probe-file",
+            f"r={probe}",
+            "--exercise-edits",
+            "--baseline-iterations",
+            "0",
+            "--watch-iterations",
+            "1",
+            "--warmups",
+            "1",
+            "--warmup-settle-timeout-ms",
+            "0",
+            "--allow-dirty",
+            "--min-watch-samples",
+            "1",
+        ]
+    )
+
+    report = checkpoint.repo_report(
+        args.repo[0],
+        args=args,
+        telemetry_path=tmp_path / "t.jsonl",
+        probe_override=probe,
+    )
+
+    assert report["failures"] == ["warmup_settle_timeout"]
+    assert watch_calls == 1
+
+
 def test_watch_phase_restores_probe_once_after_accumulated_edits(tmp_path, monkeypatch):
     repo = tmp_path / "repo"
     repo.mkdir()
