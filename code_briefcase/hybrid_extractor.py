@@ -766,42 +766,44 @@ class HybridExtractor:
                 ).strip("'\"")
             elif child.type == "import_clause":
                 has_import_clause = True
-                for clause_child in child.children:
-                    if clause_child.type == "identifier":
-                        names.append(
-                            self._safe_decode(
-                                source[clause_child.start_byte : clause_child.end_byte]
-                            )
-                        )
-                    elif clause_child.type == "namespace_import":
-                        for ns_child in clause_child.children:
-                            if ns_child.type == "identifier":
-                                alias = self._safe_decode(
-                                    source[ns_child.start_byte : ns_child.end_byte]
-                                )
-                                names.append(f"* as {alias}")
-                                break
-                    elif clause_child.type == "named_imports":
-                        for named in clause_child.children:
-                            if named.type != "import_specifier":
-                                continue
-                            spec_name = self._ts_import_specifier_name(named, source)
-                            if spec_name:
-                                names.append(spec_name)
+                names.extend(self._ts_import_clause_names(child, source))
 
         if module is None:
             return None
 
-        is_from = has_import_clause
-        if not has_import_clause:
-            names = []
-
         return ImportInfo(
             module=module,
             names=names,
-            is_from=is_from,
+            is_from=has_import_clause,
             line_number=node.start_point[0] + 1,
         )
+
+    def _ts_import_clause_names(self, clause: Any, source: bytes) -> list[str]:
+        """Collect import names from an import_clause's children."""
+        names: list[str] = []
+        for child in clause.children:
+            if child.type == "identifier":
+                names.append(
+                    self._safe_decode(source[child.start_byte : child.end_byte])
+                )
+            elif child.type == "namespace_import":
+                alias = self._ts_namespace_import_alias(child, source)
+                if alias is not None:
+                    names.append(f"* as {alias}")
+            elif child.type == "named_imports":
+                for named in child.children:
+                    if named.type != "import_specifier":
+                        continue
+                    spec_name = self._ts_import_specifier_name(named, source)
+                    if spec_name:
+                        names.append(spec_name)
+        return names
+
+    def _ts_namespace_import_alias(self, node: Any, source: bytes) -> str | None:
+        for child in node.children:
+            if child.type == "identifier":
+                return self._safe_decode(source[child.start_byte : child.end_byte])
+        return None
 
     def _ts_import_specifier_name(self, node: Any, source: bytes) -> str | None:
         identifiers: list[str] = []
@@ -812,8 +814,6 @@ class HybridExtractor:
                 )
         if not identifiers:
             return None
-        if len(identifiers) == 1:
-            return identifiers[0]
         return identifiers[-1]
 
     def _parse_jsdoc(self, comment: str) -> str:
@@ -897,7 +897,7 @@ class HybridExtractor:
                 for c in child.children:
                     if c.type == "identifier":
                         bases.append(
-                            f"implements {self._safe_decode(source[c.start_byte:c.end_byte])}"
+                            f"implements {self._safe_decode(source[c.start_byte : c.end_byte])}"
                         )
             elif child.type == "class_body":
                 # Extract methods with JSDoc support
@@ -3835,7 +3835,7 @@ class HybridExtractor:
                     if args:
                         for arg in args.children:
                             if arg.type == "alias":
-                                module_info.docstring = f"Module: {self._safe_decode(source[arg.start_byte:arg.end_byte])}"
+                                module_info.docstring = f"Module: {self._safe_decode(source[arg.start_byte : arg.end_byte])}"
                                 break
             # Recurse
             self._extract_elixir_nodes(child, source, module_info)
