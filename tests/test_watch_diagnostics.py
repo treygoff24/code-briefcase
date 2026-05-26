@@ -1,15 +1,24 @@
 from __future__ import annotations
+from typing import Any
 
 from pathlib import Path
 
 from code_briefcase.daemon.protocol import DaemonResponseKind
 from code_briefcase.daemon.startup import DaemonResponse
-from code_briefcase.hooks.post_edit import build_post_edit_response, _watch_diagnostics_enabled
+from code_briefcase.hooks.post_edit import (
+    build_post_edit_response,
+    _watch_diagnostics_enabled,
+)
 from code_briefcase.hooks.runtime import parse_hook_event
 
 
-def _event(tmp_path: Path, payload: dict):
-    payload = {"event": "postToolUse", "toolName": "Edit", "cwd": str(tmp_path), **payload}
+def _event(tmp_path: Path, payload: dict) -> Any:
+    payload = {
+        "event": "postToolUse",
+        "toolName": "Edit",
+        "cwd": str(tmp_path),
+        **payload,
+    }
     return parse_hook_event(payload, client="codex")
 
 
@@ -19,14 +28,16 @@ def _source(tmp_path: Path, name: str = "app.ts") -> Path:
     return source
 
 
-def test_watch_diagnostics_disabled_by_default(monkeypatch):
+def test_watch_diagnostics_disabled_by_default(monkeypatch: Any) -> None:
     monkeypatch.delenv("CODE_BRIEFCASE_WATCH_DIAGNOSTICS", raising=False)
     monkeypatch.delenv("TLDR_WATCH_DIAGNOSTICS", raising=False)
 
     assert _watch_diagnostics_enabled() is False
 
 
-def test_code_briefcase_watch_diagnostics_overrides_legacy_tldr_env(monkeypatch):
+def test_code_briefcase_watch_diagnostics_overrides_legacy_tldr_env(
+    monkeypatch: Any,
+) -> None:
     monkeypatch.setenv("CODE_BRIEFCASE_WATCH_DIAGNOSTICS", "0")
     monkeypatch.setenv("TLDR_WATCH_DIAGNOSTICS", "1")
     assert _watch_diagnostics_enabled() is False
@@ -36,30 +47,38 @@ def test_code_briefcase_watch_diagnostics_overrides_legacy_tldr_env(monkeypatch)
     assert _watch_diagnostics_enabled() is True
 
 
-def test_legacy_tldr_watch_diagnostics_enables_when_new_env_unset(monkeypatch):
+def test_legacy_tldr_watch_diagnostics_enables_when_new_env_unset(
+    monkeypatch: Any,
+) -> None:
     monkeypatch.delenv("CODE_BRIEFCASE_WATCH_DIAGNOSTICS", raising=False)
     monkeypatch.setenv("TLDR_WATCH_DIAGNOSTICS", "1")
 
     assert _watch_diagnostics_enabled() is True
 
 
-def test_watch_diagnostics_falsey_values_disable(monkeypatch):
+def test_watch_diagnostics_falsey_values_disable(monkeypatch: Any) -> None:
     for value in ("0", "false", "no", "off", "disabled", ""):
         monkeypatch.setenv("CODE_BRIEFCASE_WATCH_DIAGNOSTICS", value)
         monkeypatch.setenv("TLDR_WATCH_DIAGNOSTICS", "1")
         assert _watch_diagnostics_enabled() is False
 
 
-def test_post_edit_fresh_watcher_skips_sync_get_diagnostics(tmp_path, monkeypatch):
+def test_post_edit_fresh_watcher_skips_sync_get_diagnostics(
+    tmp_path: Any, monkeypatch: Any
+) -> None:
     _source(tmp_path)
     monkeypatch.setenv("CODE_BRIEFCASE_WATCH_DIAGNOSTICS", "1")
-    monkeypatch.setattr("code_briefcase.hooks.post_edit.notify_daemon", lambda *a, **k: None)
+    monkeypatch.setattr(
+        "code_briefcase.hooks.post_edit.notify_daemon", lambda *a, **k: None
+    )
     monkeypatch.setattr(
         "code_briefcase.hooks.post_edit.get_diagnostics",
-        lambda *a, **k: (_ for _ in ()).throw(AssertionError("sync fallback should not run")),
+        lambda *a, **k: (_ for _ in ()).throw(
+            AssertionError("sync fallback should not run")
+        ),
     )
 
-    def fake_query(*_args, **_kwargs):
+    def fake_query(*_args: Any, **_kwargs: Any) -> Any:
         return DaemonResponse(
             DaemonResponseKind.OK,
             payload={
@@ -86,28 +105,34 @@ def test_post_edit_fresh_watcher_skips_sync_get_diagnostics(tmp_path, monkeypatc
 
     monkeypatch.setattr("code_briefcase.daemon.query_or_start_daemon", fake_query)
 
-    response = build_post_edit_response(_event(tmp_path, {"toolInput": {"file_path": "app.ts"}}))
+    response = build_post_edit_response(
+        _event(tmp_path, {"toolInput": {"file_path": "app.ts"}})
+    )
 
     assert response.diagnostics_count == 1
-    assert "bad type" in response.additional_context
+    assert "bad type" in (response.additional_context or "")
     assert response.watch_diagnostics_used is True
     assert response.watch_diagnostics_status == "fresh"
 
 
-def test_post_edit_fallback_status_uses_local_sync_only(tmp_path, monkeypatch):
+def test_post_edit_fallback_status_uses_local_sync_only(
+    tmp_path: Any, monkeypatch: Any
+) -> None:
     _source(tmp_path)
     monkeypatch.setenv("CODE_BRIEFCASE_WATCH_DIAGNOSTICS", "1")
-    monkeypatch.setattr("code_briefcase.hooks.post_edit.notify_daemon", lambda *a, **k: None)
+    monkeypatch.setattr(
+        "code_briefcase.hooks.post_edit.notify_daemon", lambda *a, **k: None
+    )
     seen_commands = []
 
-    def fake_query(_project, command, **_kwargs):
+    def fake_query(_project: Any, command: Any, **_kwargs: Any) -> Any:
         seen_commands.append(command)
         assert command.get("cmd") != "diagnostics"
         return DaemonResponse(DaemonResponseKind.UNREACHABLE, message="no daemon")
 
     sync_calls = []
 
-    def fake_sync(path, language=None):
+    def fake_sync(path: Any, language: Any = None) -> Any:
         sync_calls.append((Path(path).name, language))
         return {
             "diagnostics": [
@@ -127,22 +152,30 @@ def test_post_edit_fallback_status_uses_local_sync_only(tmp_path, monkeypatch):
     monkeypatch.setattr("code_briefcase.daemon.query_or_start_daemon", fake_query)
     monkeypatch.setattr("code_briefcase.hooks.post_edit.get_diagnostics", fake_sync)
 
-    response = build_post_edit_response(_event(tmp_path, {"toolInput": {"file_path": "app.ts"}}))
+    response = build_post_edit_response(
+        _event(tmp_path, {"toolInput": {"file_path": "app.ts"}})
+    )
 
     assert sync_calls == [("app.ts", "typescript")]
     assert all(command["cmd"] == "watchers" for command in seen_commands)
-    assert "sync bad" in response.additional_context
+    assert "sync bad" in (response.additional_context or "")
     assert response.watch_diagnostics_status == "fallback_required"
     assert response.watch_diagnostics_fallback_reason == "no daemon"
 
 
-def test_post_edit_pending_watcher_does_not_sync_fallback(tmp_path, monkeypatch):
+def test_post_edit_pending_watcher_does_not_sync_fallback(
+    tmp_path: Any, monkeypatch: Any
+) -> None:
     _source(tmp_path)
     monkeypatch.setenv("CODE_BRIEFCASE_WATCH_DIAGNOSTICS", "1")
-    monkeypatch.setattr("code_briefcase.hooks.post_edit.notify_daemon", lambda *a, **k: None)
+    monkeypatch.setattr(
+        "code_briefcase.hooks.post_edit.notify_daemon", lambda *a, **k: None
+    )
     monkeypatch.setattr(
         "code_briefcase.hooks.post_edit.get_diagnostics",
-        lambda *a, **k: (_ for _ in ()).throw(AssertionError("pending must not block on sync")),
+        lambda *a, **k: (_ for _ in ()).throw(
+            AssertionError("pending must not block on sync")
+        ),
     )
     monkeypatch.setattr(
         "code_briefcase.daemon.query_or_start_daemon",
@@ -160,21 +193,27 @@ def test_post_edit_pending_watcher_does_not_sync_fallback(tmp_path, monkeypatch)
         ),
     )
 
-    response = build_post_edit_response(_event(tmp_path, {"toolInput": {"file_path": "app.ts"}}))
+    response = build_post_edit_response(
+        _event(tmp_path, {"toolInput": {"file_path": "app.ts"}})
+    )
 
     assert response.status == "ok"
-    assert "fresh results are still pending" in response.additional_context
+    assert "fresh results are still pending" in (response.additional_context or "")
     assert response.watch_diagnostics_status == "pending"
     assert response.watch_diagnostics_used is True
 
 
-def test_post_edit_multi_file_combines_watcher_and_sync_fallback(tmp_path, monkeypatch):
+def test_post_edit_multi_file_combines_watcher_and_sync_fallback(
+    tmp_path: Any, monkeypatch: Any
+) -> None:
     _source(tmp_path, "a.ts")
     _source(tmp_path, "b.ts")
     monkeypatch.setenv("CODE_BRIEFCASE_WATCH_DIAGNOSTICS", "1")
-    monkeypatch.setattr("code_briefcase.hooks.post_edit.notify_daemon", lambda *a, **k: None)
+    monkeypatch.setattr(
+        "code_briefcase.hooks.post_edit.notify_daemon", lambda *a, **k: None
+    )
 
-    def fake_query(_project, command, **_kwargs):
+    def fake_query(_project: Any, command: Any, **_kwargs: Any) -> Any:
         if Path(command["file"]).name == "a.ts":
             return DaemonResponse(
                 DaemonResponseKind.OK,
@@ -210,7 +249,7 @@ def test_post_edit_multi_file_combines_watcher_and_sync_fallback(tmp_path, monke
 
     sync_calls = []
 
-    def fake_sync(path, language=None):
+    def fake_sync(path: Any, language: Any = None) -> Any:
         sync_calls.append(Path(path).name)
         return {
             "diagnostics": [
@@ -249,6 +288,6 @@ def test_post_edit_multi_file_combines_watcher_and_sync_fallback(tmp_path, monke
 
     assert sync_calls == ["b.ts"]
     assert response.diagnostics_count == 2
-    assert "a bad" in response.additional_context
-    assert "b warning" in response.additional_context
+    assert "a bad" in (response.additional_context or "")
+    assert "b warning" in (response.additional_context or "")
     assert response.watch_diagnostics_statuses == ["fresh", "unhealthy"]

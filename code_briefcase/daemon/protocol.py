@@ -42,7 +42,9 @@ class LineReader:
     def __init__(self) -> None:
         self._buffer = bytearray()
 
-    def readline(self, sock: socket.socket, *, max_bytes: int = MAX_FRAME_BYTES) -> bytes | None:
+    def readline(
+        self, sock: socket.socket, *, max_bytes: int = MAX_FRAME_BYTES
+    ) -> bytes | None:
         while True:
             newline_at = self._buffer.find(b"\n")
             if newline_at >= 0:
@@ -76,7 +78,9 @@ def send_framed_json(sock: socket.socket, payload: dict[str, Any]) -> None:
     sock.sendall(pack(">Q", len(raw)) + raw)
 
 
-def recv_json_line(sock: socket.socket, *, max_bytes: int = MAX_FRAME_BYTES) -> bytes | None:
+def recv_json_line(
+    sock: socket.socket, *, max_bytes: int = MAX_FRAME_BYTES
+) -> bytes | None:
     return LineReader().readline(sock, max_bytes=max_bytes)
 
 
@@ -90,16 +94,20 @@ def recv_exact(sock: socket.socket, size: int) -> bytes:
     return bytes(data)
 
 
-def recv_framed_json(sock: socket.socket, *, max_bytes: int = MAX_FRAME_BYTES) -> dict[str, Any]:
+def recv_framed_json(
+    sock: socket.socket, *, max_bytes: int = MAX_FRAME_BYTES
+) -> dict[str, Any]:
     header = recv_exact(sock, FRAME_HEADER_BYTES)
     payload_size = unpack(">Q", header)[0]
     if payload_size > max_bytes:
         raise DaemonProtocolError("daemon response exceeded maximum size")
     payload = recv_exact(sock, payload_size)
-    return json.loads(payload.decode())
+    return _decode_json_object(payload.decode())
 
 
-def recv_legacy_json(sock: socket.socket, *, max_bytes: int = MAX_FRAME_BYTES) -> dict[str, Any]:
+def recv_legacy_json(
+    sock: socket.socket, *, max_bytes: int = MAX_FRAME_BYTES
+) -> dict[str, Any]:
     chunks: list[bytes] = []
     total = 0
     while True:
@@ -122,5 +130,12 @@ def decode_response_bytes(chunks: list[bytes]) -> dict[str, Any]:
     if len(raw) >= FRAME_HEADER_BYTES:
         payload_size = unpack(">Q", raw[:FRAME_HEADER_BYTES])[0]
         if payload_size == len(raw) - FRAME_HEADER_BYTES:
-            return json.loads(raw[FRAME_HEADER_BYTES:].decode())
-    return json.loads(raw.decode())
+            return _decode_json_object(raw[FRAME_HEADER_BYTES:].decode())
+    return _decode_json_object(raw.decode())
+
+
+def _decode_json_object(raw: str) -> dict[str, Any]:
+    payload = json.loads(raw)
+    if not isinstance(payload, dict):
+        raise DaemonProtocolError("daemon response was not a JSON object")
+    return payload

@@ -1,10 +1,14 @@
 from __future__ import annotations
+from typing import Any
 
 from code_briefcase.hooks.runtime import parse_hook_event
-from code_briefcase.hooks.tool import build_pre_tool_response, extract_shell_file_candidates
+from code_briefcase.hooks.tool import (
+    build_pre_tool_response,
+    extract_shell_file_candidates,
+)
 
 
-def make_event(tmp_path, tool_name: str, tool_input: dict):
+def make_event(tmp_path: Any, tool_name: str, tool_input: dict) -> Any:
     return parse_hook_event(
         {
             "hook_event_name": "PreToolUse",
@@ -24,7 +28,7 @@ def make_event(tmp_path, tool_name: str, tool_input: dict):
 # landed — see docs/plans/2026-05-24-pre-tool-shell-context-redesign.md.
 
 
-def test_pre_tool_is_noop_for_read_like_shell_command(tmp_path):
+def test_pre_tool_is_noop_for_read_like_shell_command(tmp_path: Any) -> None:
     path = tmp_path / "src" / "app.ts"
     path.parent.mkdir(parents=True)
     path.write_text("export function main() { return 1 }\n", encoding="utf-8")
@@ -36,7 +40,7 @@ def test_pre_tool_is_noop_for_read_like_shell_command(tmp_path):
     assert result.noop_reason == "shell_file_context_disabled"
 
 
-def test_pre_tool_is_noop_for_exec_command(tmp_path):
+def test_pre_tool_is_noop_for_exec_command(tmp_path: Any) -> None:
     path = tmp_path / "src" / "app.ts"
     path.parent.mkdir(parents=True)
     path.write_text("export function main() { return 1 }\n", encoding="utf-8")
@@ -48,7 +52,7 @@ def test_pre_tool_is_noop_for_exec_command(tmp_path):
     assert result.noop_reason == "shell_file_context_disabled"
 
 
-def test_pre_tool_is_noop_for_multi_path_command(tmp_path):
+def test_pre_tool_is_noop_for_multi_path_command(tmp_path: Any) -> None:
     app = tmp_path / "src" / "app.ts"
     test_file = tmp_path / "tests" / "test_app.py"
     app.parent.mkdir(parents=True)
@@ -66,7 +70,7 @@ def test_pre_tool_is_noop_for_multi_path_command(tmp_path):
     assert result.status == "noop"
 
 
-def test_pre_tool_is_noop_for_git_diff(tmp_path):
+def test_pre_tool_is_noop_for_git_diff(tmp_path: Any) -> None:
     path = tmp_path / "src" / "app.ts"
     path.parent.mkdir(parents=True)
     path.write_text("export function main() { return 1 }\n", encoding="utf-8")
@@ -77,7 +81,7 @@ def test_pre_tool_is_noop_for_git_diff(tmp_path):
     assert result.status == "noop"
 
 
-def test_glob_tokens_are_not_expanded(tmp_path):
+def test_glob_tokens_are_not_expanded(tmp_path: Any) -> None:
     (tmp_path / "a.py").write_text("x = 1\n", encoding="utf-8")
     (tmp_path / "b.py").write_text("y = 2\n", encoding="utf-8")
     event = make_event(tmp_path, "Bash", {"command": "rg foo *.py"})
@@ -87,7 +91,7 @@ def test_glob_tokens_are_not_expanded(tmp_path):
     assert candidates == []
 
 
-def test_destructive_command_still_denied(tmp_path):
+def test_destructive_command_still_denied(tmp_path: Any) -> None:
     event = make_event(tmp_path, "Bash", {"command": "rm -rf /"})
 
     result = build_pre_tool_response(event)

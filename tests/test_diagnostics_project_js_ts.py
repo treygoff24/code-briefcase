@@ -1,9 +1,12 @@
+from typing import Any
 import json
 
 from code_briefcase import diagnostics as diag
 
 
-def test_project_typescript_runs_oxlint_and_oxfmt(tmp_path, monkeypatch, make_executable):
+def test_project_typescript_runs_oxlint_and_oxfmt(
+    tmp_path: Any, monkeypatch: Any, make_executable: Any
+) -> None:
     monkeypatch.setattr(diag.shutil, "which", lambda name: None)
 
     source = tmp_path / "src" / "sample.ts"
@@ -65,8 +68,8 @@ exit 1
 
 
 def test_project_javascript_uses_ephemeral_project_config(
-    tmp_path, monkeypatch, make_executable
-):
+    tmp_path: Any, monkeypatch: Any, make_executable: Any
+) -> None:
     monkeypatch.setattr(diag.shutil, "which", lambda name: None)
 
     source = tmp_path / "src" / "sample.js"
@@ -107,7 +110,9 @@ exit 0
     assert args[args.index("--project") + 1].endswith("tsconfig.json")
 
 
-def test_project_oxfmt_skips_all_declaration_files(tmp_path, monkeypatch, make_executable):
+def test_project_oxfmt_skips_all_declaration_files(
+    tmp_path: Any, monkeypatch: Any, make_executable: Any
+) -> None:
     monkeypatch.setattr(diag.shutil, "which", lambda name: None)
 
     source = tmp_path / "types.d.ts"

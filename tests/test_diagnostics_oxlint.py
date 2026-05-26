@@ -1,10 +1,11 @@
+from typing import Any
 import json
 from pathlib import Path
 
 from code_briefcase import diagnostics as diag
 
 
-def test_parse_oxlint_fixture():
+def test_parse_oxlint_fixture() -> None:
     fixture = Path("tests/fixtures/oxlint_sample.json")
     diagnostics = diag._parse_oxlint_output(fixture.read_text())
 
@@ -16,7 +17,9 @@ def test_parse_oxlint_fixture():
     assert "debugger" in diagnostics[0]["message"]
 
 
-def test_get_diagnostics_runs_local_oxlint(tmp_path, monkeypatch, make_executable):
+def test_get_diagnostics_runs_local_oxlint(
+    tmp_path: Any, monkeypatch: Any, make_executable: Any
+) -> None:
     monkeypatch.setattr(diag.shutil, "which", lambda name: None)
 
     source = tmp_path / "src" / "sample.ts"

@@ -48,7 +48,10 @@ EXCLUDE_PARTS = {
     "coverage",
     "__pycache__",
 }
-SECRET_PATTERNS = re.compile(r"(^|[/_.-])(secret|secrets|credential|credentials|token|key|id_rsa|id_ed25519|\.env)([/_.-]|$)", re.I)
+SECRET_PATTERNS = re.compile(
+    r"(^|[/_.-])(secret|secrets|credential|credentials|token|key|id_rsa|id_ed25519|\.env)([/_.-]|$)",
+    re.I,
+)
 
 
 @dataclass
@@ -161,7 +164,9 @@ def _resolve_file(project: Path, file_name: str) -> Path:
 
 
 def _changed_files(project: Path) -> list[Path]:
-    files = [_resolve_file(project, file_name) for file_name in get_dirty_files(project)]
+    files = [
+        _resolve_file(project, file_name) for file_name in get_dirty_files(project)
+    ]
     for command in (
         ["git", "diff", "--name-only", "HEAD"],
         ["git", "ls-files", "--others", "--exclude-standard"],
@@ -204,7 +209,9 @@ def _semantic_files(project: Path, query: str, language: str) -> list[Path]:
     return paths
 
 
-def _text_search_files(project: Path, query: str, ignore_spec: IgnoreSpec) -> list[Path]:
+def _text_search_files(
+    project: Path, query: str, ignore_spec: IgnoreSpec
+) -> list[Path]:
     terms = [term for term in re.findall(r"[A-Za-z_][\w-]+", query) if len(term) > 2]
     if not terms:
         return []
@@ -227,8 +234,14 @@ def _text_search_files(project: Path, query: str, ignore_spec: IgnoreSpec) -> li
     return seen
 
 
-def _outline_file(project: Path, path: Path, reason: str, ignore_spec: IgnoreSpec) -> ContextPackItem | None:
-    if not path.exists() or not path.is_file() or not _is_candidate(project, path, ignore_spec):
+def _outline_file(
+    project: Path, path: Path, reason: str, ignore_spec: IgnoreSpec
+) -> ContextPackItem | None:
+    if (
+        not path.exists()
+        or not path.is_file()
+        or not _is_candidate(project, path, ignore_spec)
+    ):
         return None
     try:
         info = extract_file(str(path), base_path=str(project))
@@ -252,11 +265,17 @@ def _outline_file(project: Path, path: Path, reason: str, ignore_spec: IgnoreSpe
     if functions or classes:
         lines.append("Symbols:")
     for func in functions[:25]:
-        lines.append(f"- {func.get('signature') or func.get('name')} [L{func.get('line_number', '?')}]")
+        lines.append(
+            f"- {func.get('signature') or func.get('name')} [L{func.get('line_number', '?')}]"
+        )
     for cls in classes[:12]:
-        lines.append(f"- {cls.get('signature') or cls.get('name')} [L{cls.get('line_number', '?')}]")
+        lines.append(
+            f"- {cls.get('signature') or cls.get('name')} [L{cls.get('line_number', '?')}]"
+        )
         for method in (cls.get("methods") or [])[:8]:
-            lines.append(f"  - {method.get('signature') or method.get('name')} [L{method.get('line_number', '?')}]")
+            lines.append(
+                f"  - {method.get('signature') or method.get('name')} [L{method.get('line_number', '?')}]"
+            )
     calls = (info.get("call_graph") or {}).get("calls") or {}
     if calls:
         lines.extend(["", "Calls:"])
@@ -274,7 +293,9 @@ def _outline_file(project: Path, path: Path, reason: str, ignore_spec: IgnoreSpe
 
 def _structure_summary(project: Path, ignore_spec: IgnoreSpec) -> ContextPackItem:
     try:
-        tree = get_file_tree(project, extensions=CODE_EXTENSIONS, ignore_spec=ignore_spec)
+        tree = get_file_tree(
+            project, extensions=CODE_EXTENSIONS, ignore_spec=ignore_spec
+        )
         content = json.dumps(tree, indent=2)[:4000]
     except Exception:
         content = f"Project root: {project}"
@@ -309,10 +330,18 @@ def build_context_pack(
     for file_name in files or []:
         candidates.append((_resolve_file(project_path, file_name), "explicit file"))
     if changed:
-        candidates.extend((path, "changed file") for path in _changed_files(project_path))
+        candidates.extend(
+            (path, "changed file") for path in _changed_files(project_path)
+        )
     if include_semantic:
-        candidates.extend((path, "semantic match") for path in _semantic_files(project_path, query, language))
-    candidates.extend((path, "text match") for path in _text_search_files(project_path, query, ignore_spec))
+        candidates.extend(
+            (path, "semantic match")
+            for path in _semantic_files(project_path, query, language)
+        )
+    candidates.extend(
+        (path, "text match")
+        for path in _text_search_files(project_path, query, ignore_spec)
+    )
 
     pack = ContextPack(query=query, project=str(project_path), budget=budget)
     seen: set[Path] = set()

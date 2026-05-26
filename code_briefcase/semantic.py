@@ -23,14 +23,32 @@ from typing import List, Optional, Dict, Any
 
 logger = logging.getLogger("code_briefcase.semantic")
 
-ALL_LANGUAGES = ["python", "typescript", "javascript", "go", "rust", "java", "c", "cpp", "ruby", "php", "kotlin", "swift", "csharp", "scala", "lua", "luau", "elixir"]
+ALL_LANGUAGES = [
+    "python",
+    "typescript",
+    "javascript",
+    "go",
+    "rust",
+    "java",
+    "c",
+    "cpp",
+    "ruby",
+    "php",
+    "kotlin",
+    "swift",
+    "csharp",
+    "scala",
+    "lua",
+    "luau",
+    "elixir",
+]
 
 # Lazy imports for heavy dependencies
 _model = None
 _model_name = None  # Track which model is loaded
 
 # Supported models with approximate download sizes
-SUPPORTED_MODELS = {
+SUPPORTED_MODELS: dict[str, dict[str, Any]] = {
     "bge-large-en-v1.5": {
         "hf_name": "BAAI/bge-large-en-v1.5",
         "size": "1.3GB",
@@ -48,7 +66,14 @@ SUPPORTED_MODELS = {
 DEFAULT_MODEL = "bge-large-en-v1.5"
 
 # Project root markers - files that indicate a project root
-PROJECT_ROOT_MARKERS = [".git", "pyproject.toml", "package.json", "Cargo.toml", "go.mod", ".code-briefcase"]
+PROJECT_ROOT_MARKERS = [
+    ".git",
+    "pyproject.toml",
+    "package.json",
+    "Cargo.toml",
+    "go.mod",
+    ".code-briefcase",
+]
 
 
 def _find_project_root(start_path: Path) -> Path:
@@ -93,6 +118,7 @@ class EmbeddingUnit:
     - L4: dfg_summary
     - L5: dependencies
     """
+
     name: str
     qualified_name: str
     file: str
@@ -135,6 +161,7 @@ def _model_exists_locally(hf_name: str) -> bool:
     """Check if a model is already downloaded locally."""
     try:
         from huggingface_hub import try_to_load_from_cache
+
         # Check if model config exists in cache
         result = try_to_load_from_cache(hf_name, "config.json")
         return result is not None
@@ -158,7 +185,9 @@ def _confirm_download(model_key: str) -> bool:
 
     print(f"\n⚠️  Semantic search requires embedding model: {hf_name}", file=sys.stderr)
     print(f"   Download size: {size}", file=sys.stderr)
-    print("   (Set CODE_BRIEFCASE_AUTO_DOWNLOAD=1 to skip this prompt)\n", file=sys.stderr)
+    print(
+        "   (Set CODE_BRIEFCASE_AUTO_DOWNLOAD=1 to skip this prompt)\n", file=sys.stderr
+    )
 
     try:
         response = input("Continue with download? [Y/n] ").strip().lower()
@@ -167,7 +196,7 @@ def _confirm_download(model_key: str) -> bool:
         return False
 
 
-def get_model(model_name: Optional[str] = None):
+def get_model(model_name: Optional[str] = None) -> Any:
     """Lazy-load the embedding model (cached).
 
     Args:
@@ -201,9 +230,12 @@ def get_model(model_name: Optional[str] = None):
     if not _model_exists_locally(hf_name):
         model_key = model_name if model_name in SUPPORTED_MODELS else None
         if model_key and not _confirm_download(model_key):
-            raise ValueError("Model download declined. Use --model to choose a smaller model.")
+            raise ValueError(
+                "Model download declined. Use --model to choose a smaller model."
+            )
 
     from sentence_transformers import SentenceTransformer
+
     _model = SentenceTransformer(hf_name)
     _model_name = hf_name
     return _model
@@ -262,7 +294,7 @@ def build_embedding_text(unit: EmbeddingUnit) -> str:
     return "\n".join(parts)
 
 
-def compute_embedding(text: str, model_name: Optional[str] = None):
+def compute_embedding(text: str, model_name: Optional[str] = None) -> Any:
     """Compute embedding vector for text.
 
     Args:
@@ -283,7 +315,12 @@ def compute_embedding(text: str, model_name: Optional[str] = None):
     return np.array(embedding, dtype=np.float32)
 
 
-def extract_units_from_project(project_path: str, lang: str = "python", respect_ignore: bool = True, progress_callback=None) -> List[EmbeddingUnit]:
+def extract_units_from_project(
+    project_path: str,
+    lang: str = "python",
+    respect_ignore: bool = True,
+    progress_callback: Any = None,
+) -> List[EmbeddingUnit]:
     """Extract all functions/methods/classes from a project.
 
     Uses existing Code Briefcase APIs:
@@ -310,13 +347,16 @@ def extract_units_from_project(project_path: str, lang: str = "python", respect_
     ignore_spec = load_ignore_patterns(project) if respect_ignore else None
 
     # Get code structure (L1) - use high limit for semantic index
-    structure = get_code_structure(str(project), language=lang, max_results=100000, ignore_spec=ignore_spec)
+    structure = get_code_structure(
+        str(project), language=lang, max_results=100000, ignore_spec=ignore_spec
+    )
 
     # Filter ignored files
     if respect_ignore:
         spec = load_ignore_patterns(project)
         structure["files"] = [
-            f for f in structure.get("files", [])
+            f
+            for f in structure.get("files", [])
             if not should_ignore(project / f.get("path", ""), project, spec)
         ]
 
@@ -325,8 +365,8 @@ def extract_units_from_project(project_path: str, lang: str = "python", respect_
         call_graph = build_project_call_graph(str(project), language=lang)
 
         # Build call/called_by maps
-        calls_map = {}  # func -> [called functions]
-        called_by_map = {}  # func -> [calling functions]
+        calls_map: Any = {}  # func -> [called functions]
+        called_by_map: Any = {}  # func -> [calling functions]
 
         for edge in call_graph.edges:
             src_file, src_func, dst_file, dst_func = edge
@@ -371,12 +411,18 @@ def extract_units_from_project(project_path: str, lang: str = "python", respect_
                         file_units = future.result(timeout=60)
                         units.extend(file_units)
                         if progress_callback:
-                            progress_callback(file_info.get('path', 'unknown'), len(units), len(files))
+                            progress_callback(
+                                file_info.get("path", "unknown"), len(units), len(files)
+                            )
                     except Exception as e:
-                        logger.warning(f"Failed to process {file_info.get('path', 'unknown')}: {e}")
+                        logger.warning(
+                            f"Failed to process {file_info.get('path', 'unknown')}: {e}"
+                        )
 
         except Exception as e:
-            logger.warning(f"Parallel extraction failed: {e}, falling back to sequential")
+            logger.warning(
+                f"Parallel extraction failed: {e}, falling back to sequential"
+            )
             for file_info in files:
                 try:
                     file_units = _process_file_for_extraction(
@@ -384,9 +430,13 @@ def extract_units_from_project(project_path: str, lang: str = "python", respect_
                     )
                     units.extend(file_units)
                     if progress_callback:
-                        progress_callback(file_info.get('path', 'unknown'), len(units), len(files))
+                        progress_callback(
+                            file_info.get("path", "unknown"), len(units), len(files)
+                        )
                 except Exception as fe:
-                    logger.warning(f"Failed to process {file_info.get('path', 'unknown')}: {fe}")
+                    logger.warning(
+                        f"Failed to process {file_info.get('path', 'unknown')}: {fe}"
+                    )
     else:
         for file_info in files:
             try:
@@ -395,9 +445,13 @@ def extract_units_from_project(project_path: str, lang: str = "python", respect_
                 )
                 units.extend(file_units)
                 if progress_callback:
-                    progress_callback(file_info.get('path', 'unknown'), len(units), len(files))
+                    progress_callback(
+                        file_info.get("path", "unknown"), len(units), len(files)
+                    )
             except Exception as e:
-                logger.warning(f"Failed to process {file_info.get('path', 'unknown')}: {e}")
+                logger.warning(
+                    f"Failed to process {file_info.get('path', 'unknown')}: {e}"
+                )
 
     return units
 
@@ -413,26 +467,32 @@ def _parse_file_ast(file_path: Path, lang: str) -> dict:
             "methods": {"ClassName.method": {"line": int, "code_preview": str}}
         }
     """
-    result = {"functions": {}, "classes": {}, "methods": {}}
+    result: dict[str, Any] = {"functions": {}, "classes": {}, "methods": {}}
 
     if not file_path.exists():
         return result
 
     try:
         content = file_path.read_text()
-        lines = content.split('\n')
+        lines = content.split("\n")
 
         if lang == "python":
             import ast
+
             tree = ast.parse(content)
 
             for node in ast.walk(tree):
-                if isinstance(node, ast.FunctionDef) or isinstance(node, ast.AsyncFunctionDef):
+                if isinstance(node, ast.FunctionDef) or isinstance(
+                    node, ast.AsyncFunctionDef
+                ):
                     # Check if this is a method (inside a class)
                     parent_class = None
                     for potential_parent in ast.walk(tree):
                         if isinstance(potential_parent, ast.ClassDef):
-                            if node in ast.walk(potential_parent) and node.name != potential_parent.name:
+                            if (
+                                node in ast.walk(potential_parent)
+                                and node.name != potential_parent.name
+                            ):
                                 # Check if node is a direct child method
                                 for item in potential_parent.body:
                                     if item is node:
@@ -441,19 +501,21 @@ def _parse_file_ast(file_path: Path, lang: str) -> dict:
 
                     # Extract code preview (first 10 lines of body)
                     start_line = node.lineno
-                    end_line = getattr(node, 'end_lineno', start_line + 10)
-                    body_lines = lines[start_line - 1:min(end_line, start_line + 10) - 1]
-                    code_preview = '\n'.join(body_lines[:10])
+                    end_line = getattr(node, "end_lineno", start_line + 10)
+                    body_lines = lines[
+                        start_line - 1 : min(end_line, start_line + 10) - 1
+                    ]
+                    code_preview = "\n".join(body_lines[:10])
 
                     if parent_class:
                         result["methods"][f"{parent_class}.{node.name}"] = {
                             "line": node.lineno,
-                            "code_preview": code_preview
+                            "code_preview": code_preview,
                         }
                     else:
                         result["functions"][node.name] = {
                             "line": node.lineno,
-                            "code_preview": code_preview
+                            "code_preview": code_preview,
                         }
 
                 elif isinstance(node, ast.ClassDef):
@@ -473,6 +535,7 @@ def _get_file_dependencies(file_path: Path, lang: str) -> str:
 
     try:
         from code_briefcase.api import get_imports
+
         imports = get_imports(str(file_path), language=lang)
 
         # Extract module names (limit to first 5 for brevity)
@@ -575,7 +638,9 @@ def _get_dfg_summary(file_path: Path, func_name: str, lang: str) -> str:
     return ""
 
 
-def _get_function_signature(file_path: Path, func_name: str, lang: str) -> Optional[str]:
+def _get_function_signature(
+    file_path: Path, func_name: str, lang: str
+) -> Optional[str]:
     """Extract function signature from file."""
     if not file_path.exists():
         return None
@@ -585,6 +650,7 @@ def _get_function_signature(file_path: Path, func_name: str, lang: str) -> Optio
 
         if lang == "python":
             import ast
+
             tree = ast.parse(content)
             for node in ast.walk(tree):
                 if isinstance(node, ast.FunctionDef) and node.name == func_name:
@@ -602,7 +668,6 @@ def _get_function_signature(file_path: Path, func_name: str, lang: str) -> Optio
 
                     return f"def {func_name}({', '.join(args)}){returns}"
 
-
         # For other languages, return simple signature
         return f"function {func_name}(...)"
 
@@ -610,7 +675,9 @@ def _get_function_signature(file_path: Path, func_name: str, lang: str) -> Optio
         return None
 
 
-def _get_function_docstring(file_path: Path, func_name: str, lang: str) -> Optional[str]:
+def _get_function_docstring(
+    file_path: Path, func_name: str, lang: str
+) -> Optional[str]:
     """Extract function docstring from file."""
     if not file_path.exists():
         return None
@@ -620,6 +687,7 @@ def _get_function_docstring(file_path: Path, func_name: str, lang: str) -> Optio
 
         if lang == "python":
             import ast
+
             tree = ast.parse(content)
             for node in ast.walk(tree):
                 if isinstance(node, ast.FunctionDef) and node.name == func_name:
@@ -653,7 +721,7 @@ def _process_file_for_extraction(
     Returns:
         List of EmbeddingUnit objects for this file.
     """
-    units = []
+    units: list[EmbeddingUnit] = []
     project = Path(project_path)
     file_path = file_info.get("path", "")
     full_path = project / file_path
@@ -664,19 +732,20 @@ def _process_file_for_extraction(
     try:
         # Read file content ONCE
         content = full_path.read_text()
-        lines = content.split('\n')
+        lines = content.split("\n")
     except Exception as e:
         logger.warning(f"Failed to read {file_path}: {e}")
         return units
 
     # Parse AST once for all function info
-    ast_info = {"functions": {}, "classes": {}, "methods": {}}
+    ast_info: dict[str, Any] = {"functions": {}, "classes": {}, "methods": {}}
     all_signatures = {}
     all_docstrings = {}
 
     if lang == "python":
         try:
             import ast
+
             tree = ast.parse(content)
 
             for node in ast.walk(tree):
@@ -692,9 +761,11 @@ def _process_file_for_extraction(
 
                     # Extract code preview (first 10 lines of body)
                     start_line = node.lineno
-                    end_line = getattr(node, 'end_lineno', start_line + 10)
-                    body_lines = lines[start_line - 1:min(end_line, start_line + 10) - 1]
-                    code_preview = '\n'.join(body_lines[:10])
+                    end_line = getattr(node, "end_lineno", start_line + 10)
+                    body_lines = lines[
+                        start_line - 1 : min(end_line, start_line + 10) - 1
+                    ]
+                    code_preview = "\n".join(body_lines[:10])
 
                     # Build signature
                     args = []
@@ -715,14 +786,14 @@ def _process_file_for_extraction(
                         key = f"{parent_class}.{node.name}"
                         ast_info["methods"][key] = {
                             "line": node.lineno,
-                            "code_preview": code_preview
+                            "code_preview": code_preview,
                         }
                         all_signatures[key] = signature
                         all_docstrings[key] = docstring
                     else:
                         ast_info["functions"][node.name] = {
                             "line": node.lineno,
-                            "code_preview": code_preview
+                            "code_preview": code_preview,
                         }
                         all_signatures[node.name] = signature
                         all_docstrings[node.name] = docstring
@@ -737,6 +808,7 @@ def _process_file_for_extraction(
     dependencies = ""
     try:
         from code_briefcase.api import get_imports
+
         imports = get_imports(str(full_path), language=lang)
         modules = [imp.get("module", "") for imp in imports[:5] if imp.get("module")]
         dependencies = ", ".join(modules)
@@ -748,15 +820,17 @@ def _process_file_for_extraction(
     dfg_cache = {}
 
     # Language-to-extractor mapping for CFG/DFG analysis
-    def _get_extractors(language: str):
+    def _get_extractors(language: str) -> Any:
         """Return (cfg_extractor, dfg_extractor) for the given language."""
         if language == "python":
             from code_briefcase.cfg_extractor import extract_python_cfg
             from code_briefcase.dfg_extractor import extract_python_dfg
+
             return extract_python_cfg, extract_python_dfg
         elif language in ("typescript", "javascript"):
             from code_briefcase.cfg_extractor import extract_typescript_cfg
             from code_briefcase.dfg_extractor import extract_typescript_dfg
+
             return extract_typescript_cfg, extract_typescript_dfg
         return None, None
 
@@ -772,14 +846,18 @@ def _process_file_for_extraction(
         for func_name in all_func_names:
             try:
                 cfg = cfg_extractor(content, func_name)
-                cfg_cache[func_name] = f"complexity:{cfg.cyclomatic_complexity}, blocks:{len(cfg.blocks)}"
+                cfg_cache[func_name] = (
+                    f"complexity:{cfg.cyclomatic_complexity}, blocks:{len(cfg.blocks)}"
+                )
             except Exception:
                 cfg_cache[func_name] = ""
 
             try:
                 dfg = dfg_extractor(content, func_name)
                 var_names = {ref.name for ref in dfg.var_refs}
-                dfg_cache[func_name] = f"vars:{len(var_names)}, def-use chains:{len(dfg.dataflow_edges)}"
+                dfg_cache[func_name] = (
+                    f"vars:{len(var_names)}, def-use chains:{len(dfg.dataflow_edges)}"
+                )
             except Exception:
                 dfg_cache[func_name] = ""
 
@@ -860,7 +938,7 @@ def _process_file_for_extraction(
     return units
 
 
-def _get_progress_console():
+def _get_progress_console() -> Any:
     """Get rich Console if available and TTY, else None."""
     if not sys.stdout.isatty():
         return None
@@ -868,44 +946,47 @@ def _get_progress_console():
         return None
     try:
         from rich.console import Console
+
         return Console()
     except ImportError:
         return None
 
 
-def _detect_project_languages(project_path: Path, respect_ignore: bool = True) -> List[str]:
+def _detect_project_languages(
+    project_path: Path, respect_ignore: bool = True
+) -> List[str]:
     """Scan project files to detect present languages."""
     from code_briefcase.tldrignore import load_ignore_patterns, should_ignore
 
     # Extension map (copied from cli.py to avoid circular import)
     EXTENSION_TO_LANGUAGE = {
-        '.java': 'java',
-        '.py': 'python',
-        '.ts': 'typescript',
-        '.tsx': 'typescript',
-        '.js': 'javascript',
-        '.jsx': 'javascript',
-        '.go': 'go',
-        '.rs': 'rust',
-        '.c': 'c',
-        '.h': 'c',
-        '.cpp': 'cpp',
-        '.hpp': 'cpp',
-        '.cc': 'cpp',
-        '.cxx': 'cpp',
-        '.hh': 'cpp',
-        '.rb': 'ruby',
-        '.php': 'php',
-        '.swift': 'swift',
-        '.cs': 'csharp',
-        '.kt': 'kotlin',
-        '.kts': 'kotlin',
-        '.scala': 'scala',
-        '.sc': 'scala',
-        '.lua': 'lua',
-        '.luau': 'luau',
-        '.ex': 'elixir',
-        '.exs': 'elixir',
+        ".java": "java",
+        ".py": "python",
+        ".ts": "typescript",
+        ".tsx": "typescript",
+        ".js": "javascript",
+        ".jsx": "javascript",
+        ".go": "go",
+        ".rs": "rust",
+        ".c": "c",
+        ".h": "c",
+        ".cpp": "cpp",
+        ".hpp": "cpp",
+        ".cc": "cpp",
+        ".cxx": "cpp",
+        ".hh": "cpp",
+        ".rb": "ruby",
+        ".php": "php",
+        ".swift": "swift",
+        ".cs": "csharp",
+        ".kt": "kotlin",
+        ".kts": "kotlin",
+        ".scala": "scala",
+        ".sc": "scala",
+        ".lua": "lua",
+        ".luau": "luau",
+        ".ex": "elixir",
+        ".exs": "elixir",
     }
 
     found_languages = set()
@@ -913,18 +994,38 @@ def _detect_project_languages(project_path: Path, respect_ignore: bool = True) -
 
     for root, dirs, files in os.walk(project_path):
         # Prune common heavy dirs immediately for speed
-        dirs[:] = [d for d in dirs if d not in {'.git', 'node_modules', '.code-briefcase', 'venv', '.venv', '__pycache__', '.idea', '.vscode', 'env', '.env', 'vendor', 'deps', '_build', 'cover'}]
+        dirs[:] = [
+            d
+            for d in dirs
+            if d
+            not in {
+                ".git",
+                "node_modules",
+                ".code-briefcase",
+                "venv",
+                ".venv",
+                "__pycache__",
+                ".idea",
+                ".vscode",
+                "env",
+                ".env",
+                "vendor",
+                "deps",
+                "_build",
+                "cover",
+            }
+        ]
 
         for file in files:
-             file_path = Path(root) / file
+            file_path = Path(root) / file
 
-             # Check ignore patterns
-             if respect_ignore and should_ignore(file_path, project_path, spec):
-                 continue
+            # Check ignore patterns
+            if respect_ignore and should_ignore(file_path, project_path, spec):
+                continue
 
-             ext = file_path.suffix.lower()
-             if ext in EXTENSION_TO_LANGUAGE:
-                 found_languages.add(EXTENSION_TO_LANGUAGE[ext])
+            ext = file_path.suffix.lower()
+            if ext in EXTENSION_TO_LANGUAGE:
+                found_languages.add(EXTENSION_TO_LANGUAGE[ext])
 
     # Return sorted list intersect with ALL_LANGUAGES to ensure validity
     return sorted(list(found_languages & set(ALL_LANGUAGES)))
@@ -982,47 +1083,86 @@ def build_semantic_index(
     # Extract all units (respecting .code-briefcaseignore) - scan from scan_path, not project_root
     if console:
         with console.status("[bold green]Extracting code units...") as status:
-            def update_progress(file_path, units_count, total_files):
-                short_path = file_path if len(file_path) < 50 else "..." + file_path[-47:]
-                status.update(f"[bold green]Processing {short_path}... ({units_count} units)")
+
+            def update_progress(
+                file_path: Any, units_count: Any, total_files: Any
+            ) -> None:
+                short_path = (
+                    file_path if len(file_path) < 50 else "..." + file_path[-47:]
+                )
+                status.update(
+                    f"[bold green]Processing {short_path}... ({units_count} units)"
+                )
 
             if lang == "all":
                 status.update("[bold green]Scanning project languages...")
-                target_languages = _detect_project_languages(scan_path, respect_ignore=respect_ignore)
+                target_languages = _detect_project_languages(
+                    scan_path, respect_ignore=respect_ignore
+                )
                 if not target_languages:
-                    console.print("[yellow]No supported languages detected in project[/yellow]")
+                    console.print(
+                        "[yellow]No supported languages detected in project[/yellow]"
+                    )
                     return 0
                 if console:
-                    console.print(f"[dim]Detected languages: {', '.join(target_languages)}[/dim]")
+                    console.print(
+                        f"[dim]Detected languages: {', '.join(target_languages)}[/dim]"
+                    )
 
                 units = []
                 for lang_name in target_languages:
                     status.update(f"[bold green]Extracting {lang_name} code units...")
-                    units.extend(extract_units_from_project(str(scan_path), lang=lang_name, respect_ignore=respect_ignore, progress_callback=update_progress))
+                    units.extend(
+                        extract_units_from_project(
+                            str(scan_path),
+                            lang=lang_name,
+                            respect_ignore=respect_ignore,
+                            progress_callback=update_progress,
+                        )
+                    )
             else:
-                units = extract_units_from_project(str(scan_path), lang=lang, respect_ignore=respect_ignore, progress_callback=update_progress)
+                units = extract_units_from_project(
+                    str(scan_path),
+                    lang=lang,
+                    respect_ignore=respect_ignore,
+                    progress_callback=update_progress,
+                )
             status.update(f"[bold green]Extracted {len(units)} code units")
     else:
         if lang == "all":
-            target_languages = _detect_project_languages(scan_path, respect_ignore=respect_ignore)
+            target_languages = _detect_project_languages(
+                scan_path, respect_ignore=respect_ignore
+            )
             if not target_languages:
                 return 0
             units = []
             for lang_name in target_languages:
-                units.extend(extract_units_from_project(str(scan_path), lang=lang_name, respect_ignore=respect_ignore))
+                units.extend(
+                    extract_units_from_project(
+                        str(scan_path), lang=lang_name, respect_ignore=respect_ignore
+                    )
+                )
         else:
-            units = extract_units_from_project(str(scan_path), lang=lang, respect_ignore=respect_ignore)
+            units = extract_units_from_project(
+                str(scan_path), lang=lang, respect_ignore=respect_ignore
+            )
 
     if not units:
         return 0
-
 
     BATCH_SIZE = 64
     num_units = len(units)
     texts = [build_embedding_text(unit) for unit in units]
 
     if console:
-        from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn
+        from rich.progress import (
+            Progress,
+            SpinnerColumn,
+            TextColumn,
+            BarColumn,
+            TaskProgressColumn,
+        )
+
         with Progress(
             SpinnerColumn(),
             TextColumn("[bold green]{task.description}"),
@@ -1033,21 +1173,28 @@ def build_semantic_index(
             task = progress.add_task("Computing embeddings...", total=num_units)
 
             model_obj = get_model(model)
-            all_embeddings = []
+            all_embeddings: Any = []
 
             for i in range(0, num_units, BATCH_SIZE):
                 chunk_end = min(i + BATCH_SIZE, num_units)
                 chunk_texts = texts[i:chunk_end]
 
                 current_unit = units[i]
-                short_path = current_unit.file if len(current_unit.file) < 40 else "..." + current_unit.file[-37:]
-                progress.update(task, description=f"[bold green]Embedding {short_path}::{current_unit.name}")
+                short_path = (
+                    current_unit.file
+                    if len(current_unit.file) < 40
+                    else "..." + current_unit.file[-37:]
+                )
+                progress.update(
+                    task,
+                    description=f"[bold green]Embedding {short_path}::{current_unit.name}",
+                )
 
                 result = model_obj.encode(
                     chunk_texts,
                     batch_size=BATCH_SIZE,
                     normalize_embeddings=True,
-                    show_progress_bar=False
+                    show_progress_bar=False,
                 )
                 all_embeddings.extend(np.array(result, dtype=np.float32))
 
@@ -1057,9 +1204,7 @@ def build_semantic_index(
     else:
         model_obj = get_model(model)
         result = model_obj.encode(
-            texts,
-            batch_size=BATCH_SIZE,
-            normalize_embeddings=True
+            texts, batch_size=BATCH_SIZE, normalize_embeddings=True
         )
         embeddings_matrix = np.array(result, dtype=np.float32)
 
@@ -1123,10 +1268,14 @@ def semantic_search(
 
     # Check index exists
     if not index_file.exists():
-        raise FileNotFoundError(f"Semantic index not found at {index_file}. Run build_semantic_index first.")
+        raise FileNotFoundError(
+            f"Semantic index not found at {index_file}. Run build_semantic_index first."
+        )
 
     if not metadata_file.exists():
-        raise FileNotFoundError(f"Metadata not found at {metadata_file}. Run build_semantic_index first.")
+        raise FileNotFoundError(
+            f"Metadata not found at {metadata_file}. Run build_semantic_index first."
+        )
 
     # Load index and metadata
     index = faiss.read_index(str(index_file))
@@ -1168,7 +1317,9 @@ def semantic_search(
         if expand_graph:
             result["calls"] = unit.get("calls", [])
             result["called_by"] = unit.get("called_by", [])
-            result["related"] = list(set(unit.get("calls", []) + unit.get("called_by", [])))
+            result["related"] = list(
+                set(unit.get("calls", []) + unit.get("called_by", []))
+            )
 
         results.append(result)
 

@@ -1,4 +1,5 @@
 from __future__ import annotations
+from typing import Any, cast
 
 import signal
 import time
@@ -36,7 +37,9 @@ def _adapter(tmp_path: Path) -> TypeScriptWatchAdapter:
     )
 
 
-def test_clean_pending_file_only_becomes_fresh_when_project_config_covers_it(tmp_path):
+def test_clean_pending_file_only_becomes_fresh_when_project_config_covers_it(
+    tmp_path: Any,
+) -> None:
     source = tmp_path / "src" / "covered.ts"
     source.parent.mkdir()
     source.write_text("const answer: number = 42;\n", encoding="utf-8")
@@ -53,7 +56,9 @@ def test_clean_pending_file_only_becomes_fresh_when_project_config_covers_it(tmp
     assert response.diagnostics == []
 
 
-def test_previously_errored_file_is_cleared_when_next_batch_is_clean(tmp_path):
+def test_previously_errored_file_is_cleared_when_next_batch_is_clean(
+    tmp_path: Any,
+) -> None:
     source = tmp_path / "src" / "fixed.ts"
     source.parent.mkdir()
     source.write_text("const answer: number = 42;\n", encoding="utf-8")
@@ -78,7 +83,9 @@ def test_previously_errored_file_is_cleared_when_next_batch_is_clean(tmp_path):
     assert response.diagnostics == []
 
 
-def test_clean_pending_file_not_in_project_config_requires_sync_fallback(tmp_path):
+def test_clean_pending_file_not_in_project_config_requires_sync_fallback(
+    tmp_path: Any,
+) -> None:
     source = tmp_path / "src" / "excluded.ts"
     source.parent.mkdir()
     source.write_text("const answer: number = 42;\n", encoding="utf-8")
@@ -110,7 +117,9 @@ def _fake_tsc(path: Path) -> Path:
     return path
 
 
-def test_repo_local_tsc_watch_requires_explicit_trust(tmp_path, monkeypatch):
+def test_repo_local_tsc_watch_requires_explicit_trust(
+    tmp_path: Any, monkeypatch: Any
+) -> None:
     source = tmp_path / "src" / "app.ts"
     source.parent.mkdir()
     source.write_text("const answer: number = 42;\n", encoding="utf-8")
@@ -131,7 +140,9 @@ def test_repo_local_tsc_watch_requires_explicit_trust(tmp_path, monkeypatch):
     assert trusted.ok is True
 
 
-def test_repo_local_tsc_symlink_target_requires_explicit_trust(tmp_path, monkeypatch):
+def test_repo_local_tsc_symlink_target_requires_explicit_trust(
+    tmp_path: Any, monkeypatch: Any
+) -> None:
     source = tmp_path / "src" / "app.ts"
     source.parent.mkdir()
     source.write_text("const answer: number = 42;\n", encoding="utf-8")
@@ -151,7 +162,9 @@ def test_repo_local_tsc_symlink_target_requires_explicit_trust(tmp_path, monkeyp
     assert untrusted.reason == "untrusted_repo_binary"
 
 
-def test_supervisor_refuses_new_adapter_after_cap(tmp_path, monkeypatch):
+def test_supervisor_refuses_new_adapter_after_cap(
+    tmp_path: Any, monkeypatch: Any
+) -> None:
     from code_briefcase.daemon.watchers import supervisor as supervisor_module
 
     class FakeAdapter:
@@ -159,7 +172,7 @@ def test_supervisor_refuses_new_adapter_after_cap(tmp_path, monkeypatch):
             self.key = key
             self.project = project
 
-    def fake_can_start(file_path: Path, **_kwargs):
+    def fake_can_start(file_path: Path, **_kwargs: Any) -> Any:
         key = AdapterKey(
             language="typescript",
             tool_path=Path("/usr/bin/tsc"),
@@ -183,8 +196,8 @@ def test_supervisor_refuses_new_adapter_after_cap(tmp_path, monkeypatch):
 
 
 def test_unknown_project_coverage_clean_batch_becomes_stale_not_not_in_project(
-    tmp_path,
-):
+    tmp_path: Any,
+) -> None:
     source = tmp_path / "src" / "unknown.ts"
     source.parent.mkdir()
     source.write_text("const answer: number = 42;\n", encoding="utf-8")
@@ -203,8 +216,8 @@ def test_unknown_project_coverage_clean_batch_becomes_stale_not_not_in_project(
 
 
 def test_unknown_project_clean_stale_result_returns_without_waiting(
-    tmp_path, monkeypatch
-):
+    tmp_path: Any, monkeypatch: Any
+) -> None:
     source = tmp_path / "src" / "unknown-fast-stale.ts"
     source.parent.mkdir()
     source.write_text("const answer: number = 42;\n", encoding="utf-8")
@@ -229,7 +242,7 @@ def test_unknown_project_clean_stale_result_returns_without_waiting(
     assert response.status == QueryStatus.STALE
 
 
-def test_known_excluded_project_file_requires_sync_fallback(tmp_path):
+def test_known_excluded_project_file_requires_sync_fallback(tmp_path: Any) -> None:
     source = tmp_path / "src" / "excluded.ts"
     source.parent.mkdir()
     source.write_text("const answer: number = 42;\n", encoding="utf-8")
@@ -247,8 +260,8 @@ def test_known_excluded_project_file_requires_sync_fallback(tmp_path):
 
 
 def test_unknown_project_coverage_does_not_cover_newer_edit_than_batch_snapshot(
-    tmp_path, monkeypatch
-):
+    tmp_path: Any, monkeypatch: Any
+) -> None:
     source = tmp_path / "src" / "racy-unknown.ts"
     source.parent.mkdir()
     source.write_text("const answer: number = 42;\n", encoding="utf-8")
@@ -273,8 +286,8 @@ def test_unknown_project_coverage_does_not_cover_newer_edit_than_batch_snapshot(
 
 
 def test_unknown_project_batch_started_before_notify_clears_older_pending(
-    tmp_path, monkeypatch
-):
+    tmp_path: Any, monkeypatch: Any
+) -> None:
     source = tmp_path / "src" / "notify-race-unknown.ts"
     source.parent.mkdir()
     source.write_text("const answer: number = 42;\n", encoding="utf-8")
@@ -296,8 +309,8 @@ def test_unknown_project_batch_started_before_notify_clears_older_pending(
 
 
 def test_unknown_project_clean_batch_clears_pending_for_previous_diagnostics(
-    tmp_path, monkeypatch
-):
+    tmp_path: Any, monkeypatch: Any
+) -> None:
     source = tmp_path / "src" / "previous-error-now-clean.ts"
     source.parent.mkdir()
     source.write_text("const answer: number = 42;\n", encoding="utf-8")
@@ -328,7 +341,9 @@ def test_unknown_project_clean_batch_clears_pending_for_previous_diagnostics(
     assert source.resolve() not in adapter._pending_versions
 
 
-def test_unknown_project_previous_diagnostics_remain_pending_after_new_edit(tmp_path):
+def test_unknown_project_previous_diagnostics_remain_pending_after_new_edit(
+    tmp_path: Any,
+) -> None:
     source = tmp_path / "src" / "previous-known-pending.ts"
     source.parent.mkdir()
     source.write_text("const answer: number = 42;\n", encoding="utf-8")
@@ -345,7 +360,9 @@ def test_unknown_project_previous_diagnostics_remain_pending_after_new_edit(tmp_
     assert source.resolve() in adapter._pending_versions
 
 
-def test_unknown_project_coverage_before_batch_completion_stays_pending(tmp_path):
+def test_unknown_project_coverage_before_batch_completion_stays_pending(
+    tmp_path: Any,
+) -> None:
     source = tmp_path / "src" / "warming.ts"
     source.parent.mkdir()
     source.write_text("const answer: number = 42;\n", encoding="utf-8")
@@ -360,7 +377,7 @@ def test_unknown_project_coverage_before_batch_completion_stays_pending(tmp_path
     assert response.fallback_reason is None
 
 
-def test_explicit_uncovered_marker_still_requires_sync_fallback(tmp_path):
+def test_explicit_uncovered_marker_still_requires_sync_fallback(tmp_path: Any) -> None:
     source = tmp_path / "src" / "uncovered.ts"
     source.parent.mkdir()
     source.write_text("const answer: number = 42;\n", encoding="utf-8")
@@ -375,7 +392,9 @@ def test_explicit_uncovered_marker_still_requires_sync_fallback(tmp_path):
     assert response.fallback_reason == "not_in_project_config"
 
 
-def test_batch_completion_does_not_cover_edit_newer_than_compile_snapshot(tmp_path):
+def test_batch_completion_does_not_cover_edit_newer_than_compile_snapshot(
+    tmp_path: Any,
+) -> None:
     source = tmp_path / "src" / "racy.ts"
     source.parent.mkdir()
     source.write_text("const answer: number = 42;\n", encoding="utf-8")
@@ -397,7 +416,7 @@ def test_batch_completion_does_not_cover_edit_newer_than_compile_snapshot(tmp_pa
     assert adapter._pending_versions[source.resolve()] == second
 
 
-def test_non_project_pending_versions_are_cleared_after_batch(tmp_path):
+def test_non_project_pending_versions_are_cleared_after_batch(tmp_path: Any) -> None:
     adapter = _adapter(tmp_path)
     adapter._project_files = set()
 
@@ -425,9 +444,9 @@ def _ps_stdout(*, started_at: float, comm: str, command: str) -> str:
 
 
 def test_orphan_sweep_kills_registered_pid_only_when_identity_matches(
-    tmp_path,
-    monkeypatch,
-):
+    tmp_path: Any,
+    monkeypatch: Any,
+) -> None:
     tool = tmp_path / "node_modules" / ".bin" / "tsc"
     config = tmp_path / "tsconfig.json"
     started_at = 1_800_000_000.0
@@ -471,9 +490,9 @@ def test_orphan_sweep_kills_registered_pid_only_when_identity_matches(
 
 
 def test_orphan_sweep_does_not_kill_when_registered_start_time_differs(
-    tmp_path,
-    monkeypatch,
-):
+    tmp_path: Any,
+    monkeypatch: Any,
+) -> None:
     tool = tmp_path / "node_modules" / ".bin" / "tsc"
     config = tmp_path / "tsconfig.json"
     started_at = 1_800_000_000.0
@@ -522,7 +541,7 @@ def test_orphan_sweep_does_not_kill_when_registered_start_time_differs(
 
 class _FakePopen:
     def __init__(
-        self, *, pid: int = 4321, stdout=None, returncode: int | None = None
+        self, *, pid: int = 4321, stdout: Any = None, returncode: int | None = None
     ) -> None:
         self.pid = pid
         self.stdout = stdout
@@ -532,11 +551,13 @@ class _FakePopen:
         return self._returncode
 
 
-def test_unhealthy_adapter_restarts_after_backoff(tmp_path, monkeypatch):
+def test_unhealthy_adapter_restarts_after_backoff(
+    tmp_path: Any, monkeypatch: Any
+) -> None:
     adapter = _adapter(tmp_path)
     now = [100.0]
     monkeypatch.setattr(typescript_module.time, "monotonic", lambda: now[0])
-    adapter._process = _FakePopen(stdout=[], returncode=9)
+    adapter._process = cast(Any, _FakePopen(stdout=[], returncode=9))
     adapter._read_output()
     assert adapter.health().status == "unhealthy"
 
@@ -546,7 +567,7 @@ def test_unhealthy_adapter_restarts_after_backoff(tmp_path, monkeypatch):
     )
     popen_calls = []
 
-    def fake_popen(*args, **kwargs):
+    def fake_popen(*args: Any, **kwargs: Any) -> Any:
         popen_calls.append((args, kwargs))
         return _FakePopen(pid=99, stdout=None)
 
@@ -564,11 +585,13 @@ def test_unhealthy_adapter_restarts_after_backoff(tmp_path, monkeypatch):
     assert adapter._unhealthy_reason is None
 
 
-def test_restart_backoff_escalates_after_failed_restart_attempts(tmp_path, monkeypatch):
+def test_restart_backoff_escalates_after_failed_restart_attempts(
+    tmp_path: Any, monkeypatch: Any
+) -> None:
     adapter = _adapter(tmp_path)
     now = [200.0]
     monkeypatch.setattr(typescript_module.time, "monotonic", lambda: now[0])
-    adapter._process = _FakePopen(stdout=[], returncode=9)
+    adapter._process = cast(Any, _FakePopen(stdout=[], returncode=9))
     adapter._read_output()
     monkeypatch.setattr(adapter, "_load_project_files", lambda _env: set())
     monkeypatch.setattr(
@@ -576,7 +599,7 @@ def test_restart_backoff_escalates_after_failed_restart_attempts(tmp_path, monke
     )
     attempts = []
 
-    def failing_popen(*_args, **_kwargs):
+    def failing_popen(*_args: Any, **_kwargs: Any) -> None:
         attempts.append(now[0])
         raise OSError("boom")
 
@@ -592,7 +615,9 @@ def test_restart_backoff_escalates_after_failed_restart_attempts(tmp_path, monke
     assert attempts == [205.0, 220.0]
 
 
-def test_load_project_files_returns_none_on_tsc_failure(tmp_path, monkeypatch, caplog):
+def test_load_project_files_returns_none_on_tsc_failure(
+    tmp_path: Any, monkeypatch: Any, caplog: Any
+) -> None:
     adapter = _adapter(tmp_path)
     monkeypatch.setattr(
         typescript_module.subprocess,
@@ -624,7 +649,9 @@ def test_load_project_files_returns_none_on_tsc_failure(tmp_path, monkeypatch, c
     assert response.fallback_reason is None
 
 
-def test_recheck_complete_telemetry_records_real_batch_duration(tmp_path, monkeypatch):
+def test_recheck_complete_telemetry_records_real_batch_duration(
+    tmp_path: Any, monkeypatch: Any
+) -> None:
     source = tmp_path / "src" / "duration.ts"
     source.parent.mkdir()
     source.write_text("const answer: number = 42;\n", encoding="utf-8")
@@ -648,7 +675,9 @@ def test_recheck_complete_telemetry_records_real_batch_duration(tmp_path, monkey
     assert events[-1]["duration_ms"] == 1250
 
 
-def test_registry_write_is_atomic_when_replace_fails(tmp_path, monkeypatch):
+def test_registry_write_is_atomic_when_replace_fails(
+    tmp_path: Any, monkeypatch: Any
+) -> None:
     registry_path = tmp_path / "registry.json"
     monkeypatch.setattr(
         typescript_module, "_registry_path", lambda _project: registry_path
@@ -657,7 +686,7 @@ def test_registry_write_is_atomic_when_replace_fails(tmp_path, monkeypatch):
     new_entries = [{"pid": 2, "tool_path": "/bin/new"}]
     _write_registry(tmp_path, old_entries)
 
-    def fail_replace(_src, _dst):
+    def fail_replace(_src: Any, _dst: Any) -> None:
         raise OSError("simulated interrupted replace")
 
     monkeypatch.setattr(typescript_module.os, "replace", fail_replace)
@@ -668,7 +697,9 @@ def test_registry_write_is_atomic_when_replace_fails(tmp_path, monkeypatch):
     assert registry_path.with_suffix(".tmp").exists()
 
 
-def test_recheck_telemetry_uses_completed_compile_batch_seq(tmp_path, monkeypatch):
+def test_recheck_telemetry_uses_completed_compile_batch_seq(
+    tmp_path: Any, monkeypatch: Any
+) -> None:
     source = tmp_path / "src" / "telemetry.ts"
     source.parent.mkdir()
     source.write_text("const answer: number = 42;\n", encoding="utf-8")

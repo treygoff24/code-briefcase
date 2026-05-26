@@ -1,9 +1,11 @@
+from typing import Any
 import json
 import os
 import subprocess
 import sys
 
-def run_cli(args, payload=None):
+
+def run_cli(args: Any, payload: Any = None) -> Any:
     env = {
         **os.environ,
         # Session-start hooks normally request daemon/warm background work. CLI
@@ -21,7 +23,7 @@ def run_cli(args, payload=None):
     )
 
 
-def test_claude_pre_read_cli_output_matches_current_schema(tmp_path):
+def test_claude_pre_read_cli_output_matches_current_schema(tmp_path: Any) -> None:
     source = tmp_path / "app.py"
     source.write_text("def main():\n    return 1\n" + "x = 1\n" * 400)
     payload = {
@@ -40,7 +42,9 @@ def test_claude_pre_read_cli_output_matches_current_schema(tmp_path):
     assert "additionalContext" in rendered["hookSpecificOutput"]
 
 
-def test_codex_pre_edit_apply_patch_cli_output_matches_current_schema(tmp_path):
+def test_codex_pre_edit_apply_patch_cli_output_matches_current_schema(
+    tmp_path: Any,
+) -> None:
     source = tmp_path / "app.py"
     source.write_text("def main():\n    return 1\n")
     payload = {
@@ -59,7 +63,9 @@ def test_codex_pre_edit_apply_patch_cli_output_matches_current_schema(tmp_path):
     assert "hookSpecificOutput" not in rendered
 
 
-def test_hook_install_cli_can_target_temp_configs_without_user_config(tmp_path):
+def test_hook_install_cli_can_target_temp_configs_without_user_config(
+    tmp_path: Any,
+) -> None:
     claude_config = tmp_path / "claude-settings.json"
     codex_config = tmp_path / "codex-hooks.json"
 
@@ -77,7 +83,7 @@ def test_hook_install_cli_can_target_temp_configs_without_user_config(tmp_path):
 # --- Phase 1: Runtime CLI shape additions ---
 
 
-def test_droid_client_accepted_in_hooks_run(tmp_path):
+def test_droid_client_accepted_in_hooks_run(tmp_path: Any) -> None:
     payload = {
         "hook_event_name": "SessionStart",
         "cwd": str(tmp_path),
@@ -87,7 +93,7 @@ def test_droid_client_accepted_in_hooks_run(tmp_path):
     assert rendered["hookSpecificOutput"]["hookEventName"] == "SessionStart"
 
 
-def test_factory_client_accepted_in_hooks_run(tmp_path):
+def test_factory_client_accepted_in_hooks_run(tmp_path: Any) -> None:
     payload = {
         "hook_event_name": "SessionStart",
         "cwd": str(tmp_path),
@@ -97,7 +103,7 @@ def test_factory_client_accepted_in_hooks_run(tmp_path):
     assert rendered["hookSpecificOutput"]["hookEventName"] == "SessionStart"
 
 
-def test_opencode_client_accepted_in_hooks_run(tmp_path):
+def test_opencode_client_accepted_in_hooks_run(tmp_path: Any) -> None:
     payload = {
         "hook_event_name": "SessionStart",
         "cwd": str(tmp_path),
@@ -109,32 +115,36 @@ def test_opencode_client_accepted_in_hooks_run(tmp_path):
     assert rendered["hookSpecificOutput"]["hookEventName"] == "SessionStart"
 
 
-def test_user_prompt_submit_event_accepted_in_hooks_run():
+def test_user_prompt_submit_event_accepted_in_hooks_run() -> None:
     payload = {
         "hook_event_name": "UserPromptSubmit",
         "prompt": "Hello world",
         "cwd": "/tmp",
     }
-    result = run_cli(["hooks", "run", "user-prompt-submit", "--client", "codex"], payload)
+    result = run_cli(
+        ["hooks", "run", "user-prompt-submit", "--client", "codex"], payload
+    )
     rendered = json.loads(result.stdout)
     # Clean prompt should noop
     assert rendered == {}
 
 
-def test_permission_request_event_accepted_in_hooks_run():
+def test_permission_request_event_accepted_in_hooks_run() -> None:
     payload = {
         "hook_event_name": "PermissionRequest",
         "tool_name": "Bash",
         "tool_input": {"command": "npm test"},
         "cwd": "/tmp",
     }
-    result = run_cli(["hooks", "run", "permission-request", "--client", "codex"], payload)
+    result = run_cli(
+        ["hooks", "run", "permission-request", "--client", "codex"], payload
+    )
     rendered = json.loads(result.stdout)
     # Safe command should noop
     assert rendered == {}
 
 
-def test_stop_event_accepted_in_hooks_run():
+def test_stop_event_accepted_in_hooks_run() -> None:
     payload = {
         "hook_event_name": "Stop",
         "cwd": "/tmp",
@@ -144,7 +154,7 @@ def test_stop_event_accepted_in_hooks_run():
     assert rendered == {}
 
 
-def test_session_end_event_accepted_in_hooks_run():
+def test_session_end_event_accepted_in_hooks_run() -> None:
     payload = {
         "hook_event_name": "SessionEnd",
         "cwd": "/tmp",
@@ -154,7 +164,7 @@ def test_session_end_event_accepted_in_hooks_run():
     assert rendered == {}
 
 
-def test_notification_event_accepted_in_hooks_run():
+def test_notification_event_accepted_in_hooks_run() -> None:
     payload = {
         "hook_event_name": "Notification",
         "cwd": "/tmp",
@@ -164,7 +174,7 @@ def test_notification_event_accepted_in_hooks_run():
     assert rendered == {}
 
 
-def test_pre_tool_event_accepted_in_hooks_run():
+def test_pre_tool_event_accepted_in_hooks_run() -> None:
     payload = {
         "hook_event_name": "PreToolUse",
         "tool_name": "Bash",
@@ -177,7 +187,7 @@ def test_pre_tool_event_accepted_in_hooks_run():
     assert rendered == {}
 
 
-def test_post_tool_event_accepted_in_hooks_run():
+def test_post_tool_event_accepted_in_hooks_run() -> None:
     payload = {
         "hook_event_name": "PostToolUse",
         "tool_name": "Bash",
@@ -189,7 +199,7 @@ def test_post_tool_event_accepted_in_hooks_run():
     assert rendered == {}
 
 
-def test_subagent_start_event_accepted_in_hooks_run():
+def test_subagent_start_event_accepted_in_hooks_run() -> None:
     payload = {
         "hook_event_name": "SubagentStart",
         "cwd": "/tmp",
@@ -199,7 +209,7 @@ def test_subagent_start_event_accepted_in_hooks_run():
     assert rendered == {}
 
 
-def test_subagent_stop_event_accepted_in_hooks_run():
+def test_subagent_stop_event_accepted_in_hooks_run() -> None:
     payload = {
         "hook_event_name": "SubagentStop",
         "cwd": "/tmp",
@@ -209,7 +219,7 @@ def test_subagent_stop_event_accepted_in_hooks_run():
     assert rendered == {}
 
 
-def test_pre_compact_event_accepted_in_hooks_run(tmp_path):
+def test_pre_compact_event_accepted_in_hooks_run(tmp_path: Any) -> None:
     (tmp_path / "app.py").write_text("def main():\n    return 1\n")
     payload = {
         "hook_event_name": "PreCompact",
@@ -218,29 +228,36 @@ def test_pre_compact_event_accepted_in_hooks_run(tmp_path):
     result = run_cli(["hooks", "run", "pre-compact", "--client", "droid"], payload)
     rendered = json.loads(result.stdout)
     assert rendered["hookSpecificOutput"]["hookEventName"] == "PreCompact"
-    assert "Code Briefcase compact context" in rendered["hookSpecificOutput"]["additionalContext"]
+    assert (
+        "Code Briefcase compact context"
+        in rendered["hookSpecificOutput"]["additionalContext"]
+    )
 
 
-def test_codex_permission_request_cli_blocks_destructive():
+def test_codex_permission_request_cli_blocks_destructive() -> None:
     payload = {
         "hook_event_name": "PermissionRequest",
         "tool_name": "Bash",
         "tool_input": {"command": "rm -rf /"},
         "cwd": "/tmp",
     }
-    result = run_cli(["hooks", "run", "permission-request", "--client", "codex"], payload)
+    result = run_cli(
+        ["hooks", "run", "permission-request", "--client", "codex"], payload
+    )
     rendered = json.loads(result.stdout)
     assert "hookSpecificOutput" in rendered
     assert rendered["hookSpecificOutput"]["decision"]["behavior"] == "deny"
 
 
-def test_droid_user_prompt_submit_cli_blocks_secret():
+def test_droid_user_prompt_submit_cli_blocks_secret() -> None:
     payload = {
         "hook_event_name": "UserPromptSubmit",
         "prompt": "Here is my key: sk-" + "A" * 48,
         "cwd": "/tmp",
     }
-    result = run_cli(["hooks", "run", "user-prompt-submit", "--client", "droid"], payload)
+    result = run_cli(
+        ["hooks", "run", "user-prompt-submit", "--client", "droid"], payload
+    )
     rendered = json.loads(result.stdout)
     assert rendered["decision"] == "block"
     assert "possible OpenAI API key" in rendered["reason"]

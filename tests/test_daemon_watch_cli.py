@@ -1,4 +1,5 @@
 from __future__ import annotations
+from typing import Any
 
 import io
 import json
@@ -11,7 +12,9 @@ from code_briefcase.daemon.protocol import DaemonResponseKind
 from code_briefcase.daemon.startup import DaemonResponse
 
 
-def test_daemon_watchers_status_cli_outputs_json(tmp_path, monkeypatch):
+def test_daemon_watchers_status_cli_outputs_json(
+    tmp_path: Any, monkeypatch: Any
+) -> None:
     from code_briefcase import cli
 
     monkeypatch.setattr(
@@ -44,14 +47,16 @@ def test_daemon_watchers_status_cli_outputs_json(tmp_path, monkeypatch):
     assert payload["command"] == {"cmd": "watchers", "action": "status"}
 
 
-def test_daemon_watchers_start_cli_sends_start_command(tmp_path, monkeypatch):
+def test_daemon_watchers_start_cli_sends_start_command(
+    tmp_path: Any, monkeypatch: Any
+) -> None:
     from code_briefcase import cli
 
     source = tmp_path / "app.ts"
     source.write_text("const answer = 42;\n", encoding="utf-8")
     seen = {}
 
-    def fake_query(project, command, **_kwargs):
+    def fake_query(project: Any, command: Any, **_kwargs: Any) -> Any:
         seen["project"] = project
         seen["command"] = command
         return DaemonResponse(
@@ -89,7 +94,7 @@ def test_daemon_watchers_start_cli_sends_start_command(tmp_path, monkeypatch):
     assert json.loads(stdout.getvalue())["watcher_status"] == "pending"
 
 
-def test_daemon_status_cli_reports_timeout(tmp_path, monkeypatch):
+def test_daemon_status_cli_reports_timeout(tmp_path: Any, monkeypatch: Any) -> None:
     from code_briefcase import cli
 
     monkeypatch.setattr(
@@ -113,8 +118,8 @@ def test_daemon_status_cli_reports_timeout(tmp_path, monkeypatch):
 
 
 def test_daemon_watchers_start_cli_resolves_relative_file_against_project(
-    tmp_path, monkeypatch
-):
+    tmp_path: Any, monkeypatch: Any
+) -> None:
     from code_briefcase import cli
 
     project = tmp_path / "project"
@@ -125,7 +130,7 @@ def test_daemon_watchers_start_cli_resolves_relative_file_against_project(
     other_cwd.mkdir()
     seen = {}
 
-    def fake_query(project, command, **_kwargs):
+    def fake_query(project: Any, command: Any, **_kwargs: Any) -> Any:
         seen["project"] = project
         seen["command"] = command
         return DaemonResponse(
@@ -159,7 +164,9 @@ def test_daemon_watchers_start_cli_resolves_relative_file_against_project(
     assert json.loads(stdout.getvalue())["watcher_status"] == "pending"
 
 
-def test_daemon_watchers_start_cli_surfaces_application_error(tmp_path, monkeypatch):
+def test_daemon_watchers_start_cli_surfaces_application_error(
+    tmp_path: Any, monkeypatch: Any
+) -> None:
     from code_briefcase import cli
 
     source = tmp_path / "app.ts"

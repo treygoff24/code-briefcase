@@ -1,3 +1,4 @@
+from typing import Any
 import json
 import os
 import shutil
@@ -73,7 +74,9 @@ switch (process.env.CODE_BRIEFCASE_FAKE_MODE) {
     return fake
 
 
-def _run_node(tmp_path: Path, source: str, *, env: dict[str, str] | None = None) -> subprocess.CompletedProcess[str]:
+def _run_node(
+    tmp_path: Path, source: str, *, env: dict[str, str] | None = None
+) -> subprocess.CompletedProcess[str]:
     node_bin = _node_or_skip()
     runner = tmp_path / "runner.mjs"
     runner.write_text(source)
@@ -86,7 +89,12 @@ def _run_node(tmp_path: Path, source: str, *, env: dict[str, str] | None = None)
     )
 
 
-def _write_adapter(tmp_path: Path, *, enable_tool_guard: bool = True, enable_compact_context: bool = True) -> Path:
+def _write_adapter(
+    tmp_path: Path,
+    *,
+    enable_tool_guard: bool = True,
+    enable_compact_context: bool = True,
+) -> Path:
     node_bin = _node_or_skip()
     fake = _write_fake_tldr(tmp_path)
     adapter = tmp_path / "code-briefcase-hooks.mjs"
@@ -100,7 +108,7 @@ def _write_adapter(tmp_path: Path, *, enable_tool_guard: bool = True, enable_com
     return adapter
 
 
-def test_generate_opencode_adapter_default_callbacks():
+def test_generate_opencode_adapter_default_callbacks() -> None:
     tldr_path = "/usr/local/bin/tldr"
     js = generate_opencode_adapter(tldr_path)
 
@@ -129,7 +137,7 @@ def test_generate_opencode_adapter_default_callbacks():
             assert "node:child_process" in line or "node:" in line
 
 
-def test_generate_opencode_adapter_opt_in_callbacks():
+def test_generate_opencode_adapter_opt_in_callbacks() -> None:
     tldr_path = "/usr/local/bin/tldr"
 
     # Opt-in tool guard
@@ -143,22 +151,24 @@ def test_generate_opencode_adapter_opt_in_callbacks():
     assert '"experimental.session.compacting"' in js_compact
 
     # Both opt-ins
-    js_both = generate_opencode_adapter(tldr_path, enable_tool_guard=True, enable_compact_context=True)
+    js_both = generate_opencode_adapter(
+        tldr_path, enable_tool_guard=True, enable_compact_context=True
+    )
     assert '"permission.asked"' in js_both
     assert '"experimental.session.compacting"' in js_both
 
 
-def test_generate_opencode_adapter_list_tldr_command():
+def test_generate_opencode_adapter_list_tldr_command() -> None:
     tldr_cmd = ["/path/to/python", "-m", "code_briefcase.cli"]
     js = generate_opencode_adapter(tldr_cmd)
-    
+
     assert "/path/to/python" in js
     assert "-m" in js
     assert "code_briefcase.cli" in js
     assert '["code-briefcase"]' not in js
 
 
-def test_node_smoke_parsing(tmp_path):
+def test_node_smoke_parsing(tmp_path: Any) -> None:
     _write_adapter(tmp_path)
 
     test_js = """
@@ -191,12 +201,16 @@ def test_node_smoke_parsing(tmp_path):
     runner_path = tmp_path / "run-test.mjs"
     runner_path.write_text(test_js)
 
-    result = subprocess.run([_node_or_skip(), "run-test.mjs"], cwd=tmp_path, capture_output=True, text=True)
+    result = subprocess.run(
+        [_node_or_skip(), "run-test.mjs"], cwd=tmp_path, capture_output=True, text=True
+    )
 
-    assert result.returncode == 0, f"Node.js parsing failed:\nstdout: {result.stdout}\nstderr: {result.stderr}"
+    assert (
+        result.returncode == 0
+    ), f"Node.js parsing failed:\nstdout: {result.stdout}\nstderr: {result.stderr}"
 
 
-def test_node_callback_event_normalization(tmp_path):
+def test_node_callback_event_normalization(tmp_path: Any) -> None:
     capture = tmp_path / "capture.jsonl"
     _write_adapter(tmp_path, enable_tool_guard=False, enable_compact_context=False)
     result = _run_node(
@@ -210,7 +224,10 @@ await hooks["tool.execute.before"]({ tool: "edit" }, { args: { filePath: "README
 await hooks["tool.execute.after"]({ tool: "edit" }, { args: { filePath: "README.md" }, result: { ok: true } })
 await hooks["file.edited"]({ filePath: "README.md" }, {})
 """,
-        env={"CODE_BRIEFCASE_CAPTURE": str(capture), "CODE_BRIEFCASE_FAKE_MODE": "default"},
+        env={
+            "CODE_BRIEFCASE_CAPTURE": str(capture),
+            "CODE_BRIEFCASE_FAKE_MODE": "default",
+        },
     )
 
     assert result.returncode == 0, result.stderr
@@ -229,7 +246,9 @@ await hooks["file.edited"]({ filePath: "README.md" }, {})
     assert lines[4]["payload"]["tool_input"]["file_path"] == "README.md"
 
 
-def test_node_callbacks_treat_empty_parse_failure_subprocess_failure_and_timeout_as_noop(tmp_path):
+def test_node_callbacks_treat_empty_parse_failure_subprocess_failure_and_timeout_as_noop(
+    tmp_path: Any,
+) -> None:
     _write_adapter(tmp_path, enable_tool_guard=False, enable_compact_context=False)
     result = _run_node(
         tmp_path,
@@ -246,7 +265,7 @@ for (const mode of ["empty", "invalid", "nonzero", "timeout"]) {
     assert result.returncode == 0, result.stderr
 
 
-def test_node_tool_before_applies_updated_input(tmp_path):
+def test_node_tool_before_applies_updated_input(tmp_path: Any) -> None:
     _write_adapter(tmp_path, enable_tool_guard=False, enable_compact_context=False)
     result = _run_node(
         tmp_path,
@@ -265,7 +284,7 @@ if (output.args.command !== "echo sanitized") {
     assert result.returncode == 0, result.stderr
 
 
-def test_node_permission_and_tool_guards_throw_on_deny(tmp_path):
+def test_node_permission_and_tool_guards_throw_on_deny(tmp_path: Any) -> None:
     _write_adapter(tmp_path, enable_tool_guard=True, enable_compact_context=False)
     result = _run_node(
         tmp_path,
@@ -290,7 +309,7 @@ for (const name of ["tool.execute.before", "permission.asked"]) {
     assert result.returncode == 0, result.stderr
 
 
-def test_node_compaction_callback_pushes_context(tmp_path):
+def test_node_compaction_callback_pushes_context(tmp_path: Any) -> None:
     _write_adapter(tmp_path, enable_tool_guard=False, enable_compact_context=True)
     result = _run_node(
         tmp_path,
@@ -309,7 +328,9 @@ if (output.context[0] !== "Code Briefcase context") {
     assert result.returncode == 0, result.stderr
 
 
-def test_node_session_created_appends_context_when_output_supports_it(tmp_path):
+def test_node_session_created_appends_context_when_output_supports_it(
+    tmp_path: Any,
+) -> None:
     _write_adapter(tmp_path, enable_tool_guard=False, enable_compact_context=False)
     result = _run_node(
         tmp_path,

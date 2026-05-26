@@ -17,13 +17,15 @@ import pytest
 class TestLuauBasicRequire:
     """Tests for basic require statements in Luau."""
 
-    def test_luau_imports_script_require(self):
+    def test_luau_imports_script_require(self) -> None:
         """Should parse require(script.Utils) pattern."""
         from code_briefcase.cross_file_calls import parse_luau_imports
 
         with tempfile.NamedTemporaryFile(suffix=".luau", mode="w", delete=False) as f:
-            f.write("""local Utils = require(script.Utils)
-""")
+            f.write(
+                """local Utils = require(script.Utils)
+"""
+            )
             f.flush()
 
             imports = parse_luau_imports(f.name)
@@ -32,13 +34,15 @@ class TestLuauBasicRequire:
         assert imports[0]["module"] == "script.Utils"
         assert imports[0]["type"] == "require"
 
-    def test_luau_imports_script_parent_require(self):
+    def test_luau_imports_script_parent_require(self) -> None:
         """Should parse require(script.Parent.SharedModule) pattern."""
         from code_briefcase.cross_file_calls import parse_luau_imports
 
         with tempfile.NamedTemporaryFile(suffix=".luau", mode="w", delete=False) as f:
-            f.write("""local module = require(script.Parent.SharedModule)
-""")
+            f.write(
+                """local module = require(script.Parent.SharedModule)
+"""
+            )
             f.flush()
 
             imports = parse_luau_imports(f.name)
@@ -47,13 +51,15 @@ class TestLuauBasicRequire:
         assert imports[0]["module"] == "script.Parent.SharedModule"
         assert imports[0]["type"] == "require"
 
-    def test_luau_imports_string_literal_require(self):
+    def test_luau_imports_string_literal_require(self) -> None:
         """Should parse require('@pkg/json') string literal pattern."""
         from code_briefcase.cross_file_calls import parse_luau_imports
 
         with tempfile.NamedTemporaryFile(suffix=".luau", mode="w", delete=False) as f:
-            f.write("""local json = require("@pkg/json")
-""")
+            f.write(
+                """local json = require("@pkg/json")
+"""
+            )
             f.flush()
 
             imports = parse_luau_imports(f.name)
@@ -66,13 +72,15 @@ class TestLuauBasicRequire:
 class TestLuauGetService:
     """Tests for Roblox GetService patterns."""
 
-    def test_luau_imports_getservice_players(self):
+    def test_luau_imports_getservice_players(self) -> None:
         """Should parse game:GetService('Players') as import-like."""
         from code_briefcase.cross_file_calls import parse_luau_imports
 
         with tempfile.NamedTemporaryFile(suffix=".luau", mode="w", delete=False) as f:
-            f.write("""local Players = game:GetService("Players")
-""")
+            f.write(
+                """local Players = game:GetService("Players")
+"""
+            )
             f.flush()
 
             imports = parse_luau_imports(f.name)
@@ -81,15 +89,17 @@ class TestLuauGetService:
         assert imports[0]["module"] == "Players"
         assert imports[0]["type"] == "service"
 
-    def test_luau_imports_multiple_getservice(self):
+    def test_luau_imports_multiple_getservice(self) -> None:
         """Should parse multiple GetService calls."""
         from code_briefcase.cross_file_calls import parse_luau_imports
 
         with tempfile.NamedTemporaryFile(suffix=".luau", mode="w", delete=False) as f:
-            f.write("""local Players = game:GetService("Players")
+            f.write(
+                """local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-""")
+"""
+            )
             f.flush()
 
             imports = parse_luau_imports(f.name)
@@ -102,15 +112,17 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 class TestLuauMultipleImports:
     """Tests for files with multiple import types."""
 
-    def test_luau_imports_mixed_requires_and_services(self):
+    def test_luau_imports_mixed_requires_and_services(self) -> None:
         """Should parse both require and GetService in same file."""
         from code_briefcase.cross_file_calls import parse_luau_imports
 
         with tempfile.NamedTemporaryFile(suffix=".luau", mode="w", delete=False) as f:
-            f.write("""local ReplicatedStorage = game:GetService("ReplicatedStorage")
+            f.write(
+                """local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Utils = require(ReplicatedStorage.Utils)
 local Config = require(script.Parent.Config)
-""")
+"""
+            )
             f.flush()
 
             imports = parse_luau_imports(f.name)
@@ -130,14 +142,16 @@ local Config = require(script.Parent.Config)
 class TestLuauEdgeCases:
     """Tests for edge cases and empty files."""
 
-    def test_luau_imports_no_imports(self):
+    def test_luau_imports_no_imports(self) -> None:
         """Should return empty list for file with no imports."""
         from code_briefcase.cross_file_calls import parse_luau_imports
 
         with tempfile.NamedTemporaryFile(suffix=".luau", mode="w", delete=False) as f:
-            f.write("""local x = 10
+            f.write(
+                """local x = 10
 print(x)
-""")
+"""
+            )
             f.flush()
 
             imports = parse_luau_imports(f.name)

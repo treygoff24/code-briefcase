@@ -1,3 +1,4 @@
+from typing import Any
 import json
 from pathlib import Path
 
@@ -6,13 +7,10 @@ from code_briefcase.daemon.protocol import send_framed_json
 from code_briefcase.mcp_server import _decode_socket_response
 
 
-def test_daemon_context_response_is_json_serializable(tmp_path: Path):
+def test_daemon_context_response_is_json_serializable(tmp_path: Path) -> None:
     source = tmp_path / "app.py"
     source.write_text(
-        "def helper():\n"
-        "    return 1\n\n"
-        "def main():\n"
-        "    return helper()\n"
+        "def helper():\n" "    return 1\n\n" "def main():\n" "    return helper()\n"
     )
 
     daemon = TLDRDaemon(tmp_path)
@@ -25,7 +23,7 @@ def test_daemon_context_response_is_json_serializable(tmp_path: Path):
     assert "main" in json.dumps(response)
 
 
-def test_daemon_loads_call_graph_from_cache_dir(tmp_path: Path):
+def test_daemon_loads_call_graph_from_cache_dir(tmp_path: Path) -> None:
     cache_dir = tmp_path / ".code-briefcase" / "cache"
     cache_dir.mkdir(parents=True)
     (cache_dir / "call_graph.json").write_text(
@@ -51,7 +49,7 @@ def test_daemon_loads_call_graph_from_cache_dir(tmp_path: Path):
     assert daemon.indexes["call_graph"]["edges"][0]["to_func"] == "helper"
 
 
-def test_daemon_impact_uses_current_edge_shape(tmp_path: Path):
+def test_daemon_impact_uses_current_edge_shape(tmp_path: Path) -> None:
     cache_dir = tmp_path / ".code-briefcase" / "cache"
     cache_dir.mkdir(parents=True)
     (cache_dir / "call_graph.json").write_text(
@@ -80,7 +78,7 @@ def test_daemon_impact_uses_current_edge_shape(tmp_path: Path):
     assert "helper" in payload
 
 
-def test_mcp_decode_socket_response_does_not_duplicate_chunks():
+def test_mcp_decode_socket_response_does_not_duplicate_chunks() -> None:
     payload = {"status": "ok", "result": "abc"}
     raw = json.dumps(payload).encode()
     midpoint = len(raw) // 2
@@ -88,7 +86,7 @@ def test_mcp_decode_socket_response_does_not_duplicate_chunks():
     assert _decode_socket_response([raw[:midpoint], raw[midpoint:]]) == payload
 
 
-def test_mcp_decode_socket_response_accepts_framed_chunks():
+def test_mcp_decode_socket_response_accepts_framed_chunks() -> None:
     import socket
 
     payload = {"status": "ok", "result": "x" * 100}
@@ -103,11 +101,15 @@ def test_mcp_decode_socket_response_accepts_framed_chunks():
     assert _decode_socket_response(chunks) == payload
 
 
-def test_daemon_diagnostics_uses_current_schema(tmp_path: Path, monkeypatch):
+def test_daemon_diagnostics_uses_current_schema(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
     source = tmp_path / "app.py"
     source.write_text("def main():\n    return 1\n")
 
-    def fake_get_diagnostics(path, language=None, include_lint=True):
+    def fake_get_diagnostics(
+        path: Any, language: Any = None, include_lint: Any = True
+    ) -> Any:
         return {
             "file": path,
             "language": "python",
@@ -117,7 +119,9 @@ def test_daemon_diagnostics_uses_current_schema(tmp_path: Path, monkeypatch):
             "warning_count": 0,
         }
 
-    monkeypatch.setattr("code_briefcase.diagnostics.get_diagnostics", fake_get_diagnostics)
+    monkeypatch.setattr(
+        "code_briefcase.diagnostics.get_diagnostics", fake_get_diagnostics
+    )
 
     daemon = TLDRDaemon(tmp_path)
     response = daemon.handle_command(
@@ -131,7 +135,7 @@ def test_daemon_diagnostics_uses_current_schema(tmp_path: Path, monkeypatch):
     assert "summary" not in response
 
 
-def test_daemon_watchers_status_command_reports_schema(tmp_path: Path):
+def test_daemon_watchers_status_command_reports_schema(tmp_path: Path) -> None:
     daemon = TLDRDaemon(tmp_path)
 
     response = daemon.handle_command({"cmd": "watchers", "action": "status"})
@@ -141,7 +145,7 @@ def test_daemon_watchers_status_command_reports_schema(tmp_path: Path):
     assert response["count"] == 0
 
 
-def test_daemon_watchers_stop_command_is_idempotent(tmp_path: Path):
+def test_daemon_watchers_stop_command_is_idempotent(tmp_path: Path) -> None:
     daemon = TLDRDaemon(tmp_path)
 
     first = daemon.handle_command({"cmd": "watchers", "action": "stop"})

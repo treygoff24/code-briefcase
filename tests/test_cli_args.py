@@ -1,9 +1,10 @@
+from typing import Any
 import json
 import subprocess
 import sys
 
 
-def test_extract_accepts_format_json(tmp_path):
+def test_extract_accepts_format_json(tmp_path: Any) -> None:
     source = tmp_path / "sample.py"
     source.write_text("def hello():\n    return 'world'\n")
 

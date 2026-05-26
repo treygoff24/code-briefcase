@@ -17,6 +17,8 @@ Architecture (following ARISTODE pattern):
 - Support for forward/backward slicing
 """
 
+from typing import Any
+
 from collections import deque
 from dataclasses import dataclass, field
 
@@ -276,7 +278,7 @@ class PDGInfo:
 
         target_ids = {n.id for n in target_nodes}
 
-        result = {
+        result: dict[str, list[dict[Any, Any]]] = {
             "control_in": [],
             "control_out": [],
             "data_in": [],
@@ -314,7 +316,7 @@ class PDGBuilder:
     5. Add data edges from DFG, mapping line numbers to nodes
     """
 
-    def __init__(self, cfg: CFGInfo, dfg: DFGInfo):
+    def __init__(self, cfg: CFGInfo, dfg: DFGInfo) -> None:
         self.cfg = cfg
         self.dfg = dfg
         self.nodes: list[PDGNode] = []
@@ -339,7 +341,7 @@ class PDGBuilder:
             edges=self.edges,
         )
 
-    def _create_nodes_from_cfg(self):
+    def _create_nodes_from_cfg(self) -> None:
         """Create PDG nodes from CFG blocks."""
         # Map CFG block types to PDG node types
         type_map = {
@@ -372,16 +374,16 @@ class PDGBuilder:
         for ref in self.dfg.var_refs:
             node_id = self._line_to_node.get(ref.line)
             if node_id is not None:
-                node = self._node_by_id.get(node_id)
-                if node:
+                mapped_node = self._node_by_id.get(node_id)
+                if mapped_node:
                     if ref.ref_type in ("definition", "update"):
-                        if ref.name not in node.definitions:
-                            node.definitions.append(ref.name)
+                        if ref.name not in mapped_node.definitions:
+                            mapped_node.definitions.append(ref.name)
                     elif ref.ref_type == "use":
-                        if ref.name not in node.uses:
-                            node.uses.append(ref.name)
+                        if ref.name not in mapped_node.uses:
+                            mapped_node.uses.append(ref.name)
 
-    def _add_control_edges(self):
+    def _add_control_edges(self) -> None:
         """Add control dependency edges from CFG."""
         for cfg_edge in self.cfg.edges:
             edge = PDGEdge(
@@ -392,7 +394,7 @@ class PDGBuilder:
             )
             self.edges.append(edge)
 
-    def _add_data_edges(self):
+    def _add_data_edges(self) -> None:
         """Add data dependency edges from DFG."""
         for df_edge in self.dfg.dataflow_edges:
             # Map def line to source node

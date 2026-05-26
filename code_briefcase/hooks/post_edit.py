@@ -17,7 +17,13 @@ from code_briefcase.hooks.path_policy import (
     looks_secret_path,
     resolve_event_path,
 )
-from code_briefcase.hooks.outcome import HookExecutionResult, event_relative_path, noop, ok, skipped
+from code_briefcase.hooks.outcome import (
+    HookExecutionResult,
+    event_relative_path,
+    noop,
+    ok,
+    skipped,
+)
 from code_briefcase.hooks.runtime import HookEvent, HookResponse
 
 logger = logging.getLogger(__name__)
@@ -51,7 +57,10 @@ def extract_edited_files(event: HookEvent) -> list[Path]:
         if decision.reason == "markdown_unsupported":
             return
         if not decision.allowed:
-            if decision.reason == "missing_file" and path.suffix.lower() in CODE_EXTENSIONS:
+            if (
+                decision.reason == "missing_file"
+                and path.suffix.lower() in CODE_EXTENSIONS
+            ):
                 paths.append(path)
                 seen.add(path)
             return
@@ -194,7 +203,9 @@ def build_post_edit_response(event: HookEvent) -> HookExecutionResult:
     watcher_section = _format_watcher_notices(watcher_notices)
     if not messages:
         if os.environ.get("CODE_BRIEFCASE_POST_EDIT_CLEAN_CONFIRM") == "0":
-            return noop(reason="clean_no_diagnostics", trigger_files=trigger, **watch_summary)
+            return noop(
+                reason="clean_no_diagnostics", trigger_files=trigger, **watch_summary
+            )
         confirmation = _format_clean_edit_confirmation(edited_files)
         if watcher_section:
             confirmation = f"{confirmation}\n\n{watcher_section}"
@@ -213,7 +224,9 @@ def build_post_edit_response(event: HookEvent) -> HookExecutionResult:
     if watcher_section:
         message = f"{message}\n\n{watcher_section}"
     return ok(
-        HookResponse(message=message, additional_context=message, suppress_output=False),
+        HookResponse(
+            message=message, additional_context=message, suppress_output=False
+        ),
         trigger_files=trigger,
         diagnostics_count=diagnostics_count,
         **watch_summary,
@@ -296,7 +309,9 @@ def _query_watch_diagnostics(
         return info
 
     payload = response.payload
-    status = str(payload.get("watcher_status") or payload.get("status") or "fallback_required")
+    status = str(
+        payload.get("watcher_status") or payload.get("status") or "fallback_required"
+    )
     info.update(
         {
             "status": status,
@@ -348,7 +363,9 @@ def _merge_lint_format_diagnostics(
     merged["tools"] = tools
     merged["diagnostics"] = diagnostics
     merged["error_count"] = sum(1 for d in diagnostics if d.get("severity") == "error")
-    merged["warning_count"] = sum(1 for d in diagnostics if d.get("severity") == "warning")
+    merged["warning_count"] = sum(
+        1 for d in diagnostics if d.get("severity") == "warning"
+    )
     return merged
 
 
@@ -380,7 +397,11 @@ def _summarize_watch_infos(
     used = any(bool(item.get("used")) for item in infos)
     first = infos[0] if infos else {}
     fallback_reason = next(
-        (str(item.get("fallback_reason")) for item in infos if item.get("fallback_reason")),
+        (
+            str(item.get("fallback_reason"))
+            for item in infos
+            if item.get("fallback_reason")
+        ),
         None,
     )
     return {
@@ -407,7 +428,11 @@ def _first_int(items: list[dict[str, Any]], key: str) -> int | None:
 
 
 def _sum_int(items: list[dict[str, Any]], key: str) -> int | None:
-    values = [item.get(key) for item in items if isinstance(item.get(key), int)]
+    values: list[int] = []
+    for item in items:
+        value = item.get(key)
+        if isinstance(value, int):
+            values.append(value)
     if not values:
         return None
     return int(sum(values))
@@ -443,7 +468,9 @@ def _format_clean_edit_confirmation(edited_files: list[Path]) -> str:
     )
 
 
-def format_diagnostic_message(file_path: Path, result: dict[str, Any], limit: int = 10) -> str | None:
+def format_diagnostic_message(
+    file_path: Path, result: dict[str, Any], limit: int = 10
+) -> str | None:
     error_count = int(result.get("error_count") or 0)
     warning_count = int(result.get("warning_count") or 0)
     if error_count == 0 and warning_count == 0:

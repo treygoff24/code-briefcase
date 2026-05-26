@@ -7,7 +7,9 @@ from typing import Any, Literal
 
 MatchConfidence = Literal["none", "low", "medium", "high"]
 AttributionConfidence = Literal["none", "low", "medium", "high"]
-CausalConfidence = Literal["proxy-only", "manual-annotation", "ab-test", "matched-baseline"]
+CausalConfidence = Literal[
+    "proxy-only", "manual-annotation", "ab-test", "matched-baseline"
+]
 Verdict = Literal["helpful", "neutral", "harmful", "proxy-only", "insufficient-data"]
 
 ALLOWED_CAUSAL_CONFIDENCE = frozenset(
@@ -208,7 +210,9 @@ class SessionRollup:
             self.user_correction_kind_counts.get(event.kind, 0) + 1
         )
 
-    def record_local_evidence(self, evidence: dict[str, Any], *, limit: int = 100) -> None:
+    def record_local_evidence(
+        self, evidence: dict[str, Any], *, limit: int = 100
+    ) -> None:
         if len(self.local_evidence) >= limit:
             return
         self.local_evidence.append(evidence)
@@ -249,11 +253,13 @@ class SessionRollup:
         verdict, verdict_reasons = self._compute_verdict()
         injected = self.injected_bytes_samples
         hook_durations = self.hook_duration_samples
-        data = {
+        data: dict[str, Any] = {
             "session_id": self.session_id,
             "client": self.client,
             "project_hash": self.project_hash,
-            "window_start": self.window_start.isoformat() if self.window_start else None,
+            "window_start": (
+                self.window_start.isoformat() if self.window_start else None
+            ),
             "window_end": self.window_end.isoformat() if self.window_end else None,
             "match_confidence": self.match_confidence,
             "attribution_confidence": self.attribution_confidence,
@@ -286,9 +292,13 @@ class SessionRollup:
             "injected_bytes_total": self.injected_bytes_total,
             "injected_bytes_p50": statistics.median(injected) if injected else 0,
             "injected_bytes_p95": (
-                sorted(injected)[int(max(0, len(injected) * 0.95 - 1))] if injected else 0
+                sorted(injected)[int(max(0, len(injected) * 0.95 - 1))]
+                if injected
+                else 0
             ),
-            "hook_duration_p50": statistics.median(hook_durations) if hook_durations else 0,
+            "hook_duration_p50": (
+                statistics.median(hook_durations) if hook_durations else 0
+            ),
             "hook_duration_p95": (
                 sorted(hook_durations)[int(max(0, len(hook_durations) * 0.95 - 1))]
                 if hook_durations

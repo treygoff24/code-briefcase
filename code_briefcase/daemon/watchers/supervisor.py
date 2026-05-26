@@ -10,7 +10,11 @@ from typing import Any
 from code_briefcase.diagnostics import _detect_language
 
 from .base import QueryResponse, QueryStatus, file_version
-from .typescript import TypeScriptWatchAdapter, can_start_typescript, sweep_orphan_watchers
+from .typescript import (
+    TypeScriptWatchAdapter,
+    can_start_typescript,
+    sweep_orphan_watchers,
+)
 
 MAX_ADAPTERS_ENV = "CODE_BRIEFCASE_WATCH_DIAGNOSTICS_MAX_ADAPTERS"
 LEGACY_MAX_ADAPTERS_ENV = "TLDR_WATCH_DIAGNOSTICS_MAX_ADAPTERS"
@@ -42,7 +46,10 @@ class WatchSupervisor:
         if action == "start":
             file_arg = command.get("file")
             if not file_arg:
-                return {"status": "error", "message": "Missing required parameter: file"}
+                return {
+                    "status": "error",
+                    "message": "Missing required parameter: file",
+                }
             response = self.query(
                 Path(str(file_arg)),
                 language=command.get("language"),

@@ -4,6 +4,7 @@ import os
 import subprocess
 import sys
 from pathlib import Path
+from typing import BinaryIO
 
 from code_briefcase.hooks.outcome import HookExecutionResult, noop, ok, skipped
 from code_briefcase.hooks.runtime import HookEvent, HookResponse
@@ -18,9 +19,9 @@ def _log_path(project: Path) -> Path:
 
 
 def _spawn(command: list[str], project: Path, log_file: Path | None = None) -> None:
-    stdout = subprocess.DEVNULL
-    stderr = subprocess.DEVNULL
-    handle = None
+    stdout: int | BinaryIO = subprocess.DEVNULL
+    stderr: int | BinaryIO = subprocess.DEVNULL
+    handle: BinaryIO | None = None
     if log_file is not None:
         handle = log_file.open("ab")
         stdout = handle
@@ -41,7 +42,9 @@ def _spawn(command: list[str], project: Path, log_file: Path | None = None) -> N
 
 
 def _background_work_enabled() -> bool:
-    value = os.environ.get("CODE_BRIEFCASE_SESSION_START_NO_BACKGROUND", "").strip().lower()
+    value = (
+        os.environ.get("CODE_BRIEFCASE_SESSION_START_NO_BACKGROUND", "").strip().lower()
+    )
     return value not in {"1", "true", "yes", "on"}
 
 
@@ -84,7 +87,15 @@ def build_session_start_response(
             source_count = count_source_files(project, max_count=max_files + 1)
             if source_count <= max_files:
                 _spawn(
-                    [sys.executable, "-m", "code_briefcase.cli", "warm", str(project), "--lang", "all"],
+                    [
+                        sys.executable,
+                        "-m",
+                        "code_briefcase.cli",
+                        "warm",
+                        str(project),
+                        "--lang",
+                        "all",
+                    ],
                     project,
                     _log_path(project),
                 )
@@ -99,6 +110,11 @@ def build_session_start_response(
     if not actions:
         return noop("no_actions")
     return ok(
-        HookResponse(message="Code Briefcase session hook: " + "; ".join(actions), suppress_output=True),
-        daemon_state="start_requested" if any("daemon" in action for action in actions) else None,
+        HookResponse(
+            message="Code Briefcase session hook: " + "; ".join(actions),
+            suppress_output=True,
+        ),
+        daemon_state=(
+            "start_requested" if any("daemon" in action for action in actions) else None
+        ),
     )

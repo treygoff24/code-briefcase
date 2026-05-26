@@ -67,10 +67,10 @@ cli = [
 dev = [
     "pytest>=6.0",
     "pytest-cov>=2.0",
-    "black>=21.0",
+    "black==25.12.0",
     "flake8>=3.8",
-    "mypy>=0.900",
-    "ruff>=0.15.13",
+    "mypy==1.19.1",
+    "ruff==0.15.13",
     "rich>=13.0",
     "shtab>=1.7.0",
 ]

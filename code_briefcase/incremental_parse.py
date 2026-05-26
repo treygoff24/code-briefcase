@@ -28,24 +28,28 @@ try:
     from tree_sitter import Language, Parser
     import tree_sitter_typescript
     import tree_sitter_javascript
+
     TREE_SITTER_AVAILABLE = True
 except ImportError:
     pass
 
 try:
     import tree_sitter_python
+
     TREE_SITTER_PYTHON_AVAILABLE = True
 except ImportError:
     pass
 
 try:
     import tree_sitter_go
+
     TREE_SITTER_GO_AVAILABLE = True
 except ImportError:
     pass
 
 try:
     import tree_sitter_rust
+
     TREE_SITTER_RUST_AVAILABLE = True
 except ImportError:
     pass
@@ -53,6 +57,7 @@ except ImportError:
 TREE_SITTER_LUA_AVAILABLE = False
 try:
     import tree_sitter_lua
+
     TREE_SITTER_LUA_AVAILABLE = True
 except ImportError:
     pass
@@ -60,6 +65,7 @@ except ImportError:
 TREE_SITTER_LUAU_AVAILABLE = False
 try:
     import tree_sitter_luau
+
     TREE_SITTER_LUAU_AVAILABLE = True
 except ImportError:
     pass
@@ -67,6 +73,7 @@ except ImportError:
 TREE_SITTER_JAVA_AVAILABLE = False
 try:
     import tree_sitter_java
+
     TREE_SITTER_JAVA_AVAILABLE = True
 except ImportError:
     pass
@@ -74,6 +81,7 @@ except ImportError:
 TREE_SITTER_C_AVAILABLE = False
 try:
     import tree_sitter_c
+
     TREE_SITTER_C_AVAILABLE = True
 except ImportError:
     pass
@@ -81,6 +89,7 @@ except ImportError:
 TREE_SITTER_CPP_AVAILABLE = False
 try:
     import tree_sitter_cpp
+
     TREE_SITTER_CPP_AVAILABLE = True
 except ImportError:
     pass
@@ -88,6 +97,7 @@ except ImportError:
 TREE_SITTER_RUBY_AVAILABLE = False
 try:
     import tree_sitter_ruby
+
     TREE_SITTER_RUBY_AVAILABLE = True
 except ImportError:
     pass
@@ -95,6 +105,7 @@ except ImportError:
 TREE_SITTER_PHP_AVAILABLE = False
 try:
     import tree_sitter_php
+
     TREE_SITTER_PHP_AVAILABLE = True
 except ImportError:
     pass
@@ -102,6 +113,7 @@ except ImportError:
 TREE_SITTER_CSHARP_AVAILABLE = False
 try:
     import tree_sitter_c_sharp
+
     TREE_SITTER_CSHARP_AVAILABLE = True
 except ImportError:
     pass
@@ -109,6 +121,7 @@ except ImportError:
 TREE_SITTER_KOTLIN_AVAILABLE = False
 try:
     import tree_sitter_kotlin
+
     TREE_SITTER_KOTLIN_AVAILABLE = True
 except ImportError:
     pass
@@ -116,6 +129,7 @@ except ImportError:
 TREE_SITTER_SCALA_AVAILABLE = False
 try:
     import tree_sitter_scala
+
     TREE_SITTER_SCALA_AVAILABLE = True
 except ImportError:
     pass
@@ -123,6 +137,7 @@ except ImportError:
 TREE_SITTER_ELIXIR_AVAILABLE = False
 try:
     import tree_sitter_elixir
+
     TREE_SITTER_ELIXIR_AVAILABLE = True
 except ImportError:
     pass
@@ -244,7 +259,7 @@ class TreeCache:
     on cache hit since tree-sitter Tree objects aren't directly serializable.
     """
 
-    def __init__(self, cache_dir: Optional[Path] = None):
+    def __init__(self, cache_dir: Optional[Path] = None) -> None:
         """Initialize the tree cache.
 
         Args:
@@ -266,9 +281,7 @@ class TreeCache:
             try:
                 with open(self._index_path) as f:
                     data = json.load(f)
-                self._index = {
-                    k: CacheEntry(**v) for k, v in data.items()
-                }
+                self._index = {k: CacheEntry(**v) for k, v in data.items()}
             except (json.JSONDecodeError, TypeError) as e:
                 logger.warning(f"Failed to load cache index: {e}")
                 self._index = {}
@@ -291,6 +304,8 @@ class TreeCache:
 
     def _get_cache_path(self, file_path: str) -> Path:
         """Get the cache file path for a given source file."""
+        if self._cache_dir is None:
+            raise ValueError("cache directory is not configured")
         # Use hash of path for cache filename
         path_hash = hashlib.md5(file_path.encode()).hexdigest()
         return self._cache_dir / f"{path_hash}.cache"
@@ -509,12 +524,26 @@ class IncrementalParser:
     """
 
     SUPPORTED_LANGUAGES = {
-        "typescript", "tsx", "javascript", "python", "go", "rust",
-        "lua", "luau", "java", "c", "cpp", "ruby", "php", "csharp",
-        "kotlin", "scala", "elixir"
+        "typescript",
+        "tsx",
+        "javascript",
+        "python",
+        "go",
+        "rust",
+        "lua",
+        "luau",
+        "java",
+        "c",
+        "cpp",
+        "ruby",
+        "php",
+        "csharp",
+        "kotlin",
+        "scala",
+        "elixir",
     }
 
-    def __init__(self, cache_dir: Optional[Path] = None):
+    def __init__(self, cache_dir: Optional[Path] = None) -> None:
         """Initialize the incremental parser.
 
         Args:

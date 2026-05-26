@@ -13,7 +13,7 @@ import pytest
 class TestLuauPDGBasic:
     """Tests for basic Luau PDG extraction."""
 
-    def test_luau_pdg_simple_function(self):
+    def test_luau_pdg_simple_function(self) -> None:
         """Should extract PDG for simple typed function."""
         from code_briefcase.pdg_extractor import extract_luau_pdg
 
@@ -32,7 +32,7 @@ end
         data_vars = {edge.label for edge in data_edges}
         assert "x" in data_vars or "y" in data_vars
 
-    def test_luau_pdg_with_continue(self):
+    def test_luau_pdg_with_continue(self) -> None:
         """Should handle continue statement (Luau-specific) in PDG."""
         from code_briefcase.pdg_extractor import extract_luau_pdg
 
@@ -59,7 +59,7 @@ end
 class TestLuauPDGCompoundAssignment:
     """Tests for compound assignment operators (Luau-specific)."""
 
-    def test_luau_pdg_compound_assignment_chain(self):
+    def test_luau_pdg_compound_assignment_chain(self) -> None:
         """Should track data flow through compound assignments."""
         from code_briefcase.pdg_extractor import extract_luau_pdg
 
@@ -84,7 +84,7 @@ end
 class TestLuauPDGNotFound:
     """Tests for error handling."""
 
-    def test_luau_pdg_function_not_found(self):
+    def test_luau_pdg_function_not_found(self) -> None:
         """Should return None for non-existent function."""
         from code_briefcase.pdg_extractor import extract_luau_pdg
 

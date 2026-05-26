@@ -8,6 +8,8 @@ Run with:
     pytest tests/test_typescript_semantic.py -v
 """
 
+from typing import Any
+
 import pytest
 import json
 from pathlib import Path
@@ -35,7 +37,7 @@ export function processData(input: string): string {
 
 
 @pytest.fixture
-def temp_ts_project(tmp_path):
+def temp_ts_project(tmp_path: Any) -> Any:
     """Create a temporary TypeScript project."""
     filepath = tmp_path / "functions.ts"
     filepath.write_text(TYPESCRIPT_WITH_BRANCHES)
@@ -45,7 +47,7 @@ def temp_ts_project(tmp_path):
 class TestSemanticCFGSummary:
     """Test that CFG summaries are populated for TypeScript."""
 
-    def test_cfg_summary_populated(self, temp_ts_project):
+    def test_cfg_summary_populated(self, temp_ts_project: Any) -> None:
         """_get_cfg_summary should return complexity and blocks for TypeScript."""
         from code_briefcase.semantic import _get_cfg_summary
 
@@ -62,9 +64,11 @@ class TestSemanticCFGSummary:
         complexity_part = next((p for p in parts if "complexity:" in p), None)
         assert complexity_part is not None, f"No complexity in summary: {summary}"
         complexity = int(complexity_part.split(":")[1].strip())
-        assert complexity >= 3, f"classify() should have complexity >= 3, got {complexity}"
+        assert (
+            complexity >= 3
+        ), f"classify() should have complexity >= 3, got {complexity}"
 
-    def test_cfg_summary_simple_function(self, temp_ts_project):
+    def test_cfg_summary_simple_function(self, temp_ts_project: Any) -> None:
         """CFG summary for simple function should have low complexity."""
         from code_briefcase.semantic import _get_cfg_summary
 
@@ -74,20 +78,22 @@ class TestSemanticCFGSummary:
         assert summary != "", "CFG summary should not be empty"
         assert "complexity:" in summary
 
-    def test_cfg_summary_javascript(self, temp_ts_project):
+    def test_cfg_summary_javascript(self, temp_ts_project: Any) -> None:
         """CFG summary should also work for JavaScript."""
         from code_briefcase.semantic import _get_cfg_summary
 
         # Create a JS file
         js_file = Path(temp_ts_project) / "functions.js"
-        js_file.write_text("""
+        js_file.write_text(
+            """
 function greet(name) {
     if (name) {
         return "Hello, " + name;
     }
     return "Hello, stranger";
 }
-""")
+"""
+        )
         summary = _get_cfg_summary(js_file, "greet", "javascript")
         assert summary != "", "CFG summary should work for JavaScript"
         assert "complexity:" in summary
@@ -96,7 +102,7 @@ function greet(name) {
 class TestSemanticDFGSummary:
     """Test that DFG summaries are populated for TypeScript."""
 
-    def test_dfg_summary_populated(self, temp_ts_project):
+    def test_dfg_summary_populated(self, temp_ts_project: Any) -> None:
         """_get_dfg_summary should return vars and def-use chains for TypeScript."""
         from code_briefcase.semantic import _get_dfg_summary
 
@@ -105,7 +111,9 @@ class TestSemanticDFGSummary:
 
         assert summary != "", f"DFG summary should not be empty, got: '{summary}'"
         assert "vars:" in summary, f"Should include vars count, got: {summary}"
-        assert "def-use chains:" in summary, f"Should include def-use chains, got: {summary}"
+        assert (
+            "def-use chains:" in summary
+        ), f"Should include def-use chains, got: {summary}"
 
         # processData has variables: input, trimmed, upper, result
         parts = summary.split(",")
@@ -114,18 +122,20 @@ class TestSemanticDFGSummary:
         var_count = int(vars_part.split(":")[1].strip())
         assert var_count >= 3, f"processData() should have >= 3 vars, got {var_count}"
 
-    def test_dfg_summary_javascript(self, temp_ts_project):
+    def test_dfg_summary_javascript(self, temp_ts_project: Any) -> None:
         """DFG summary should also work for JavaScript."""
         from code_briefcase.semantic import _get_dfg_summary
 
         js_file = Path(temp_ts_project) / "functions.js"
-        js_file.write_text("""
+        js_file.write_text(
+            """
 function transform(data) {
     const parsed = JSON.parse(data);
     const filtered = parsed.filter(x => x.active);
     return filtered;
 }
-""")
+"""
+        )
         summary = _get_dfg_summary(js_file, "transform", "javascript")
         assert summary != "", "DFG summary should work for JavaScript"
         assert "vars:" in summary
@@ -134,7 +144,7 @@ function transform(data) {
 class TestSemanticIndexIntegration:
     """Test that semantic index includes CFG/DFG for TypeScript functions."""
 
-    def test_semantic_index_has_cfg_dfg(self, temp_ts_project):
+    def test_semantic_index_has_cfg_dfg(self, temp_ts_project: Any) -> None:
         """Semantic index metadata should include cfg_summary and dfg_summary."""
         from code_briefcase.semantic import build_semantic_index
 
@@ -142,7 +152,13 @@ class TestSemanticIndexIntegration:
         build_semantic_index(temp_ts_project, lang="typescript", show_progress=False)
 
         # Check the metadata
-        metadata_path = Path(temp_ts_project) / ".code-briefcase" / "cache" / "semantic" / "metadata.json"
+        metadata_path = (
+            Path(temp_ts_project)
+            / ".code-briefcase"
+            / "cache"
+            / "semantic"
+            / "metadata.json"
+        )
         assert metadata_path.exists(), "Semantic index should create metadata.json"
 
         with open(metadata_path) as f:
@@ -176,34 +192,40 @@ class TestSemanticIndexIntegration:
 class TestSemanticLayerParity:
     """Test that TypeScript has parity with Python for semantic features."""
 
-    def test_python_cfg_summary_works(self, tmp_path):
+    def test_python_cfg_summary_works(self, tmp_path: Any) -> None:
         """Sanity check: Python CFG summary should work."""
         from code_briefcase.semantic import _get_cfg_summary
 
         py_file = tmp_path / "test.py"
-        py_file.write_text("""
+        py_file.write_text(
+            """
 def example(x):
     if x > 10:
         return "big"
     return "small"
-""")
+"""
+        )
         summary = _get_cfg_summary(py_file, "example", "python")
 
         assert summary != "", "Python CFG summary should work"
         assert "complexity:" in summary
 
-    def test_typescript_matches_python_format(self, temp_ts_project, tmp_path):
+    def test_typescript_matches_python_format(
+        self, temp_ts_project: Any, tmp_path: Any
+    ) -> None:
         """TypeScript CFG/DFG summaries should use same format as Python."""
         from code_briefcase.semantic import _get_cfg_summary
 
         # Get Python format
         py_file = tmp_path / "test.py"
-        py_file.write_text("""
+        py_file.write_text(
+            """
 def example(x):
     if x > 10:
         return "big"
     return "small"
-""")
+"""
+        )
         py_cfg = _get_cfg_summary(py_file, "example", "python")
 
         # Get TypeScript format

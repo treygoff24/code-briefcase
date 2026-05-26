@@ -210,7 +210,7 @@ class StackedDB:
     - Compaction for performance
     """
 
-    def __init__(self, base: Optional[ImmutableStack] = None):
+    def __init__(self, base: Optional[ImmutableStack] = None) -> None:
         """Initialize with optional base stack."""
         if base is None:
             base = ImmutableStack(id=str(uuid4()))
@@ -308,7 +308,7 @@ class StackedDB:
 
     def _find_stack_by_id(self, stack_id: str) -> Optional[ImmutableStack]:
         """Find a stack in the chain by ID."""
-        current = self.current
+        current: Optional[ImmutableStack] = self.current
         while current is not None:
             if current.id == stack_id:
                 return current
@@ -317,8 +317,8 @@ class StackedDB:
 
     def _find_stack_by_time(self, target_time: datetime) -> Optional[ImmutableStack]:
         """Find the most recent stack created at or before target_time."""
-        current = self.current
-        result = None
+        current: Optional[ImmutableStack] = self.current
+        result: Optional[ImmutableStack] = None
 
         while current is not None:
             if current.created_at <= target_time:

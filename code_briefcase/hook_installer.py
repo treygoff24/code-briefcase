@@ -33,7 +33,9 @@ DEFAULT_DOCTOR_CLIENTS = [
     "opencode",
 ]
 SHELL_HOOK_CLIENTS = {"claude", "codex", "droid", "factory"}
-TELEMETRY_ENV_PREFIX = "CODE_BRIEFCASE_TELEMETRY=1 CODE_BRIEFCASE_TELEMETRY_REDACT_PATHS=1"
+TELEMETRY_ENV_PREFIX = (
+    "CODE_BRIEFCASE_TELEMETRY=1 CODE_BRIEFCASE_TELEMETRY_REDACT_PATHS=1"
+)
 LEGACY_TELEMETRY_ENV_RENAMES = {
     "TLDR_TELEMETRY": "CODE_BRIEFCASE_TELEMETRY",
     "TLDR_TELEMETRY_MODE": "CODE_BRIEFCASE_TELEMETRY_MODE",
@@ -84,7 +86,8 @@ def load_json(path: str | Path) -> dict[str, Any]:
     config_path = Path(path).expanduser()
     if not config_path.exists():
         return {}
-    return json.loads(config_path.read_text())
+    payload = json.loads(config_path.read_text())
+    return payload if isinstance(payload, dict) else {}
 
 
 def _existing_mode(path: Path) -> int | None:
@@ -175,7 +178,9 @@ def _validate_tldr_hooks_command(command: TldrCommand) -> None:
             timeout=5,
         )
     except (OSError, subprocess.TimeoutExpired) as exc:
-        raise RuntimeError(f"Could not validate Code Briefcase hooks command: {_quote_command(*command)}") from exc
+        raise RuntimeError(
+            f"Could not validate Code Briefcase hooks command: {_quote_command(*command)}"
+        ) from exc
 
     if result.returncode != 0:
         detail = (result.stderr or result.stdout).strip().splitlines()
@@ -186,7 +191,9 @@ def _validate_tldr_hooks_command(command: TldrCommand) -> None:
 
 
 def _command(tldr_command: TldrCommand, event_name: str, client: str) -> str:
-    command = _quote_command(*tldr_command, "hooks", "run", event_name, "--client", client)
+    command = _quote_command(
+        *tldr_command, "hooks", "run", event_name, "--client", client
+    )
     if client in SHELL_HOOK_CLIENTS:
         return f"{TELEMETRY_ENV_PREFIX} {command}"
     return command
@@ -198,7 +205,9 @@ def _runtime_client(client: str) -> str:
     return client
 
 
-def _hook(command: str, timeout: int = 10, status_message: str | None = None) -> dict[str, Any]:
+def _hook(
+    command: str, timeout: int = 10, status_message: str | None = None
+) -> dict[str, Any]:
     hook = {"type": "command", "command": command, "timeout": timeout}
     if status_message:
         hook["statusMessage"] = status_message
@@ -224,18 +233,38 @@ def _desired_groups(
 
     if is_codex:
         groups: dict[str, list[dict[str, Any]]] = {
-            "SessionStart": [group("startup|resume|clear", "session-start", "Code Briefcase starting context")],
+            "SessionStart": [
+                group(
+                    "startup|resume|clear",
+                    "session-start",
+                    "Code Briefcase starting context",
+                )
+            ],
             "PreToolUse": [
-                group("apply_patch|Edit|Write", "pre-edit", "Code Briefcase building edit context"),
+                group(
+                    "apply_patch|Edit|Write",
+                    "pre-edit",
+                    "Code Briefcase building edit context",
+                ),
             ],
             "PostToolUse": [
-                group("apply_patch|Edit|Write", "post-edit", "Code Briefcase checking edited file")
+                group(
+                    "apply_patch|Edit|Write",
+                    "post-edit",
+                    "Code Briefcase checking edited file",
+                )
             ],
         }
         if enable_prompt_guard:
-            groups["UserPromptSubmit"] = [group(".*", "user-prompt-submit", "Code Briefcase prompt guard")]
+            groups["UserPromptSubmit"] = [
+                group(".*", "user-prompt-submit", "Code Briefcase prompt guard")
+            ]
         groups.setdefault("PreToolUse", []).append(
-            group("Bash|Execute|Shell|shell|command|exec_command", "pre-tool", "Code Briefcase shell context")
+            group(
+                "Bash|Execute|Shell|shell|command|exec_command",
+                "pre-tool",
+                "Code Briefcase shell context",
+            )
         )
         if enable_tool_guard:
             groups["PermissionRequest"] = [
@@ -256,16 +285,12 @@ def _desired_groups(
                 group("Read", "pre-read", ""),
                 group("Edit|Create|ApplyPatch", "pre-edit", ""),
             ],
-            "PostToolUse": [
-                group("Edit|Create|ApplyPatch", "post-edit", "")
-            ],
+            "PostToolUse": [group("Edit|Create|ApplyPatch", "post-edit", "")],
         }
         if enable_prompt_guard:
             groups["UserPromptSubmit"] = [group(".*", "user-prompt-submit", "")]
         if enable_tool_guard:
-            groups.setdefault("PreToolUse", []).append(
-                group("Execute", "pre-tool", "")
-            )
+            groups.setdefault("PreToolUse", []).append(group("Execute", "pre-tool", ""))
         if enable_compact_context:
             groups["PreCompact"] = [group("manual|auto", "pre-compact", "")]
         return groups
@@ -297,9 +322,21 @@ def _is_tldr_owned(command: str) -> bool:
 def _managed_events(client: str) -> set[str]:
     runtime_client = _runtime_client(client)
     if runtime_client == "codex":
-        return {"SessionStart", "PreToolUse", "PostToolUse", "UserPromptSubmit", "PermissionRequest"}
+        return {
+            "SessionStart",
+            "PreToolUse",
+            "PostToolUse",
+            "UserPromptSubmit",
+            "PermissionRequest",
+        }
     if runtime_client in ("droid", "factory"):
-        return {"SessionStart", "PreToolUse", "PostToolUse", "UserPromptSubmit", "PreCompact"}
+        return {
+            "SessionStart",
+            "PreToolUse",
+            "PostToolUse",
+            "UserPromptSubmit",
+            "PreCompact",
+        }
     if runtime_client == "claude":
         return {"SessionStart", "PreToolUse", "PostToolUse"}
     return set()
@@ -334,7 +371,8 @@ def merge_hook_group(
             group = dict(group)
             old_hooks = _group_hooks(group)
             kept_hooks = [
-                hook for hook in old_hooks
+                hook
+                for hook in old_hooks
                 if not _is_tldr_owned(str(hook.get("command", "")))
             ]
             if len(kept_hooks) == len(old_hooks):
@@ -342,7 +380,11 @@ def merge_hook_group(
                 continue
 
             matcher = group.get("matcher")
-            label = "legacy Code Briefcase hook" if _contains_legacy_tldr_hook(old_hooks) else "stale Code Briefcase hook"
+            label = (
+                "legacy Code Briefcase hook"
+                if _contains_legacy_tldr_hook(old_hooks)
+                else "stale Code Briefcase hook"
+            )
             if kept_hooks:
                 group["hooks"] = kept_hooks
                 groups.append(group)
@@ -358,14 +400,19 @@ def merge_hook_group(
 
                 old_hooks = _group_hooks(group)
                 kept_hooks = [
-                    hook for hook in old_hooks
+                    hook
+                    for hook in old_hooks
                     if not _is_tldr_owned(str(hook.get("command", "")))
                 ]
                 if len(kept_hooks) != len(old_hooks):
                     if _contains_legacy_tldr_hook(old_hooks):
-                        actions.append(f"replace legacy Code Briefcase hook for {event} {matcher}")
+                        actions.append(
+                            f"replace legacy Code Briefcase hook for {event} {matcher}"
+                        )
                     else:
-                        actions.append(f"replace Code Briefcase hook for {event} {matcher}")
+                        actions.append(
+                            f"replace Code Briefcase hook for {event} {matcher}"
+                        )
                 group["hooks"] = kept_hooks + desired_group["hooks"]
                 break
             else:
@@ -380,7 +427,9 @@ def merge_hook_group(
     return merged, actions
 
 
-def _migrate_legacy_tldr_env(config: dict[str, Any]) -> tuple[dict[str, Any], list[str]]:
+def _migrate_legacy_tldr_env(
+    config: dict[str, Any],
+) -> tuple[dict[str, Any], list[str]]:
     env = config.get("env")
     if not isinstance(env, dict):
         return config, []
@@ -408,7 +457,9 @@ def _migrate_legacy_tldr_env(config: dict[str, Any]) -> tuple[dict[str, Any], li
 
 
 def _resolved_config_path(client: str, config_path: str | None) -> Path:
-    path = Path(config_path).expanduser() if config_path else default_config_path(client)
+    path = (
+        Path(config_path).expanduser() if config_path else default_config_path(client)
+    )
     return path.resolve() if path.exists() else path
 
 
@@ -453,6 +504,7 @@ def install_hooks(
     tldr_command = _resolve_tldr_command(tldr_path)
     if client == "opencode":
         from code_briefcase.hooks.opencode_adapter import generate_opencode_adapter
+
         new_content = generate_opencode_adapter(
             expand_shebang_command(tldr_command),
             enable_tool_guard=enable_tool_guard,
@@ -470,7 +522,9 @@ def install_hooks(
         if changed:
             if existing_content:
                 if "code-briefcase" not in existing_content.lower():
-                    actions.append("backup and replace existing plugin file containing non-Code Briefcase content")
+                    actions.append(
+                        "backup and replace existing plugin file containing non-Code Briefcase content"
+                    )
                 else:
                     actions.append("replace existing Code Briefcase-owned plugin file")
             else:
@@ -503,7 +557,9 @@ def install_hooks(
         enable_tool_guard=enable_tool_guard,
         enable_compact_context=enable_compact_context,
     )
-    merged, actions = merge_hook_group(existing, desired, managed_events=_managed_events(client))
+    merged, actions = merge_hook_group(
+        existing, desired, managed_events=_managed_events(client)
+    )
     merged, env_actions = _migrate_legacy_tldr_env(merged)
     actions.extend(env_actions)
     changed = merged != existing
@@ -513,7 +569,11 @@ def install_hooks(
 
     if changed and not dry_run:
         # Safety: reject managed JSON markers
-        if existing.get("enterprise_managed") or existing.get("managed") or "managedPolicy" in existing:
+        if (
+            existing.get("enterprise_managed")
+            or existing.get("managed")
+            or "managedPolicy" in existing
+        ):
             raise ValueError("Refusing to edit managed/enterprise policy config")
 
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -560,7 +620,10 @@ def _hook_commands(config: dict[str, Any]) -> list[str]:
 def _uses_stale_tldr_command(command: str) -> bool:
     if "llm-tldr" in command or "TLDR_TELEMETRY" in command:
         return True
-    if re.search(r"(^|\s)tldr\s+hooks\s+run\s+", command) and "code-briefcase" not in command:
+    if (
+        re.search(r"(^|\s)tldr\s+hooks\s+run\s+", command)
+        and "code-briefcase" not in command
+    ):
         return True
     return False
 
@@ -577,14 +640,16 @@ def doctor_report(
     try:
         tldr_command = _quote_command(*_resolve_tldr_command())
     except Exception:
-        tldr_command = shutil.which("code-briefcase")
+        tldr_command = shutil.which("code-briefcase") or "code-briefcase"
 
     report: dict[str, Any] = {
         "version": __version__,
         "code-briefcase": tldr_command,
         "code_briefcase_mcp": shutil.which("code-briefcase-mcp"),
         "clients": {},
-        "semantic_index_present": (Path(project) / ".code-briefcase" / "cache" / "semantic" / "index.faiss").exists(),
+        "semantic_index_present": (
+            Path(project) / ".code-briefcase" / "cache" / "semantic" / "index.faiss"
+        ).exists(),
     }
 
     for client in clients:
@@ -606,7 +671,10 @@ def doctor_report(
             try:
                 if exists:
                     content = path.read_text()
-                    hooks_present = "CODE_BRIEFCASE_COMMAND" in content or "code-briefcase" in content.lower()
+                    hooks_present = (
+                        "CODE_BRIEFCASE_COMMAND" in content
+                        or "code-briefcase" in content.lower()
+                    )
                 else:
                     hooks_present = False
                 error = None

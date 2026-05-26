@@ -7,11 +7,15 @@ import uuid
 from typing import Any
 
 from code_briefcase.hooks.outcome import HookExecutionResult, error, injected_bytes
-from code_briefcase.hooks.runtime import JSON_CONTROL_CLIENTS, parse_hook_event, render_hook_response
+from code_briefcase.hooks.runtime import (
+    JSON_CONTROL_CLIENTS,
+    parse_hook_event,
+    render_hook_response,
+)
 from code_briefcase.telemetry import record_hook_execution
 
 
-def _dispatch(event_name: str, event) -> HookExecutionResult:
+def _dispatch(event_name: str, event: Any) -> HookExecutionResult:
     if event_name == "session-start":
         from code_briefcase.hooks.session import build_session_start_response
 
@@ -73,7 +77,9 @@ def _dispatch(event_name: str, event) -> HookExecutionResult:
     return noop("unknown_event")
 
 
-def run_hook(event_name: str, payload: dict[str, Any] | None, client: str = "generic") -> dict[str, Any]:
+def run_hook(
+    event_name: str, payload: dict[str, Any] | None, client: str = "generic"
+) -> dict[str, Any]:
     event = parse_hook_event(payload, client=client)
     started = time.perf_counter()
     execution: HookExecutionResult

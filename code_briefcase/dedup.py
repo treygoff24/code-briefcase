@@ -41,11 +41,7 @@ class ContentHashedIndex:
     _extractions: int = field(default=0)
     _cache_hits: int = field(default=0)
 
-    def get_or_create_edges(
-        self,
-        file_path: str,
-        lang: str = "python"
-    ) -> List[Edge]:
+    def get_or_create_edges(self, file_path: str, lang: str = "python") -> List[Edge]:
         """Get edges for file, creating if needed. Uses content-hash dedup.
 
         Args:
@@ -74,7 +70,9 @@ class ContentHashedIndex:
 
         # Extract edges (new content or changed content)
         self._extractions += 1
-        edges = extract_edges_from_file(file_path, lang=lang, project_root=self.project_root)
+        edges = extract_edges_from_file(
+            file_path, lang=lang, project_root=self.project_root
+        )
 
         # Store by content hash
         edge_tuples = [e.to_tuple() for e in edges]
@@ -138,7 +136,7 @@ class ContentHashedIndex:
             "stats": {
                 "extractions": self._extractions,
                 "cache_hits": self._cache_hits,
-            }
+            },
         }
 
         index_file.write_text(json.dumps(data, indent=2))

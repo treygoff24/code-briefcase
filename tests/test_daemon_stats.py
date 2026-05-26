@@ -16,7 +16,7 @@ import pytest
 class TestTokenCounting:
     """Tests for accurate token counting with tiktoken."""
 
-    def test_count_tokens_basic(self):
+    def test_count_tokens_basic(self) -> None:
         """Should count tokens accurately for simple text."""
         from code_briefcase.stats import count_tokens
 
@@ -24,7 +24,7 @@ class TestTokenCounting:
         result = count_tokens("Hello world")
         assert 2 <= result <= 4
 
-    def test_count_tokens_code(self):
+    def test_count_tokens_code(self) -> None:
         """Should count tokens for code content."""
         from code_briefcase.stats import count_tokens
 
@@ -36,13 +36,13 @@ class TestTokenCounting:
         # Code typically has more tokens per character
         assert result > 5
 
-    def test_count_tokens_empty(self):
+    def test_count_tokens_empty(self) -> None:
         """Should return 0 for empty string."""
         from code_briefcase.stats import count_tokens
 
         assert count_tokens("") == 0
 
-    def test_count_tokens_large_file(self):
+    def test_count_tokens_large_file(self) -> None:
         """Should handle large files efficiently."""
         from code_briefcase.stats import count_tokens
 
@@ -55,7 +55,7 @@ class TestTokenCounting:
 class TestSessionStats:
     """Tests for per-session stats tracking."""
 
-    def test_session_stats_initialization(self):
+    def test_session_stats_initialization(self) -> None:
         """New session should start with zero stats."""
         from code_briefcase.stats import SessionStats
 
@@ -65,7 +65,7 @@ class TestSessionStats:
         assert stats.tldr_tokens == 0
         assert stats.requests == 0
 
-    def test_session_stats_record_request(self):
+    def test_session_stats_record_request(self) -> None:
         """Should accumulate stats for each request."""
         from code_briefcase.stats import SessionStats
 
@@ -82,7 +82,7 @@ class TestSessionStats:
         assert stats.tldr_tokens == 225
         assert stats.requests == 2
 
-    def test_session_stats_savings(self):
+    def test_session_stats_savings(self) -> None:
         """Should calculate savings percentage correctly."""
         from code_briefcase.stats import SessionStats
 
@@ -92,7 +92,7 @@ class TestSessionStats:
         assert stats.savings_tokens == 900
         assert stats.savings_percent == 90.0
 
-    def test_session_stats_to_dict(self):
+    def test_session_stats_to_dict(self) -> None:
         """Should serialize to dict for JSON."""
         from code_briefcase.stats import SessionStats
 
@@ -110,7 +110,7 @@ class TestSessionStats:
 class TestStatsStore:
     """Tests for JSONL persistence."""
 
-    def test_stats_store_append(self):
+    def test_stats_store_append(self) -> None:
         """Should append stats to JSONL file."""
         from code_briefcase.stats import SessionStats, StatsStore
 
@@ -130,7 +130,7 @@ class TestStatsStore:
             record = json.loads(lines[0])
             assert record["session_id"] == "test-123"
 
-    def test_stats_store_multiple_sessions(self):
+    def test_stats_store_multiple_sessions(self) -> None:
         """Should handle multiple sessions in same file."""
         from code_briefcase.stats import SessionStats, StatsStore
 
@@ -150,7 +150,7 @@ class TestStatsStore:
             lines = store.path.read_text().strip().split("\n")
             assert len(lines) == 2
 
-    def test_stats_store_get_session_history(self):
+    def test_stats_store_get_session_history(self) -> None:
         """Should retrieve history for specific session."""
         from code_briefcase.stats import SessionStats, StatsStore
 
@@ -160,7 +160,9 @@ class TestStatsStore:
             # Multiple entries for same session
             for i in range(3):
                 stats = SessionStats(session_id="test-session")
-                stats.record_request(raw_tokens=1000 * (i + 1), tldr_tokens=100 * (i + 1))
+                stats.record_request(
+                    raw_tokens=1000 * (i + 1), tldr_tokens=100 * (i + 1)
+                )
                 store.append(stats)
 
             # Different session
@@ -171,7 +173,7 @@ class TestStatsStore:
             history = store.get_session_history("test-session")
             assert len(history) == 3
 
-    def test_stats_store_get_totals(self):
+    def test_stats_store_get_totals(self) -> None:
         """Should calculate all-time totals."""
         from code_briefcase.stats import SessionStats, StatsStore
 
@@ -195,19 +197,19 @@ class TestStatsStore:
 class TestDaemonStatsIntegration:
     """Tests for daemon stats integration."""
 
-    def test_daemon_tracks_session_stats(self):
+    def test_daemon_tracks_session_stats(self) -> None:
         """Daemon should track stats per session ID."""
 
         # This tests that the daemon can accept and track session IDs
         # Implementation will add session tracking to daemon
         pass  # TODO: Implement after daemon changes
 
-    def test_daemon_status_includes_session_stats(self):
+    def test_daemon_status_includes_session_stats(self) -> None:
         """Status command should include session-specific stats."""
         # Tests that status returns per-session token counts
         pass  # TODO: Implement after daemon changes
 
-    def test_daemon_writes_stats_on_shutdown(self):
+    def test_daemon_writes_stats_on_shutdown(self) -> None:
         """Daemon should persist stats to JSONL on graceful shutdown."""
         pass  # TODO: Implement after daemon changes
 

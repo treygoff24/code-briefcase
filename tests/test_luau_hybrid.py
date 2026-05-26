@@ -24,13 +24,15 @@ from code_briefcase.hybrid_extractor import HybridExtractor
 class TestLuauFileExtensionRecognition:
     """Test that .luau files are recognized and parsed."""
 
-    def test_luau_extension_detected_as_luau_language(self, tmp_path: Path):
+    def test_luau_extension_detected_as_luau_language(self, tmp_path: Path) -> None:
         """File with .luau extension should be detected as 'luau' language."""
         luau_file = tmp_path / "test.luau"
-        luau_file.write_text("""
+        luau_file.write_text(
+            """
 local x = 10
 print(x)
-""")
+"""
+        )
 
         extractor = HybridExtractor()
         result = extractor.extract(luau_file)
@@ -38,14 +40,16 @@ print(x)
         # Should detect language as "luau", not "lua" or unknown
         assert result.language == "luau"
 
-    def test_luau_extension_not_treated_as_lua(self, tmp_path: Path):
+    def test_luau_extension_not_treated_as_lua(self, tmp_path: Path) -> None:
         """Luau files should NOT be processed as regular Lua."""
         luau_file = tmp_path / "module.luau"
-        luau_file.write_text("""
+        luau_file.write_text(
+            """
 function greet(name: string): string
     return "Hello, " .. name
 end
-""")
+"""
+        )
 
         extractor = HybridExtractor()
         result = extractor.extract(luau_file)
@@ -58,17 +62,19 @@ end
 class TestLuauFunctionExtraction:
     """Test extraction of Luau functions with type annotations."""
 
-    def test_function_with_typed_parameters(self, tmp_path: Path):
+    def test_function_with_typed_parameters(self, tmp_path: Path) -> None:
         """Functions with Luau type annotations should be extracted."""
         luau_file = tmp_path / "typed.luau"
-        luau_file.write_text("""
+        luau_file.write_text(
+            """
 function greet(name: string): string
     return "Hello, " .. name
 end
 
 local function helper(): ()
 end
-""")
+"""
+        )
 
         extractor = HybridExtractor()
         result = extractor.extract(luau_file)
@@ -85,15 +91,17 @@ end
         helper = next((f for f in result.functions if f.name == "helper"), None)
         assert helper is not None
 
-    def test_function_with_optional_type(self, tmp_path: Path):
+    def test_function_with_optional_type(self, tmp_path: Path) -> None:
         """Functions with optional type (?) should be extracted."""
         luau_file = tmp_path / "optional.luau"
-        luau_file.write_text("""
+        luau_file.write_text(
+            """
 function process(input: string, count: number?): {string}
     -- body
     return {}
 end
-""")
+"""
+        )
 
         extractor = HybridExtractor()
         result = extractor.extract(luau_file)
@@ -108,14 +116,16 @@ end
 class TestLuauTypeDefinitions:
     """Test extraction of Luau type definitions."""
 
-    def test_type_definitions_extracted(self, tmp_path: Path):
+    def test_type_definitions_extracted(self, tmp_path: Path) -> None:
         """Type definitions should be recognized and extracted."""
         luau_file = tmp_path / "types.luau"
-        luau_file.write_text("""
+        luau_file.write_text(
+            """
 type Point = {x: number, y: number}
 type Array<T> = {T}
 type Callback = (string) -> ()
-""")
+"""
+        )
 
         extractor = HybridExtractor()
         result = extractor.extract(luau_file)
@@ -132,10 +142,11 @@ type Callback = (string) -> ()
 class TestLuauMethodDetection:
     """Test detection of methods (. vs : syntax)."""
 
-    def test_static_vs_instance_method(self, tmp_path: Path):
+    def test_static_vs_instance_method(self, tmp_path: Path) -> None:
         """Should distinguish between . (static) and : (instance) methods."""
         luau_file = tmp_path / "methods.luau"
-        luau_file.write_text("""
+        luau_file.write_text(
+            """
 local Module = {}
 
 function Module.staticMethod(): ()
@@ -143,7 +154,8 @@ end
 
 function Module:instanceMethod(): ()
 end
-""")
+"""
+        )
 
         extractor = HybridExtractor()
         result = extractor.extract(luau_file)
@@ -157,10 +169,11 @@ end
         assert any("staticMethod" in name for name in func_names)
         assert any("instanceMethod" in name for name in func_names)
 
-    def test_class_like_pattern(self, tmp_path: Path):
+    def test_class_like_pattern(self, tmp_path: Path) -> None:
         """Should handle Luau class-like patterns."""
         luau_file = tmp_path / "class.luau"
-        luau_file.write_text("""
+        luau_file.write_text(
+            """
 local Player = {}
 Player.__index = Player
 
@@ -173,7 +186,8 @@ end
 function Player:greet(): string
     return "Hello, " .. self.name
 end
-""")
+"""
+        )
 
         extractor = HybridExtractor()
         result = extractor.extract(luau_file)
@@ -187,10 +201,11 @@ end
 class TestLuauCallGraph:
     """Test call graph extraction for Luau."""
 
-    def test_call_graph_extraction(self, tmp_path: Path):
+    def test_call_graph_extraction(self, tmp_path: Path) -> None:
         """Should extract call relationships between functions."""
         luau_file = tmp_path / "calls.luau"
-        luau_file.write_text("""
+        luau_file.write_text(
+            """
 local function helper()
     return 42
 end
@@ -199,7 +214,8 @@ local function main()
     helper()
     helper()
 end
-""")
+"""
+        )
 
         extractor = HybridExtractor()
         result = extractor.extract(luau_file)
@@ -215,13 +231,15 @@ end
 class TestLuauImportExtraction:
     """Test extraction of require statements."""
 
-    def test_require_extraction(self, tmp_path: Path):
+    def test_require_extraction(self, tmp_path: Path) -> None:
         """Should extract require statements as imports."""
         luau_file = tmp_path / "imports.luau"
-        luau_file.write_text("""
+        luau_file.write_text(
+            """
 local Utils = require(script.Utils)
 local Config = require(game.ReplicatedStorage.Config)
-""")
+"""
+        )
 
         extractor = HybridExtractor()
         result = extractor.extract(luau_file)
@@ -234,12 +252,14 @@ local Config = require(game.ReplicatedStorage.Config)
         assert any("Utils" in m for m in modules)
         assert any("Config" in m for m in modules)
 
-    def test_string_require_extraction(self, tmp_path: Path):
+    def test_string_require_extraction(self, tmp_path: Path) -> None:
         """Should extract require with string literal."""
         luau_file = tmp_path / "string_require.luau"
-        luau_file.write_text("""
+        luau_file.write_text(
+            """
 local json = require("@pkg/json")
-""")
+"""
+        )
 
         extractor = HybridExtractor()
         result = extractor.extract(luau_file)
@@ -251,14 +271,16 @@ local json = require("@pkg/json")
 class TestLuauGenericFunctions:
     """Test extraction of generic functions."""
 
-    def test_generic_function_extraction(self, tmp_path: Path):
+    def test_generic_function_extraction(self, tmp_path: Path) -> None:
         """Should extract generic functions with type parameters."""
         luau_file = tmp_path / "generics.luau"
-        luau_file.write_text("""
+        luau_file.write_text(
+            """
 function identity<T>(value: T): T
     return value
 end
-""")
+"""
+        )
 
         extractor = HybridExtractor()
         result = extractor.extract(luau_file)
@@ -274,10 +296,11 @@ end
 class TestLuauExportPatterns:
     """Test detection of export patterns."""
 
-    def test_export_detection(self, tmp_path: Path):
+    def test_export_detection(self, tmp_path: Path) -> None:
         """Should track which functions are exported vs local."""
         luau_file = tmp_path / "exports.luau"
-        luau_file.write_text("""
+        luau_file.write_text(
+            """
 local module = {}
 
 function module.publicFunc(): ()
@@ -287,7 +310,8 @@ local function privateFunc(): ()
 end
 
 return module
-""")
+"""
+        )
 
         extractor = HybridExtractor()
         result = extractor.extract(luau_file)

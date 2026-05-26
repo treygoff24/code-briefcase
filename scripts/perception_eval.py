@@ -27,7 +27,10 @@ if str(REPO_ROOT) not in sys.path:
 
 from code_briefcase.hooks.edit import build_pre_edit_response  # noqa: E402
 from code_briefcase.hooks.post_edit import build_post_edit_response  # noqa: E402
-from code_briefcase.hooks.runtime import parse_hook_event, render_hook_response  # noqa: E402
+from code_briefcase.hooks.runtime import (  # noqa: E402
+    parse_hook_event,
+    render_hook_response,
+)
 
 TARGET = Path("code_briefcase/hooks/edit.py")
 PROMPT_TEMPLATE = (
@@ -62,7 +65,9 @@ def _render_pre_edit(target: Path) -> dict:
             f"error: expected ok pre-edit response, got {execution.status} "
             f"({execution.noop_reason})"
         )
-    return render_hook_response(execution.response, client="claude", event_name="PreToolUse")
+    return render_hook_response(
+        execution.response, client="claude", event_name="PreToolUse"
+    )
 
 
 def _render_post_edit_clean(target: Path) -> dict:
@@ -80,7 +85,9 @@ def _render_post_edit_clean(target: Path) -> dict:
         client="claude",
     )
     execution = build_post_edit_response(event)
-    return render_hook_response(execution.response, client="claude", event_name="PostToolUse")
+    return render_hook_response(
+        execution.response, client="claude", event_name="PostToolUse"
+    )
 
 
 def main() -> int:

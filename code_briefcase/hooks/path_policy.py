@@ -35,7 +35,13 @@ CODE_EXTENSIONS = {
 }
 MARKDOWN_EXTENSIONS = {".md", ".mdx"}
 STRUCTURED_EXTENSIONS = {".html", ".htm", ".sql", ".yaml", ".yml", ".json", ".sh"}
-CONFIG_FILENAMES = {".gitignore", ".prettierignore", ".dockerignore", "Dockerfile", "Makefile"}
+CONFIG_FILENAMES = {
+    ".gitignore",
+    ".prettierignore",
+    ".dockerignore",
+    "Dockerfile",
+    "Makefile",
+}
 GENERATED_OR_LOCK_FILENAMES = {
     "package-lock.json",
     "pnpm-lock.yaml",
@@ -98,7 +104,9 @@ def _is_within_project(project: Path, path: Path) -> bool:
 
 def _is_test_file(path: Path) -> bool:
     name = path.name.lower()
-    return name.startswith("test_") or any(name.endswith(suffix) for suffix in BYPASS_SUFFIXES)
+    return name.startswith("test_") or any(
+        name.endswith(suffix) for suffix in BYPASS_SUFFIXES
+    )
 
 
 def looks_secret_path(path: Path) -> bool:
@@ -273,7 +281,11 @@ def discover_related_candidates(
         add(_resolve_import_module(event, file_path, module), "import", 1.0)
         if imp.get("is_from"):
             for named_module in _relative_import_name_modules(module, imp.get("names")):
-                add(_resolve_import_module(event, file_path, named_module), "import", 1.0)
+                add(
+                    _resolve_import_module(event, file_path, named_module),
+                    "import",
+                    1.0,
+                )
 
     for sibling in sorted(file_path.parent.glob(f"{file_path.stem}.*")):
         if sibling == file_path:

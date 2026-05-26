@@ -26,6 +26,7 @@ Example usage:
     db.set_file("auth.py", "def login(): pass\\ndef logout(): pass")
     result = db.query(parse_file, db, "auth.py")  # Recomputes
 """
+
 from __future__ import annotations
 
 import functools
@@ -34,6 +35,7 @@ from dataclasses import dataclass, field
 from typing import (
     Any,
     Callable,
+    cast,
     Dict,
     List,
     Optional,
@@ -67,13 +69,13 @@ def salsa_query(func: Callable[..., T]) -> Callable[..., T]:
     """
 
     @functools.wraps(func)
-    def wrapper(*args, **kwargs):
+    def wrapper(*args: Any, **kwargs: Any) -> Any:
         # When called directly (not through db.query), just execute
         return func(*args, **kwargs)
 
     # Mark as salsa query
     setattr(wrapper, _SALSA_QUERY_MARKER, True)
-    wrapper._original_func = func
+    setattr(wrapper, "_original_func", func)
 
     return wrapper
 
@@ -113,7 +115,7 @@ class SalsaDB:
     Thread-safe for concurrent access.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._lock = threading.RLock()
 
         # File storage
@@ -199,7 +201,7 @@ class SalsaDB:
     # Query Execution
     # -------------------------------------------------------------------------
 
-    def query(self, func: Callable[..., T], *args) -> T:
+    def query(self, func: Callable[..., T], *args: Any) -> T:
         """Execute a query with memoization and dependency tracking.
 
         If the query result is cached and valid, returns cached result.
@@ -222,7 +224,7 @@ class SalsaDB:
                     self._stats.cache_hits += 1
                     # Still register dependency to parent even on cache hit
                     self._register_dependency_to_parent(key)
-                    return entry.result
+                    return cast(T, entry.result)
 
             self._stats.cache_misses += 1
 
@@ -260,7 +262,7 @@ class SalsaDB:
 
                 self._query_cache[key] = entry
 
-                return result
+                return cast(T, result)
 
             finally:
                 self._query_stack.pop()
@@ -347,7 +349,7 @@ class SalsaDB:
     # Dependency Management
     # -------------------------------------------------------------------------
 
-    def get_dependencies(self, func: Callable, *args) -> Set[QueryKey]:
+    def get_dependencies(self, func: Callable, *args: Any) -> Set[QueryKey]:
         """Get the dependencies of a query.
 
         Args:
@@ -367,7 +369,7 @@ class SalsaDB:
     # Invalidation
     # -------------------------------------------------------------------------
 
-    def invalidate(self, func: Callable, *args) -> None:
+    def invalidate(self, func: Callable, *args: Any) -> None:
         """Invalidate a specific query and its dependents.
 
         Args:

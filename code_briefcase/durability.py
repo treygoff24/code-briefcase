@@ -247,7 +247,7 @@ class PartitionedIndex:
 
     def get_all_durable_edges(self) -> List[Tuple[str, str, str, str]]:
         """Get all edges from durable partitions only."""
-        all_edges = []
+        all_edges: List[Tuple[str, str, str, str]] = []
         for partition in self.durable.values():
             all_edges.extend(partition.edges)
         return all_edges

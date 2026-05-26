@@ -95,7 +95,9 @@ class QueryResponse:
             "wait_ms": self.wait_ms,
             "fallback_reason": self.fallback_reason,
             "backend": self.backend,
-            "error_count": sum(1 for d in self.diagnostics if d.get("severity") == "error"),
+            "error_count": sum(
+                1 for d in self.diagnostics if d.get("severity") == "error"
+            ),
             "warning_count": sum(
                 1 for d in self.diagnostics if d.get("severity") == "warning"
             ),

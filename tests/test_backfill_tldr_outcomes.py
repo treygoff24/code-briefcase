@@ -1,4 +1,5 @@
 from __future__ import annotations
+from typing import Any
 
 import json
 import subprocess
@@ -10,8 +11,11 @@ FIXTURES = Path(__file__).parent / "fixtures" / "eval"
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def test_rollup_from_session_summary_hashes_tool_paths():
-    from scripts.backfill_tldr_outcomes import _rollup_from_session_summary, hash_path_like
+def test_rollup_from_session_summary_hashes_tool_paths() -> None:
+    from scripts.backfill_tldr_outcomes import (
+        _rollup_from_session_summary,
+        hash_path_like,
+    )
     from scripts.evaluate_tldr_usage import parse_codex_file
 
     summary = parse_codex_file(
@@ -33,7 +37,7 @@ def test_rollup_from_session_summary_hashes_tool_paths():
         assert hash_path_like(summary.cwd, raw) in rollup.files_edited
 
 
-def test_backfill_cli_outputs_sanitized_session_rollups(tmp_path):
+def test_backfill_cli_outputs_sanitized_session_rollups(tmp_path: Any) -> None:
     out_json = tmp_path / "rollups.json"
     result = subprocess.run(
         [
@@ -69,7 +73,9 @@ def test_backfill_cli_outputs_sanitized_session_rollups(tmp_path):
     assert "SECRET_FIXTURE_OUTPUT" not in raw
 
 
-def test_backfill_cli_can_include_local_rich_evidence_with_redaction(tmp_path):
+def test_backfill_cli_can_include_local_rich_evidence_with_redaction(
+    tmp_path: Any,
+) -> None:
     out_json = tmp_path / "rollups-rich.json"
     result = subprocess.run(
         [
@@ -100,7 +106,9 @@ def test_backfill_cli_can_include_local_rich_evidence_with_redaction(tmp_path):
     raw = out_json.read_text(encoding="utf-8")
     payload = json.loads(raw)
     assert payload["privacy"]["includes_local_evidence"] is True
-    codex = next(item for item in payload["rollups"] if item["session_id"] == "backfill-codex-1")
+    codex = next(
+        item for item in payload["rollups"] if item["session_id"] == "backfill-codex-1"
+    )
     assert codex["local_evidence"]
     assert "rg -n main app.py" in raw
     assert "SECRET_FIXTURE_COMMAND" not in raw
@@ -108,7 +116,9 @@ def test_backfill_cli_can_include_local_rich_evidence_with_redaction(tmp_path):
     assert "SECRET_FIXTURE_USER_TEXT" not in raw
 
 
-def test_backfill_cli_allows_missing_telemetry_file_for_proxy_only_report(tmp_path):
+def test_backfill_cli_allows_missing_telemetry_file_for_proxy_only_report(
+    tmp_path: Any,
+) -> None:
     out_json = tmp_path / "rollups.json"
     result = subprocess.run(
         [
@@ -140,7 +150,7 @@ def test_backfill_cli_allows_missing_telemetry_file_for_proxy_only_report(tmp_pa
     assert all(item["causal_confidence"] == "proxy-only" for item in payload["rollups"])
 
 
-def test_backfill_ignores_telemetry_outside_window(tmp_path):
+def test_backfill_ignores_telemetry_outside_window(tmp_path: Any) -> None:
     out_json = tmp_path / "rollups.json"
     subprocess.run(
         [
@@ -162,11 +172,15 @@ def test_backfill_ignores_telemetry_outside_window(tmp_path):
         check=True,
     )
     payload = json.loads(out_json.read_text(encoding="utf-8"))
-    codex = next(item for item in payload["rollups"] if item["session_id"] == "backfill-codex-1")
+    codex = next(
+        item for item in payload["rollups"] if item["session_id"] == "backfill-codex-1"
+    )
     assert codex["tldr_hooks"] == 1
 
 
-def test_parse_telemetry_records_tolerates_malformed_schema_fields(tmp_path):
+def test_parse_telemetry_records_tolerates_malformed_schema_fields(
+    tmp_path: Any,
+) -> None:
     from scripts.backfill_tldr_outcomes import parse_telemetry_records
 
     telemetry = tmp_path / "telemetry.jsonl"
@@ -221,7 +235,7 @@ def test_parse_telemetry_records_tolerates_malformed_schema_fields(tmp_path):
     ]
 
 
-def test_match_telemetry_uses_visible_files_as_legacy_candidates():
+def test_match_telemetry_uses_visible_files_as_legacy_candidates() -> None:
     from scripts.backfill_tldr_outcomes import (
         ParsedTelemetry,
         SessionContext,

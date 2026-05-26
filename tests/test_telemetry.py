@@ -1,4 +1,5 @@
 from __future__ import annotations
+from typing import Any
 
 import json
 import os
@@ -16,15 +17,19 @@ from code_briefcase.telemetry import (
 )
 
 
-def test_telemetry_disabled_by_default(monkeypatch, tmp_path):
+def test_telemetry_disabled_by_default(monkeypatch: Any, tmp_path: Any) -> None:
     monkeypatch.delenv("CODE_BRIEFCASE_TELEMETRY", raising=False)
-    monkeypatch.setattr("code_briefcase.telemetry.TELEMETRY_ENABLE_FILE", tmp_path / "missing.enabled")
-    monkeypatch.setenv("CODE_BRIEFCASE_TELEMETRY_PATH", str(tmp_path / "telemetry.jsonl"))
+    monkeypatch.setattr(
+        "code_briefcase.telemetry.TELEMETRY_ENABLE_FILE", tmp_path / "missing.enabled"
+    )
+    monkeypatch.setenv(
+        "CODE_BRIEFCASE_TELEMETRY_PATH", str(tmp_path / "telemetry.jsonl")
+    )
     write_telemetry_record({"event": "test"})
     assert not (tmp_path / "telemetry.jsonl").exists()
 
 
-def test_telemetry_writes_when_enabled(monkeypatch, tmp_path):
+def test_telemetry_writes_when_enabled(monkeypatch: Any, tmp_path: Any) -> None:
     monkeypatch.setenv("CODE_BRIEFCASE_TELEMETRY", "1")
     path = tmp_path / "telemetry.jsonl"
     monkeypatch.setenv("CODE_BRIEFCASE_TELEMETRY_PATH", str(path))
@@ -44,10 +49,16 @@ def test_telemetry_writes_when_enabled(monkeypatch, tmp_path):
     assert "snippet" not in payload
 
 
-def test_telemetry_can_be_enabled_by_global_flag_file(monkeypatch, tmp_path):
+def test_telemetry_can_be_enabled_by_global_flag_file(
+    monkeypatch: Any, tmp_path: Any
+) -> None:
     monkeypatch.delenv("CODE_BRIEFCASE_TELEMETRY", raising=False)
-    monkeypatch.setattr("code_briefcase.telemetry.TELEMETRY_ENABLE_FILE", tmp_path / "telemetry.enabled")
-    monkeypatch.setenv("CODE_BRIEFCASE_TELEMETRY_PATH", str(tmp_path / "telemetry.jsonl"))
+    monkeypatch.setattr(
+        "code_briefcase.telemetry.TELEMETRY_ENABLE_FILE", tmp_path / "telemetry.enabled"
+    )
+    monkeypatch.setenv(
+        "CODE_BRIEFCASE_TELEMETRY_PATH", str(tmp_path / "telemetry.jsonl")
+    )
     (tmp_path / "telemetry.enabled").write_text("1\n", encoding="utf-8")
 
     write_telemetry_record({"event": "test"})
@@ -55,10 +66,16 @@ def test_telemetry_can_be_enabled_by_global_flag_file(monkeypatch, tmp_path):
     assert (tmp_path / "telemetry.jsonl").exists()
 
 
-def test_env_can_disable_global_telemetry_flag_file(monkeypatch, tmp_path):
+def test_env_can_disable_global_telemetry_flag_file(
+    monkeypatch: Any, tmp_path: Any
+) -> None:
     monkeypatch.setenv("CODE_BRIEFCASE_TELEMETRY", "0")
-    monkeypatch.setattr("code_briefcase.telemetry.TELEMETRY_ENABLE_FILE", tmp_path / "telemetry.enabled")
-    monkeypatch.setenv("CODE_BRIEFCASE_TELEMETRY_PATH", str(tmp_path / "telemetry.jsonl"))
+    monkeypatch.setattr(
+        "code_briefcase.telemetry.TELEMETRY_ENABLE_FILE", tmp_path / "telemetry.enabled"
+    )
+    monkeypatch.setenv(
+        "CODE_BRIEFCASE_TELEMETRY_PATH", str(tmp_path / "telemetry.jsonl")
+    )
     (tmp_path / "telemetry.enabled").write_text("1\n", encoding="utf-8")
 
     write_telemetry_record({"event": "test"})
@@ -66,7 +83,9 @@ def test_env_can_disable_global_telemetry_flag_file(monkeypatch, tmp_path):
     assert not (tmp_path / "telemetry.jsonl").exists()
 
 
-def test_redacted_file_paths_keep_distinct_stable_hashes(monkeypatch, tmp_path):
+def test_redacted_file_paths_keep_distinct_stable_hashes(
+    monkeypatch: Any, tmp_path: Any
+) -> None:
     monkeypatch.setenv("CODE_BRIEFCASE_TELEMETRY", "1")
     monkeypatch.setenv("CODE_BRIEFCASE_TELEMETRY_REDACT_PATHS", "1")
     telemetry_path = tmp_path / "telemetry.jsonl"
@@ -88,9 +107,14 @@ def test_redacted_file_paths_keep_distinct_stable_hashes(monkeypatch, tmp_path):
     assert expected_app != expected_auth
 
 
-def test_unwritable_telemetry_path_is_swallowed(monkeypatch, tmp_path):
+def test_unwritable_telemetry_path_is_swallowed(
+    monkeypatch: Any, tmp_path: Any
+) -> None:
     monkeypatch.setenv("CODE_BRIEFCASE_TELEMETRY", "1")
-    monkeypatch.setenv("CODE_BRIEFCASE_TELEMETRY_PATH", str(tmp_path / "missing" / "nested" / "telemetry.jsonl"))
+    monkeypatch.setenv(
+        "CODE_BRIEFCASE_TELEMETRY_PATH",
+        str(tmp_path / "missing" / "nested" / "telemetry.jsonl"),
+    )
     os.chmod(tmp_path, 0o500)
     try:
         record_hook_execution(
@@ -104,7 +128,7 @@ def test_unwritable_telemetry_path_is_swallowed(monkeypatch, tmp_path):
         os.chmod(tmp_path, 0o700)
 
 
-def test_malformed_env_path_is_swallowed(monkeypatch):
+def test_malformed_env_path_is_swallowed(monkeypatch: Any) -> None:
     monkeypatch.setenv("CODE_BRIEFCASE_TELEMETRY", "1")
 
     def broken_path() -> Path:
@@ -120,7 +144,9 @@ def test_malformed_env_path_is_swallowed(monkeypatch):
     )
 
 
-def test_concurrent_hook_writes_produce_parseable_jsonl(monkeypatch, tmp_path):
+def test_concurrent_hook_writes_produce_parseable_jsonl(
+    monkeypatch: Any, tmp_path: Any
+) -> None:
     monkeypatch.setenv("CODE_BRIEFCASE_TELEMETRY", "1")
     path = tmp_path / "telemetry.jsonl"
     monkeypatch.setenv("CODE_BRIEFCASE_TELEMETRY_PATH", str(path))
@@ -141,7 +167,7 @@ def test_concurrent_hook_writes_produce_parseable_jsonl(monkeypatch, tmp_path):
         json.loads(line)
 
 
-def test_hook_stdout_unchanged_with_telemetry(monkeypatch, tmp_path):
+def test_hook_stdout_unchanged_with_telemetry(monkeypatch: Any, tmp_path: Any) -> None:
     payload = {
         "hook_event_name": "PreToolUse",
         "tool_name": "Read",
@@ -151,12 +177,16 @@ def test_hook_stdout_unchanged_with_telemetry(monkeypatch, tmp_path):
     monkeypatch.delenv("CODE_BRIEFCASE_TELEMETRY", raising=False)
     without = run_hook("pre-read", payload, client="claude")
     monkeypatch.setenv("CODE_BRIEFCASE_TELEMETRY", "1")
-    monkeypatch.setenv("CODE_BRIEFCASE_TELEMETRY_PATH", str(tmp_path / "telemetry.jsonl"))
+    monkeypatch.setenv(
+        "CODE_BRIEFCASE_TELEMETRY_PATH", str(tmp_path / "telemetry.jsonl")
+    )
     with_enabled = run_hook("pre-read", payload, client="claude")
     assert without == with_enabled
 
 
-def test_statuses_are_distinguishable_in_telemetry(monkeypatch, tmp_path):
+def test_statuses_are_distinguishable_in_telemetry(
+    monkeypatch: Any, tmp_path: Any
+) -> None:
     monkeypatch.setenv("CODE_BRIEFCASE_TELEMETRY", "1")
     path = tmp_path / "telemetry.jsonl"
     monkeypatch.setenv("CODE_BRIEFCASE_TELEMETRY_PATH", str(path))
@@ -183,7 +213,11 @@ def test_statuses_are_distinguishable_in_telemetry(monkeypatch, tmp_path):
         },
         client="claude",
     )
-    run_hook("session-start", {"hook_event_name": "SessionStart", "cwd": str(tmp_path / "missing")}, client="codex")
+    run_hook(
+        "session-start",
+        {"hook_event_name": "SessionStart", "cwd": str(tmp_path / "missing")},
+        client="codex",
+    )
     record_hook_execution(
         client="claude",
         hook_event="pre-read",
@@ -192,11 +226,14 @@ def test_statuses_are_distinguishable_in_telemetry(monkeypatch, tmp_path):
         status="error",
         error_kind="Timeout",
     )
-    statuses = {json.loads(line)["status"] for line in path.read_text(encoding="utf-8").splitlines()}
+    statuses = {
+        json.loads(line)["status"]
+        for line in path.read_text(encoding="utf-8").splitlines()
+    }
     assert {"skipped", "ok", "error"} <= statuses
 
 
-def test_telemetry_redacts_paths_by_default(monkeypatch, tmp_path):
+def test_telemetry_redacts_paths_by_default(monkeypatch: Any, tmp_path: Any) -> None:
     monkeypatch.setenv("CODE_BRIEFCASE_TELEMETRY", "1")
     monkeypatch.delenv("CODE_BRIEFCASE_TELEMETRY_REDACT_PATHS", raising=False)
     project = tmp_path / "secret-repo-name"
@@ -221,10 +258,14 @@ def test_telemetry_redacts_paths_by_default(monkeypatch, tmp_path):
     assert "secret-repo-name" not in raw
     assert "src/app.py" not in raw
     assert payload["project"] == f"<redacted>/{payload['project_hash']}"
-    assert payload["trigger_files"][0].startswith(f"<redacted>/{payload['project_hash']}/")
+    assert payload["trigger_files"][0].startswith(
+        f"<redacted>/{payload['project_hash']}/"
+    )
 
 
-def test_hook_telemetry_records_candidate_lifecycle_without_content(monkeypatch, tmp_path):
+def test_hook_telemetry_records_candidate_lifecycle_without_content(
+    monkeypatch: Any, tmp_path: Any
+) -> None:
     monkeypatch.setenv("CODE_BRIEFCASE_TELEMETRY", "1")
     telemetry_path = tmp_path / "telemetry.jsonl"
     monkeypatch.setenv("CODE_BRIEFCASE_TELEMETRY_PATH", str(telemetry_path))
@@ -239,7 +280,13 @@ def test_hook_telemetry_records_candidate_lifecycle_without_content(monkeypatch,
         recommended_files=["src/auth.py"],
         surfaced_files=["src/auth.py"],
         candidate_files=[
-            {"path": "src/auth.py", "reason": "importer", "rank": 1, "score": 0.91, "surfaced": True},
+            {
+                "path": "src/auth.py",
+                "reason": "importer",
+                "rank": 1,
+                "score": 0.91,
+                "surfaced": True,
+            },
             {
                 "path": "tests/test_auth.py",
                 "reason": "test_neighbor",
@@ -258,13 +305,17 @@ def test_hook_telemetry_records_candidate_lifecycle_without_content(monkeypatch,
     assert payload["schema_version"] == 2
     assert payload["hook_run_id"] == "run-1"
     assert payload["context_kind"] == "edit_structure"
-    assert payload["candidate_files"][0]["path"].startswith(f"<redacted>/{payload['project_hash']}/")
+    assert payload["candidate_files"][0]["path"].startswith(
+        f"<redacted>/{payload['project_hash']}/"
+    )
     assert payload["candidate_files"][0]["surfaced"] is True
     assert "def " not in raw
     assert "content" not in raw.lower()
 
 
-def test_hook_telemetry_schema_v3_records_watch_diagnostics_fields(monkeypatch, tmp_path):
+def test_hook_telemetry_schema_v3_records_watch_diagnostics_fields(
+    monkeypatch: Any, tmp_path: Any
+) -> None:
     monkeypatch.setenv("CODE_BRIEFCASE_TELEMETRY", "1")
     telemetry_path = tmp_path / "telemetry.jsonl"
     monkeypatch.setenv("CODE_BRIEFCASE_TELEMETRY_PATH", str(telemetry_path))
@@ -298,7 +349,9 @@ def test_hook_telemetry_schema_v3_records_watch_diagnostics_fields(monkeypatch, 
     assert payload["diagnostics_backend"] == "tsc-watch"
 
 
-def test_watch_diagnostics_event_redacts_adapter_paths_by_default(monkeypatch, tmp_path):
+def test_watch_diagnostics_event_redacts_adapter_paths_by_default(
+    monkeypatch: Any, tmp_path: Any
+) -> None:
     monkeypatch.setenv("CODE_BRIEFCASE_TELEMETRY", "1")
     telemetry_path = tmp_path / "telemetry.jsonl"
     monkeypatch.setenv("CODE_BRIEFCASE_TELEMETRY_PATH", str(telemetry_path))
@@ -324,7 +377,9 @@ def test_watch_diagnostics_event_redacts_adapter_paths_by_default(monkeypatch, t
     assert "node_modules/.bin/tsc" not in raw
 
 
-def test_local_rich_mode_records_raw_local_evidence_with_secret_hygiene(monkeypatch, tmp_path):
+def test_local_rich_mode_records_raw_local_evidence_with_secret_hygiene(
+    monkeypatch: Any, tmp_path: Any
+) -> None:
     monkeypatch.setenv("CODE_BRIEFCASE_TELEMETRY", "1")
     monkeypatch.setenv("CODE_BRIEFCASE_TELEMETRY_MODE", "local-rich")
     telemetry_path = tmp_path / "telemetry.jsonl"
@@ -358,14 +413,18 @@ def test_local_rich_mode_records_raw_local_evidence_with_secret_hygiene(monkeypa
     assert payload["trigger_files"] == ["src/app.py"]
     assert payload["candidate_files"][0]["path"] == "src/auth.py"
     assert payload["local_evidence"]["tool_name"] == "shell"
-    assert "rg -n login src/auth.py" in payload["local_evidence"]["tool_input"]["command"]
+    assert (
+        "rg -n login src/auth.py" in payload["local_evidence"]["tool_input"]["command"]
+    )
     assert "sk-abcdefghijklmnopqrstuvwxyz" not in raw
     assert "OPENAI_API_KEY=[redacted]" in raw
     assert payload["local_evidence"]["raw_candidate_files"][0]["path"] == "src/auth.py"
     assert payload["local_evidence"]["raw_candidate_files"][0]["path_hash"]
 
 
-def test_local_rich_mode_redacts_secret_like_paths_everywhere(monkeypatch, tmp_path):
+def test_local_rich_mode_redacts_secret_like_paths_everywhere(
+    monkeypatch: Any, tmp_path: Any
+) -> None:
     monkeypatch.setenv("CODE_BRIEFCASE_TELEMETRY", "1")
     monkeypatch.setenv("CODE_BRIEFCASE_TELEMETRY_MODE", "local-rich")
     telemetry_path = tmp_path / "telemetry.jsonl"
@@ -381,8 +440,18 @@ def test_local_rich_mode_redacts_secret_like_paths_everywhere(monkeypatch, tmp_p
         recommended_files=["secrets/config.py", "src/api_credentials.py"],
         surfaced_files=["credentials/client.py"],
         candidate_files=[
-            {"path": "secrets/config.py", "reason": "import", "rank": 1, "surfaced": True},
-            {"path": "src/api_credentials.py", "reason": "import", "rank": 2, "surfaced": False},
+            {
+                "path": "secrets/config.py",
+                "reason": "import",
+                "rank": 1,
+                "surfaced": True,
+            },
+            {
+                "path": "src/api_credentials.py",
+                "reason": "import",
+                "rank": 2,
+                "surfaced": False,
+            },
         ],
         tool_name="Read",
         tool_input={"file_path": "src/secret_config.py"},
@@ -395,23 +464,36 @@ def test_local_rich_mode_redacts_secret_like_paths_everywhere(monkeypatch, tmp_p
     assert "secrets/config.py" not in raw
     assert "src/api_credentials.py" not in raw
     assert "credentials/client.py" not in raw
-    assert payload["trigger_files"] == ["[redacted-secret-path]", "[redacted-secret-path]"]
+    assert payload["trigger_files"] == [
+        "[redacted-secret-path]",
+        "[redacted-secret-path]",
+    ]
     assert payload["recommended_related_files"] == [
         "[redacted-secret-path]",
         "[redacted-secret-path]",
     ]
     assert payload["surfaced_files"] == ["[redacted-secret-path]"]
     assert payload["candidate_files"][0]["path"] == "[redacted-secret-path]"
-    assert payload["local_evidence"]["tool_input"]["file_path"] == "[redacted-secret-path]"
+    assert (
+        payload["local_evidence"]["tool_input"]["file_path"] == "[redacted-secret-path]"
+    )
     assert payload["local_evidence"]["raw_trigger_files"] == [
         "[redacted-secret-path]",
         "[redacted-secret-path]",
     ]
-    assert payload["local_evidence"]["raw_candidate_files"][0]["path"] == "[redacted-secret-path]"
-    assert payload["local_evidence"]["raw_candidate_files"][1]["path"] == "[redacted-secret-path]"
+    assert (
+        payload["local_evidence"]["raw_candidate_files"][0]["path"]
+        == "[redacted-secret-path]"
+    )
+    assert (
+        payload["local_evidence"]["raw_candidate_files"][1]["path"]
+        == "[redacted-secret-path]"
+    )
 
 
-def test_runner_passes_tool_input_to_local_rich_telemetry(monkeypatch, tmp_path):
+def test_runner_passes_tool_input_to_local_rich_telemetry(
+    monkeypatch: Any, tmp_path: Any
+) -> None:
     monkeypatch.setenv("CODE_BRIEFCASE_TELEMETRY", "1")
     monkeypatch.setenv("CODE_BRIEFCASE_TELEMETRY_MODE", "local-rich")
     telemetry_path = tmp_path / "telemetry.jsonl"
@@ -434,7 +516,7 @@ def test_runner_passes_tool_input_to_local_rich_telemetry(monkeypatch, tmp_path)
     assert payload["local_evidence"]["tool_input"]["file_path"] == "README.md"
 
 
-def test_cli_hook_emits_telemetry(monkeypatch, tmp_path):
+def test_cli_hook_emits_telemetry(monkeypatch: Any, tmp_path: Any) -> None:
     monkeypatch.setenv("CODE_BRIEFCASE_TELEMETRY", "1")
     telemetry_path = tmp_path / "telemetry.jsonl"
     monkeypatch.setenv("CODE_BRIEFCASE_TELEMETRY_PATH", str(telemetry_path))
@@ -446,7 +528,16 @@ def test_cli_hook_emits_telemetry(monkeypatch, tmp_path):
         "cwd": str(tmp_path),
     }
     result = subprocess.run(
-        [sys.executable, "-m", "code_briefcase.cli", "hooks", "run", "pre-read", "--client", "codex"],
+        [
+            sys.executable,
+            "-m",
+            "code_briefcase.cli",
+            "hooks",
+            "run",
+            "pre-read",
+            "--client",
+            "codex",
+        ],
         input=json.dumps(payload),
         capture_output=True,
         text=True,

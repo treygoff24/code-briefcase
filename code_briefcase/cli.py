@@ -12,6 +12,7 @@ Usage:
     code-briefcase dfg <file> <function>          Data flow graph
     code-briefcase slice <file> <func> <line>     Program slice
 """
+from typing import Any
 import argparse
 from importlib import import_module
 from importlib.util import find_spec
@@ -37,12 +38,12 @@ if os.name == "nt":
 from . import __version__
 
 
-def _get_subprocess_detach_kwargs():
+def _get_subprocess_detach_kwargs() -> Any:
     """Get platform-specific kwargs for detaching subprocess."""
     import subprocess
 
     if os.name == "nt":  # Windows
-        return {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP}
+        return {"creationflags": getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)}
     else:  # Unix (Mac/Linux)
         return {"start_new_session": True}
 
@@ -92,7 +93,7 @@ def detect_language_from_extension(file_path: str) -> str:
     return EXTENSION_TO_LANGUAGE.get(ext, "python")
 
 
-def _show_first_run_tip():
+def _show_first_run_tip() -> None:
     """Show a one-time tip about Swift support on first run."""
     marker = Path.home() / ".code_briefcase_first_run"
     if marker.exists():
@@ -115,7 +116,7 @@ def _show_first_run_tip():
     marker.touch()
 
 
-def main():
+def main() -> None:
     _show_first_run_tip()
     parser = argparse.ArgumentParser(
         prog="code-briefcase",
@@ -762,6 +763,10 @@ Semantic Search:
     doctor_p.add_argument("--json", action="store_true", help="Output as JSON")
 
     args = parser.parse_args()
+    # CLI subcommands intentionally return heterogeneous JSON-like payloads.
+    # Keep this local explicit rather than letting mypy bind `result` to the
+    # first branch's concrete type and report false cross-branch conflicts.
+    result: Any
 
     if args.command == "hooks":
         if args.hooks_action == "run":
@@ -854,7 +859,7 @@ Semantic Search:
     from .patch import patch_call_graph
     from .cross_file_calls import ProjectCallGraph
 
-    def _get_or_build_graph(project_path, lang, build_fn):
+    def _get_or_build_graph(project_path: Any, lang: Any, build_fn: Any) -> Any:
         """Get cached graph with incremental patches, or build fresh.
 
         This implements P4 incremental updates:
@@ -942,7 +947,7 @@ Semantic Search:
         return graph
 
     # Helper to load ignore patterns from .tldrignore + CLI --ignore flags + .gitignore
-    def get_ignore_spec(project_path: str | Path):
+    def get_ignore_spec(project_path: str | Path) -> Any:
         """Load ignore patterns, combining .code-briefcaseignore, .gitignore, and CLI --ignore flags."""
         if getattr(args, "no_ignore", False):
             return None
@@ -962,7 +967,9 @@ Semantic Search:
         if lang_cache.exists():
             try:
                 data = json.loads(lang_cache.read_text())
-                return data.get("languages")
+                languages = data.get("languages") if isinstance(data, dict) else None
+                if isinstance(languages, list):
+                    return [str(language) for language in languages]
             except (json.JSONDecodeError, OSError):
                 pass
         return None
@@ -1216,10 +1223,10 @@ Semantic Search:
             files = scan_project_files(
                 str(project), language=args.lang, respect_ignore=respect_ignore
             )
-            importers = []
-            for file_path in files:
+            importers: list[dict[str, Any]] = []
+            for source_file in files:
                 try:
-                    imports = get_imports(file_path, language=args.lang)
+                    imports = get_imports(source_file, language=args.lang)
                     for imp in imports:
                         module = imp.get("module", "")
                         names = imp.get("names", [])
@@ -1227,7 +1234,7 @@ Semantic Search:
                         if args.module in module or args.module in names:
                             importers.append(
                                 {
-                                    "file": str(Path(file_path).relative_to(project)),
+                                    "file": str(Path(source_file).relative_to(project)),
                                     "import": imp,
                                 }
                             )
@@ -1353,9 +1360,9 @@ Semantic Search:
                 else:
                     target_languages = [args.lang]
 
-                all_files = set()
-                combined_edges = []
-                processed_languages = []
+                indexed_files: set[str] = set()
+                combined_edges: list[dict[str, str]] = []
+                processed_languages: list[str] = []
 
                 for lang in target_languages:
                     try:
@@ -1363,7 +1370,7 @@ Semantic Search:
                         files = scan_project(
                             project_path, language=lang, respect_ignore=respect_ignore
                         )
-                        all_files.update(files)
+                        indexed_files.update(str(file_path) for file_path in files)
 
                         # Build graph
                         graph = build_project_call_graph(project_path, language=lang)
@@ -1436,7 +1443,7 @@ Semantic Search:
 
                 # Print stats
                 print(
-                    f"Total: Indexed {len(all_files)} files, found {len(unique_edges)} edges"
+                    f"Total: Indexed {len(indexed_files)} files, found {len(unique_edges)} edges"
                 )
 
         elif args.command == "semantic":
@@ -1499,12 +1506,15 @@ Semantic Search:
                     print(f"✗ Command not found: {cmd[0]}", file=sys.stderr)
                     sys.exit(1)
             else:
-                results = {}
+                doctor_results: dict[str, dict[str, list[dict[str, Any]]]] = {}
                 for lang, config in sorted(LANG_TOOLS.items()):
-                    lang_result = {slot: [] for slot in TOOL_SLOTS}
+                    lang_result: dict[str, list[dict[str, Any]]] = {
+                        slot: [] for slot in TOOL_SLOTS
+                    }
+                    config_any: Any = config
 
                     for slot in TOOL_SLOTS:
-                        for tool in config.get(slot, []):
+                        for tool in config_any.get(slot, []):
                             executable = tool["executable"]
                             path = shutil.which(executable)
                             lang_result[slot].append(
@@ -1517,32 +1527,32 @@ Semantic Search:
                                 }
                             )
 
-                    results[lang] = lang_result
+                    doctor_results[lang] = lang_result
 
                 if args.json:
-                    print(json.dumps(results, indent=2))
+                    print(json.dumps(doctor_results, indent=2))
                 else:
                     print("Code Briefcase Diagnostics Check")
                     print("=" * 50)
                     print()
 
                     missing_count = 0
-                    for lang, checks in results.items():
-                        lines = []
+                    for lang, checks in doctor_results.items():
+                        output_lines: list[str] = []
 
                         for slot in TOOL_SLOTS:
                             for tool in checks[slot]:
                                 label = tool["name"]
                                 if tool["installed"]:
-                                    lines.append(f"  ✓ {label} - {tool['path']}")
+                                    output_lines.append(f"  ✓ {label} - {tool['path']}")
                                 else:
-                                    lines.append(f"  ✗ {label} - not found")
-                                    lines.append(f"    → {tool['install']}")
+                                    output_lines.append(f"  ✗ {label} - not found")
+                                    output_lines.append(f"    → {tool['install']}")
                                     missing_count += 1
 
-                        if lines:
+                        if output_lines:
                             print(f"{lang.capitalize()}:")
-                            for line in lines:
+                            for line in output_lines:
                                 print(line)
                             print()
 

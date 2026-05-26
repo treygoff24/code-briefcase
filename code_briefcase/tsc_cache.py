@@ -455,7 +455,9 @@ def _cache_entries(root: Path) -> list[CacheEntry]:
         config_dir = meta_path.parent
         meta = read_meta(meta_path)
         cached_size = meta.get("size_bytes")
-        size = int(cached_size) if isinstance(cached_size, int) else _dir_size(config_dir)
+        size = (
+            int(cached_size) if isinstance(cached_size, int) else _dir_size(config_dir)
+        )
         entries.append(
             {
                 "path": config_dir,

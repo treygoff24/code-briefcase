@@ -1,3 +1,4 @@
+from typing import Any, cast
 import json
 import os
 import subprocess
@@ -9,11 +10,15 @@ from code_briefcase import diagnostics as diag
 from code_briefcase import tsc_cache
 
 
-def _fake_tsc(path: Path, args_file: Path, make_executable, version: str = "") -> Path:
+def _fake_tsc(
+    path: Path, args_file: Path, make_executable: Any, version: str = ""
+) -> Path:
     version_expr = version or "${FAKE_TSC_VERSION:-Version 5.9.0}"
-    return make_executable(
-        path,
-        f"""#!/bin/sh
+    return cast(
+        Path,
+        make_executable(
+            path,
+            f"""#!/bin/sh
 if [ "$1" = "--version" ]; then
   echo "{version_expr}"
   exit 0
@@ -21,6 +26,7 @@ fi
 printf '%s\\n' "$@" > {args_file}
 exit 0
 """,
+        ),
     )
 
 
@@ -39,8 +45,8 @@ def _project_arg(args_file: Path) -> Path:
 
 
 def test_phase0_cache_reuses_stable_config_and_buildinfo(
-    tmp_path, monkeypatch, make_executable
-):
+    tmp_path: Any, monkeypatch: Any, make_executable: Any
+) -> None:
     cache_root = tmp_path / "home-cache" / "tsc"
     monkeypatch.setenv("CODE_BRIEFCASE_TSC_CACHE_ROOT", str(cache_root))
     monkeypatch.setattr(diag.shutil, "which", lambda name: None)
@@ -51,7 +57,9 @@ def test_phase0_cache_reuses_stable_config_and_buildinfo(
 
     first = diag.get_diagnostics(str(source), language="typescript", include_lint=False)
     first_config = _project_arg(args_file)
-    second = diag.get_diagnostics(str(source), language="typescript", include_lint=False)
+    second = diag.get_diagnostics(
+        str(source), language="typescript", include_lint=False
+    )
     second_config = _project_arg(args_file)
 
     assert first["tools"] == ["tsc"]
@@ -75,8 +83,8 @@ def test_phase0_cache_reuses_stable_config_and_buildinfo(
 
 
 def test_phase0_cache_invalidates_buildinfo_on_tsconfig_mtime_change(
-    tmp_path, monkeypatch, make_executable
-):
+    tmp_path: Any, monkeypatch: Any, make_executable: Any
+) -> None:
     cache_root = tmp_path / "cache"
     monkeypatch.setenv("CODE_BRIEFCASE_TSC_CACHE_ROOT", str(cache_root))
     monkeypatch.setattr(diag.shutil, "which", lambda name: None)
@@ -101,8 +109,8 @@ def test_phase0_cache_invalidates_buildinfo_on_tsconfig_mtime_change(
 
 
 def test_phase0_cache_key_changes_with_tsc_version(
-    tmp_path, monkeypatch, make_executable
-):
+    tmp_path: Any, monkeypatch: Any, make_executable: Any
+) -> None:
     cache_root = tmp_path / "cache"
     monkeypatch.setenv("CODE_BRIEFCASE_TSC_CACHE_ROOT", str(cache_root))
     monkeypatch.setattr(diag.shutil, "which", lambda name: None)
@@ -133,8 +141,8 @@ def test_phase0_cache_key_changes_with_tsc_version(
 
 
 def test_phase0_lock_contention_falls_back_to_ephemeral_config(
-    tmp_path, monkeypatch, make_executable
-):
+    tmp_path: Any, monkeypatch: Any, make_executable: Any
+) -> None:
     cache_root = tmp_path / "cache"
     monkeypatch.setenv("CODE_BRIEFCASE_TSC_CACHE_ROOT", str(cache_root))
 
@@ -192,7 +200,9 @@ def test_phase0_lock_contention_falls_back_to_ephemeral_config(
         holder.wait(timeout=3)
 
 
-def test_prune_removes_phase0_entries_but_skips_recent_watchers(tmp_path, monkeypatch):
+def test_prune_removes_phase0_entries_but_skips_recent_watchers(
+    tmp_path: Any, monkeypatch: Any
+) -> None:
     cache_root = tmp_path / "cache"
     monkeypatch.setenv("CODE_BRIEFCASE_TSC_CACHE_ROOT", str(cache_root))
     now = time.time_ns()
@@ -235,7 +245,7 @@ def test_prune_removes_phase0_entries_but_skips_recent_watchers(tmp_path, monkey
     assert result["skipped"] == 1
 
 
-def test_prune_skips_locked_cache_dirs(tmp_path, monkeypatch):
+def test_prune_skips_locked_cache_dirs(tmp_path: Any, monkeypatch: Any) -> None:
     cache_root = tmp_path / "cache"
     monkeypatch.setenv("CODE_BRIEFCASE_TSC_CACHE_ROOT", str(cache_root))
     locked_dir = cache_root / "proj" / "locked"
@@ -265,7 +275,9 @@ def test_prune_skips_locked_cache_dirs(tmp_path, monkeypatch):
     assert locked_dir.exists()
 
 
-def test_cache_clean_force_ignores_recent_watcher_skip(tmp_path, monkeypatch):
+def test_cache_clean_force_ignores_recent_watcher_skip(
+    tmp_path: Any, monkeypatch: Any
+) -> None:
     cache_root = tmp_path / "cache"
     monkeypatch.setenv("CODE_BRIEFCASE_TSC_CACHE_ROOT", str(cache_root))
     watcher_dir = cache_root / "proj" / "watcher"
@@ -290,7 +302,7 @@ def test_cache_clean_force_ignores_recent_watcher_skip(tmp_path, monkeypatch):
     assert not watcher_dir.exists()
 
 
-def test_cache_clean_cli_prunes_tsc_cache(tmp_path):
+def test_cache_clean_cli_prunes_tsc_cache(tmp_path: Any) -> None:
     cache_root = tmp_path / "cache"
     entry = cache_root / "proj" / "entry"
     entry.mkdir(parents=True)
@@ -328,8 +340,8 @@ def test_cache_clean_cli_prunes_tsc_cache(tmp_path):
 
 
 def test_tsc_version_is_memoized_until_binary_mtime_changes(
-    tmp_path, monkeypatch, make_executable
-):
+    tmp_path: Any, monkeypatch: Any, make_executable: Any
+) -> None:
     tsc_cache._TSC_VERSION_CACHE.clear()
     calls = tmp_path / "call-count"
     calls.write_text("0")
@@ -356,8 +368,8 @@ echo "Version 5.9.$n"
 
 
 def test_unknown_tsc_version_returns_none_and_skips_cache(
-    tmp_path, monkeypatch, make_executable
-):
+    tmp_path: Any, monkeypatch: Any, make_executable: Any
+) -> None:
     tsc_cache._TSC_VERSION_CACHE.clear()
     cache_root = tmp_path / "cache"
     monkeypatch.setenv("CODE_BRIEFCASE_TSC_CACHE_ROOT", str(cache_root))
@@ -378,7 +390,9 @@ def test_unknown_tsc_version_returns_none_and_skips_cache(
     assert not cache_root.exists()
 
 
-def test_prune_uses_size_bytes_from_meta_without_rescanning(tmp_path, monkeypatch):
+def test_prune_uses_size_bytes_from_meta_without_rescanning(
+    tmp_path: Any, monkeypatch: Any
+) -> None:
     cache_root = tmp_path / "cache"
     monkeypatch.setenv("CODE_BRIEFCASE_TSC_CACHE_ROOT", str(cache_root))
     entry = cache_root / "proj" / "entry"
@@ -411,8 +425,8 @@ def test_prune_uses_size_bytes_from_meta_without_rescanning(tmp_path, monkeypatc
 
 
 def test_phase0_cache_hit_skips_prune_side_effect(
-    tmp_path, monkeypatch, make_executable
-):
+    tmp_path: Any, monkeypatch: Any, make_executable: Any
+) -> None:
     tsc_cache._TSC_VERSION_CACHE.clear()
     cache_root = tmp_path / "cache"
     monkeypatch.setenv("CODE_BRIEFCASE_TSC_CACHE_ROOT", str(cache_root))
@@ -434,11 +448,16 @@ def test_phase0_cache_hit_skips_prune_side_effect(
     first.cleanup()
 
     # Second call hits the existing entry; should NOT trigger prune.
-    prune_calls = []
+    prune_calls: list[tuple[tuple[Any, ...], dict[str, Any]]] = []
+
+    def fake_prune(*a: Any, **kw: Any) -> dict[str, Any]:
+        prune_calls.append((a, kw))
+        return {}
+
     monkeypatch.setattr(
         tsc_cache,
         "prune_tsc_cache",
-        lambda *a, **kw: prune_calls.append((a, kw)) or {},
+        fake_prune,
     )
     second = tsc_cache.prepare_phase0_single_file_tsconfig(
         tsconfig, source, tsc_path=str(tsc), allow_js=False

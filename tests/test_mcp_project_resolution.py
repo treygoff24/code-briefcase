@@ -1,3 +1,4 @@
+from typing import Any
 import os
 import sys
 
@@ -6,7 +7,7 @@ import pytest
 from code_briefcase import mcp_server
 
 
-def test_explicit_path_wins(tmp_path, monkeypatch):
+def test_explicit_path_wins(tmp_path: Any, monkeypatch: Any) -> None:
     other = tmp_path / "other"
     other.mkdir()
     monkeypatch.setenv("CODE_BRIEFCASE_PROJECT", str(other))
@@ -14,7 +15,7 @@ def test_explicit_path_wins(tmp_path, monkeypatch):
     assert mcp_server._resolve_project(str(tmp_path)) == str(tmp_path.resolve())
 
 
-def test_tldr_project_wins_over_pwd(tmp_path, monkeypatch):
+def test_tldr_project_wins_over_pwd(tmp_path: Any, monkeypatch: Any) -> None:
     project = tmp_path / "project"
     pwd = tmp_path / "pwd"
     project.mkdir()
@@ -25,23 +26,29 @@ def test_tldr_project_wins_over_pwd(tmp_path, monkeypatch):
     assert mcp_server._resolve_project("auto") == str(project.resolve())
 
 
-def test_missing_env_falls_back_to_cwd(tmp_path, monkeypatch):
-    for key in ("CODE_BRIEFCASE_PROJECT", "CLAUDE_PROJECT_DIR", "CODEX_PROJECT_DIR", "CODEX_CWD", "PWD"):
+def test_missing_env_falls_back_to_cwd(tmp_path: Any, monkeypatch: Any) -> None:
+    for key in (
+        "CODE_BRIEFCASE_PROJECT",
+        "CLAUDE_PROJECT_DIR",
+        "CODEX_PROJECT_DIR",
+        "CODEX_CWD",
+        "PWD",
+    ):
         monkeypatch.delenv(key, raising=False)
     monkeypatch.chdir(tmp_path)
 
     assert mcp_server._resolve_project("auto") == str(tmp_path.resolve())
 
 
-def test_nonexistent_explicit_path_raises(tmp_path):
+def test_nonexistent_explicit_path_raises(tmp_path: Any) -> None:
     with pytest.raises(FileNotFoundError):
         mcp_server._resolve_project(str(tmp_path / "missing"))
 
 
-def test_tool_functions_call_resolve_project(tmp_path, monkeypatch):
+def test_tool_functions_call_resolve_project(tmp_path: Any, monkeypatch: Any) -> None:
     calls = {}
 
-    def fake_send(project, command):
+    def fake_send(project: Any, command: Any) -> Any:
         calls["project"] = project
         calls["command"] = command
         return {"status": "ok"}
@@ -53,10 +60,14 @@ def test_tool_functions_call_resolve_project(tmp_path, monkeypatch):
     assert calls["project"] == str(tmp_path.resolve())
 
 
-def test_project_auto_does_not_set_tldr_project_to_auto(tmp_path, monkeypatch):
-    seen = {}
+def test_project_auto_does_not_set_tldr_project_to_auto(
+    tmp_path: Any, monkeypatch: Any
+) -> None:
+    seen: Any = {}
     monkeypatch.delenv("CODE_BRIEFCASE_PROJECT", raising=False)
-    monkeypatch.setattr(mcp_server.mcp, "run", lambda transport: seen.setdefault("ran", transport))
+    monkeypatch.setattr(
+        mcp_server.mcp, "run", lambda transport: seen.setdefault("ran", transport)
+    )
     monkeypatch.setattr(sys, "argv", ["code-briefcase-mcp", "--project", "auto"])
     monkeypatch.chdir(tmp_path)
 
@@ -66,20 +77,24 @@ def test_project_auto_does_not_set_tldr_project_to_auto(tmp_path, monkeypatch):
     assert seen["ran"] == "stdio"
 
 
-def test_explicit_nonexistent_project_raises_even_when_pwd_exists(tmp_path, monkeypatch):
+def test_explicit_nonexistent_project_raises_even_when_pwd_exists(
+    tmp_path: Any, monkeypatch: Any
+) -> None:
     monkeypatch.setenv("PWD", str(tmp_path))
 
     with pytest.raises(FileNotFoundError):
         mcp_server._resolve_project(str(tmp_path / "missing"))
 
 
-def test_relative_file_tool_args_resolve_against_project_root(tmp_path, monkeypatch):
+def test_relative_file_tool_args_resolve_against_project_root(
+    tmp_path: Any, monkeypatch: Any
+) -> None:
     (tmp_path / "src").mkdir()
     source = tmp_path / "src" / "app.py"
     source.write_text("def main():\n    return 1\n")
     calls = {}
 
-    def fake_send(project, command):
+    def fake_send(project: Any, command: Any) -> Any:
         calls["project"] = project
         calls["command"] = command
         return {"status": "ok"}

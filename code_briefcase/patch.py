@@ -44,6 +44,7 @@ class Edge:
         to_file: Target file path (relative to project root)
         to_func: Target function name
     """
+
     from_file: str
     from_func: str
     to_file: str
@@ -90,9 +91,7 @@ def has_file_changed(file_path: str, cached_hash: str) -> bool:
 
 
 def extract_edges_from_file(
-    file_path: str,
-    lang: str = "python",
-    project_root: Optional[str] = None
+    file_path: str, lang: str = "python", project_root: Optional[str] = None
 ) -> List[Edge]:
     """Extract call edges from a single source file.
 
@@ -140,30 +139,31 @@ def extract_edges_from_file(
         for call_type, call_target in calls:
             # Only include intra-file calls for now
             # Cross-file resolution requires the full function index
-            if call_type == 'intra':
-                edges.append(Edge(
-                    from_file=file_name,
-                    from_func=caller_func,
-                    to_file=file_name,
-                    to_func=call_target
-                ))
-            elif call_type == 'ref':
+            if call_type == "intra":
+                edges.append(
+                    Edge(
+                        from_file=file_name,
+                        from_func=caller_func,
+                        to_file=file_name,
+                        to_func=call_target,
+                    )
+                )
+            elif call_type == "ref":
                 # Function references (e.g., higher-order)
-                edges.append(Edge(
-                    from_file=file_name,
-                    from_func=caller_func,
-                    to_file=file_name,
-                    to_func=call_target
-                ))
+                edges.append(
+                    Edge(
+                        from_file=file_name,
+                        from_func=caller_func,
+                        to_file=file_name,
+                        to_func=call_target,
+                    )
+                )
 
     return edges
 
 
 def patch_call_graph(
-    graph: ProjectCallGraph,
-    edited_file: str,
-    project_root: str,
-    lang: str = "python"
+    graph: ProjectCallGraph, edited_file: str, project_root: str, lang: str = "python"
 ) -> ProjectCallGraph:
     """Incrementally update call graph for an edited file.
 
@@ -192,7 +192,7 @@ def patch_call_graph(
         rel_path = edited_path.name
 
     # Step 1: Remove all edges FROM the edited file
-    edges_to_remove = set()
+    edges_to_remove: set[tuple[str, str, str, str]] = set()
     for edge in graph.edges:
         src_file, src_func, dst_file, dst_func = edge
         if src_file == rel_path:
@@ -203,14 +203,17 @@ def patch_call_graph(
 
     # Step 2: Extract new edges from the edited file
     new_edges = extract_edges_from_file(
-        str(edited_file),
-        lang=lang,
-        project_root=project_root
+        str(edited_file), lang=lang, project_root=project_root
     )
 
     # Step 3: Add new edges to the graph
-    for edge in new_edges:
-        graph.add_edge(edge.from_file, edge.from_func, edge.to_file, edge.to_func)
+    for new_edge in new_edges:
+        graph.add_edge(
+            new_edge.from_file,
+            new_edge.from_func,
+            new_edge.to_file,
+            new_edge.to_func,
+        )
 
     return graph
 
@@ -225,13 +228,17 @@ def get_file_hash_cache(project_root: str) -> dict[str, str]:
         Dict mapping relative file paths to their SHA-1 hashes
     """
     import json
+
     cache_path = Path(project_root) / ".code-briefcase" / "cache" / "file_hashes.json"
 
     if not cache_path.exists():
         return {}
 
     try:
-        return json.loads(cache_path.read_text())
+        payload = json.loads(cache_path.read_text())
+        if not isinstance(payload, dict):
+            return {}
+        return {str(path): str(file_hash) for path, file_hash in payload.items()}
     except (json.JSONDecodeError, IOError):
         return {}
 
@@ -244,6 +251,7 @@ def save_file_hash_cache(project_root: str, cache: dict[str, str]) -> None:
         cache: Dict mapping relative file paths to their SHA-1 hashes
     """
     import json
+
     cache_path = Path(project_root) / ".code-briefcase" / "cache" / "file_hashes.json"
     cache_path.parent.mkdir(parents=True, exist_ok=True)
     cache_path.write_text(json.dumps(cache, indent=2))
@@ -253,7 +261,7 @@ def patch_dirty_files(
     graph: ProjectCallGraph,
     project_root: str,
     dirty_files: list[str],
-    lang: str = "python"
+    lang: str = "python",
 ) -> ProjectCallGraph:
     """Patch the graph for all dirty files.
 

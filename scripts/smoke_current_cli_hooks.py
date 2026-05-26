@@ -26,7 +26,9 @@ def file_fingerprint(path: Path) -> tuple[bool, str | None, int | None]:
     return True, hashlib.sha256(data).hexdigest(), path.stat().st_mtime_ns
 
 
-def run(args: list[str], *, input_json: dict[str, Any] | None = None) -> subprocess.CompletedProcess[str]:
+def run(
+    args: list[str], *, input_json: dict[str, Any] | None = None
+) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         args,
         cwd=ROOT,
@@ -39,7 +41,9 @@ def run(args: list[str], *, input_json: dict[str, Any] | None = None) -> subproc
 
 
 def tldr(args: list[str], *, input_json: dict[str, Any] | None = None) -> str:
-    return run([sys.executable, "-m", "code_briefcase.cli", *args], input_json=input_json).stdout
+    return run(
+        [sys.executable, "-m", "code_briefcase.cli", *args], input_json=input_json
+    ).stdout
 
 
 def project_daemon_pids(project: Path) -> list[int]:
@@ -65,7 +69,15 @@ def project_daemon_pids(project: Path) -> list[int]:
 def stop_project_daemon(project: Path) -> None:
     for _ in range(5):
         subprocess.run(
-            [sys.executable, "-m", "code_briefcase.cli", "daemon", "stop", "--project", str(project)],
+            [
+                sys.executable,
+                "-m",
+                "code_briefcase.cli",
+                "daemon",
+                "stop",
+                "--project",
+                str(project),
+            ],
             cwd=ROOT,
             capture_output=True,
             text=True,
@@ -96,7 +108,9 @@ def stop_project_daemon(project: Path) -> None:
         raise AssertionError(f"failed to clean up smoke daemon(s): {leftovers}")
 
 
-def assert_user_configs_unchanged(before: dict[Path, tuple[bool, str | None, int | None]]) -> None:
+def assert_user_configs_unchanged(
+    before: dict[Path, tuple[bool, str | None, int | None]],
+) -> None:
     after = {path: file_fingerprint(path) for path in before}
     if after != before:
         changed = [str(path) for path in before if before[path] != after[path]]
@@ -105,10 +119,18 @@ def assert_user_configs_unchanged(before: dict[Path, tuple[bool, str | None, int
 
 def main() -> int:
     user_configs = {
-        Path("~/.claude/settings.json").expanduser(): file_fingerprint(Path("~/.claude/settings.json")),
-        Path("~/.codex/hooks.json").expanduser(): file_fingerprint(Path("~/.codex/hooks.json")),
-        Path("~/.factory/settings.json").expanduser(): file_fingerprint(Path("~/.factory/settings.json")),
-        Path("~/.config/opencode/plugins/code-briefcase-hooks.js").expanduser(): file_fingerprint(
+        Path("~/.claude/settings.json").expanduser(): file_fingerprint(
+            Path("~/.claude/settings.json")
+        ),
+        Path("~/.codex/hooks.json").expanduser(): file_fingerprint(
+            Path("~/.codex/hooks.json")
+        ),
+        Path("~/.factory/settings.json").expanduser(): file_fingerprint(
+            Path("~/.factory/settings.json")
+        ),
+        Path(
+            "~/.config/opencode/plugins/code-briefcase-hooks.js"
+        ).expanduser(): file_fingerprint(
             Path("~/.config/opencode/plugins/code-briefcase-hooks.js")
         ),
     }
@@ -172,8 +194,14 @@ def main() -> int:
                 opencode_source = opencode_plugin.read_text()
                 assert "hooks run pre-read" in json.dumps(claude_config_payload)
                 assert "hooks run pre-read" not in json.dumps(codex_config_payload)
-                assert codex_config_payload["hooks"]["PreToolUse"][0]["matcher"] == "apply_patch|Edit|Write"
-                assert droid_config_payload["hooks"]["SessionStart"][0]["matcher"] == "startup|resume|clear|compact"
+                assert (
+                    codex_config_payload["hooks"]["PreToolUse"][0]["matcher"]
+                    == "apply_patch|Edit|Write"
+                )
+                assert (
+                    droid_config_payload["hooks"]["SessionStart"][0]["matcher"]
+                    == "startup|resume|clear|compact"
+                )
                 assert "UserPromptSubmit" in droid_config_payload["hooks"]
                 assert "PreCompact" in droid_config_payload["hooks"]
                 assert "export const TLDRHooks" in opencode_source
@@ -193,8 +221,14 @@ def main() -> int:
                         },
                     )
                 )
-                assert claude_pre_read["hookSpecificOutput"]["hookEventName"] == "PreToolUse"
-                assert claude_pre_read["hookSpecificOutput"]["permissionDecision"] == "allow"
+                assert (
+                    claude_pre_read["hookSpecificOutput"]["hookEventName"]
+                    == "PreToolUse"
+                )
+                assert (
+                    claude_pre_read["hookSpecificOutput"]["permissionDecision"]
+                    == "allow"
+                )
                 summary["claude_pre_read"] = "ok"
 
                 codex_session_start = json.loads(
@@ -207,7 +241,10 @@ def main() -> int:
                         },
                     )
                 )
-                assert codex_session_start["hookSpecificOutput"]["hookEventName"] == "SessionStart"
+                assert (
+                    codex_session_start["hookSpecificOutput"]["hookEventName"]
+                    == "SessionStart"
+                )
                 assert "additionalContext" in codex_session_start["hookSpecificOutput"]
                 assert "systemMessage" not in codex_session_start
                 summary["codex_session_start"] = "ok"
@@ -256,8 +293,14 @@ def main() -> int:
                         },
                     )
                 )
-                assert droid_permission_deny["hookSpecificOutput"]["hookEventName"] == "PreToolUse"
-                assert droid_permission_deny["hookSpecificOutput"]["permissionDecision"] == "deny"
+                assert (
+                    droid_permission_deny["hookSpecificOutput"]["hookEventName"]
+                    == "PreToolUse"
+                )
+                assert (
+                    droid_permission_deny["hookSpecificOutput"]["permissionDecision"]
+                    == "deny"
+                )
                 summary["droid_permission_guard"] = "ok"
 
                 opencode_session_start = json.loads(
@@ -269,7 +312,10 @@ def main() -> int:
                         },
                     )
                 )
-                assert opencode_session_start["hookSpecificOutput"]["hookEventName"] == "SessionStart"
+                assert (
+                    opencode_session_start["hookSpecificOutput"]["hookEventName"]
+                    == "SessionStart"
+                )
                 summary["opencode_adapter_json"] = "ok"
             finally:
                 stop_project_daemon(project)
