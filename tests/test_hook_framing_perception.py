@@ -71,8 +71,10 @@ class TestPreEditFraming:
             event_name="PreToolUse",
         )
         context = rendered["hookSpecificOutput"]["additionalContext"]
-        assert "BEFORE your pending edit lands" in context
-        assert "NOT blocked" in context or "Proceed normally" in context
+        assert "[Code Briefcase pre-edit context:" in context
+        assert "Pre-existing file structure:" in context
+        assert "BEFORE your pending edit lands" not in context
+        assert "Pre-edit snapshot only" not in context
 
 
 class TestPostEditFraming:
@@ -104,8 +106,7 @@ class TestPostEditFraming:
             client="claude",
             event_name="PostToolUse",
         )
-        context = rendered["hookSpecificOutput"]["additionalContext"]
-        assert "no diagnostics were surfaced" in context
+        assert rendered == {}
 
 
 class TestNonCodeFileEditFraming:

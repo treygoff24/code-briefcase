@@ -16,8 +16,11 @@ from code_briefcase.hooks.path_policy import (
     format_related_files_section,
 )
 from code_briefcase.hooks.runtime import HookEvent
+from code_briefcase.hooks.signature_render import render_signature
 
-TARGETED_READ_STATE_FILE = ".code-briefcase/cache/targeted-read-context.json"
+NAV_CONTEXT_STATE_FILE = ".code-briefcase/cache/nav-context.json"
+LEGACY_TARGETED_READ_STATE_FILE = ".code-briefcase/cache/targeted-read-context.json"
+TARGETED_READ_STATE_FILE = LEGACY_TARGETED_READ_STATE_FILE
 MIN_CONTEXT_FILE_BYTES = 1500
 TARGETED_READ_MIN_BYTES = MIN_CONTEXT_FILE_BYTES
 TARGETED_READ_BUDGET = 500
@@ -34,6 +37,16 @@ def should_bypass_read(file_path: Path, tool_input: dict[str, Any]) -> bool:
     except OSError:
         return True
     return False
+
+
+def _render_symbol_signature(
+    file_path: Path,
+    item: dict[str, Any],
+    *,
+    is_method: bool = False,
+) -> str:
+    raw = str(item.get("signature") or item.get("name") or "")
+    return render_signature(raw, file_path, is_method=is_method)
 
 
 def format_nav_map(file_path: Path, info: dict[str, Any], budget: int = 1200) -> str:
@@ -57,7 +70,7 @@ def format_nav_map(file_path: Path, info: dict[str, Any], budget: int = 1200) ->
         lines.append("Functions:")
         for func in functions[:20]:
             doc = (func.get("docstring") or "").split("\n")[0][:100]
-            signature = func.get("signature") or func.get("name")
+            signature = _render_symbol_signature(file_path, func)
             lines.append(f"- {signature} [L{func.get('line_number', '?')}]")
             if doc:
                 lines.append(f"  # {doc}")
@@ -70,11 +83,12 @@ def format_nav_map(file_path: Path, info: dict[str, Any], budget: int = 1200) ->
         lines.append("Classes:")
         for cls in classes[:12]:
             lines.append(
-                f"- {cls.get('signature') or cls.get('name')} [L{cls.get('line_number', '?')}]"
+                f"- {_render_symbol_signature(file_path, cls)} "
+                f"[L{cls.get('line_number', '?')}]"
             )
             for method in (cls.get("methods") or [])[:8]:
                 lines.append(
-                    f"  - {method.get('signature') or method.get('name')} "
+                    f"  - {_render_symbol_signature(file_path, method, is_method=True)} "
                     f"[L{method.get('line_number', '?')}]"
                 )
         lines.append("")
@@ -199,40 +213,92 @@ def _target_line(tool_input: dict[str, Any] | None) -> int | None:
     return None
 
 
-def _targeted_state_path(project: Path) -> Path:
-    return project / TARGETED_READ_STATE_FILE
+def _nav_state_path(project: Path) -> Path:
+    return project / NAV_CONTEXT_STATE_FILE
+
+
+def _legacy_targeted_state_path(project: Path) -> Path:
+    return project / LEGACY_TARGETED_READ_STATE_FILE
+
+
+def _file_mtime(path: Path) -> float:
+    try:
+        return path.stat().st_mtime
+    except OSError:
+        return 0.0
 
 
 def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
-def _load_targeted_state(project: Path) -> dict[str, Any]:
-    path = _targeted_state_path(project)
+def _empty_nav_state() -> dict[str, Any]:
+    return {"schema_version": 2, "sessions": {}}
+
+
+def _migrate_legacy_targeted_state(
+    project: Path, data: dict[str, Any]
+) -> dict[str, Any]:
+    migrated = _empty_nav_state()
+    sessions = data.get("sessions")
+    if not isinstance(sessions, dict):
+        return migrated
+    new_sessions = migrated["sessions"]
+    assert isinstance(new_sessions, dict)
+    for session_id, session in sessions.items():
+        if not isinstance(session, dict):
+            continue
+        files = session.get("files")
+        if not isinstance(files, dict):
+            continue
+        file_entries: dict[str, Any] = {}
+        for rel, _surfaced_at in files.items():
+            path = project / rel
+            file_entries[rel] = {
+                "mtime": _file_mtime(path),
+                "kinds": {"targeted_read_orientation": True},
+            }
+        new_sessions[session_id] = {
+            "updated_at": session.get("updated_at", _now_iso()),
+            "files": file_entries,
+        }
+    return migrated
+
+
+def _load_nav_state(project: Path) -> dict[str, Any]:
+    path = _nav_state_path(project)
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
-        return {"schema_version": 1, "sessions": {}}
+        legacy_path = _legacy_targeted_state_path(project)
+        try:
+            legacy = json.loads(legacy_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return _empty_nav_state()
+        if isinstance(legacy, dict):
+            return _migrate_legacy_targeted_state(project, legacy)
+        return _empty_nav_state()
     if not isinstance(data, dict):
-        return {"schema_version": 1, "sessions": {}}
+        return _empty_nav_state()
     sessions = data.get("sessions")
     if not isinstance(sessions, dict):
         data["sessions"] = {}
     return data
 
 
-def _write_targeted_state(project: Path, data: dict[str, Any]) -> None:
-    path = _targeted_state_path(project)
-    try:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        tmp = path.with_suffix(path.suffix + ".tmp")
-        tmp.write_text(json.dumps(data, separators=(",", ":")), encoding="utf-8")
-        tmp.replace(path)
-    except OSError:
-        return
+def _write_nav_state(project: Path, data: dict[str, Any]) -> None:
+    for relative_name in (NAV_CONTEXT_STATE_FILE, LEGACY_TARGETED_READ_STATE_FILE):
+        path = project / relative_name
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            tmp = path.with_suffix(path.suffix + ".tmp")
+            tmp.write_text(json.dumps(data, separators=(",", ":")), encoding="utf-8")
+            tmp.replace(path)
+        except OSError:
+            return
 
 
-def _prune_targeted_state(data: dict[str, Any]) -> None:
+def _prune_nav_state(data: dict[str, Any]) -> None:
     sessions = data.get("sessions")
     if not isinstance(sessions, dict):
         data["sessions"] = {}
@@ -262,15 +328,15 @@ def _prune_targeted_state(data: dict[str, Any]) -> None:
         session["files"] = dict(ordered_files[:TARGETED_READ_MAX_FILES_PER_SESSION])
 
 
-def targeted_read_recently_surfaced(event: HookEvent, path: Path) -> bool:
-    """Return True when this session already received targeted context for path."""
+def nav_context_recently_surfaced(event: HookEvent, path: Path, kind: str) -> bool:
+    """Return True when this session already surfaced kind for path at current mtime."""
     if not event.session_id:
         return False
     rel = event_relative_path(event, path)
     if rel is None:
         return False
 
-    data = _load_targeted_state(event.cwd)
+    data = _load_nav_state(event.cwd)
     sessions = data.get("sessions")
     if not isinstance(sessions, dict):
         return False
@@ -278,18 +344,26 @@ def targeted_read_recently_surfaced(event: HookEvent, path: Path) -> bool:
     if not isinstance(session, dict):
         return False
     files = session.get("files")
-    return isinstance(files, dict) and rel in files
+    if not isinstance(files, dict):
+        return False
+    entry = files.get(rel)
+    if not isinstance(entry, dict):
+        return False
+    if entry.get("mtime") != _file_mtime(path):
+        return False
+    kinds = entry.get("kinds")
+    return isinstance(kinds, dict) and kind in kinds
 
 
-def mark_targeted_read_surfaced(event: HookEvent, path: Path) -> None:
-    """Remember that targeted context was actually emitted for a session/file."""
+def mark_nav_context_surfaced(event: HookEvent, path: Path, kind: str) -> None:
+    """Remember that nav context kind was emitted for a session/file at this mtime."""
     if not event.session_id:
         return
     rel = event_relative_path(event, path)
     if rel is None:
         return
 
-    data = _load_targeted_state(event.cwd)
+    data = _load_nav_state(event.cwd)
     sessions = data.setdefault("sessions", {})
     if not isinstance(sessions, dict):
         return
@@ -304,11 +378,27 @@ def mark_targeted_read_surfaced(event: HookEvent, path: Path) -> None:
         files = {}
         session["files"] = files
 
-    now = _now_iso()
-    session["updated_at"] = now
-    files[rel] = now
-    _prune_targeted_state(data)
-    _write_targeted_state(event.cwd, data)
+    entry = files.get(rel)
+    if not isinstance(entry, dict) or entry.get("mtime") != _file_mtime(path):
+        entry = {"mtime": _file_mtime(path), "kinds": {}}
+        files[rel] = entry
+    kinds = entry.setdefault("kinds", {})
+    if isinstance(kinds, dict):
+        kinds[kind] = True
+
+    session["updated_at"] = _now_iso()
+    _prune_nav_state(data)
+    _write_nav_state(event.cwd, data)
+
+
+def targeted_read_recently_surfaced(event: HookEvent, path: Path) -> bool:
+    """Return True when this session already received targeted context for path."""
+    return nav_context_recently_surfaced(event, path, "targeted_read_orientation")
+
+
+def mark_targeted_read_surfaced(event: HookEvent, path: Path) -> None:
+    """Remember that targeted context was actually emitted for a session/file."""
+    mark_nav_context_surfaced(event, path, "targeted_read_orientation")
 
 
 def _targeted_read_file_size_ok(path: Path) -> bool:
@@ -440,23 +530,23 @@ def format_config_summary(path: Path, text: str, budget: int) -> str:
 def _format_edit_structure(file_path: Path, info: dict[str, Any], budget: int) -> str:
     lines = [
         f"[Code Briefcase pre-edit context: {file_path.name}]",
-        "(Showing the file as it exists BEFORE your pending edit lands. "
-        "This hook is informational — your tool call is NOT blocked, "
-        "modified, or reverted. Proceed normally.)",
         "",
         "Pre-existing file structure:",
     ]
     for func in (info.get("functions") or [])[:30]:
         lines.append(
-            f"- {func.get('signature') or func.get('name')} [L{func.get('line_number', '?')}]"
+            f"- {_render_symbol_signature(file_path, func)} "
+            f"[L{func.get('line_number', '?')}]"
         )
     for cls in (info.get("classes") or [])[:15]:
         lines.append(
-            f"- {cls.get('signature') or cls.get('name')} [L{cls.get('line_number', '?')}]"
+            f"- {_render_symbol_signature(file_path, cls)} "
+            f"[L{cls.get('line_number', '?')}]"
         )
         for method in (cls.get("methods") or [])[:8]:
             lines.append(
-                f"  - {method.get('signature') or method.get('name')} [L{method.get('line_number', '?')}]"
+                f"  - {_render_symbol_signature(file_path, method, is_method=True)} "
+                f"[L{method.get('line_number', '?')}]"
             )
     imports = info.get("imports") or []
     if imports:
@@ -466,15 +556,6 @@ def _format_edit_structure(file_path: Path, info: dict[str, Any], budget: int) -
             suffix = f": {', '.join(names)}" if names else ""
             prefix = "from " if imp.get("is_from") else ""
             lines.append(f"- {prefix}{imp.get('module', '')}{suffix}")
-    lines.extend(
-        [
-            "",
-            "Pre-edit snapshot only — your edit will apply normally.",
-            "- preserve signatures unless the task requires an API change",
-            "- after the tool completes, Code Briefcase will confirm the edit "
-            "and surface any diagnostics",
-        ]
-    )
     text = "\n".join(lines)
     max_chars = max(200, budget * 4)
     if len(text) > max_chars:
@@ -546,6 +627,43 @@ def build_file_context_for_path(
                 surfaced_files=[],
                 candidate_files=[],
             )
+        read_nav_kind = "read_nav_map"
+        edit_nav_kind = "edit_structure"
+        if mode == "read" and not targeted_read:
+            if nav_context_recently_surfaced(event, path, read_nav_kind):
+                return FileContextResult(
+                    status="skipped",
+                    reason="read_nav_map_recently_surfaced",
+                    context=None,
+                    context_kind=None,
+                    trigger_files=trigger,
+                    recommended_files=[],
+                    surfaced_files=[],
+                    candidate_files=[],
+                )
+        if mode == "edit":
+            if nav_context_recently_surfaced(event, path, edit_nav_kind):
+                return FileContextResult(
+                    status="skipped",
+                    reason="edit_structure_recently_surfaced",
+                    context=None,
+                    context_kind=None,
+                    trigger_files=trigger,
+                    recommended_files=[],
+                    surfaced_files=[],
+                    candidate_files=[],
+                )
+            if nav_context_recently_surfaced(event, path, read_nav_kind):
+                return FileContextResult(
+                    status="skipped",
+                    reason="read_nav_map_recently_surfaced",
+                    context=None,
+                    context_kind=None,
+                    trigger_files=trigger,
+                    recommended_files=[],
+                    surfaced_files=[],
+                    candidate_files=[],
+                )
         if (
             mode == "read"
             and tool_input is not None
@@ -602,11 +720,13 @@ def build_file_context_for_path(
         if mode == "read":
             context = format_nav_map(path, info, budget=budget)
             context += format_related_files_section(surfaced_files)
-            context_kind = "read_nav_map"
+            context_kind = read_nav_kind
+            mark_nav_context_surfaced(event, path, read_nav_kind)
         else:
             context = _format_edit_structure(path, info, budget)
             context += format_related_files_section(surfaced_files)
-            context_kind = "edit_structure"
+            context_kind = edit_nav_kind
+            mark_nav_context_surfaced(event, path, edit_nav_kind)
         return FileContextResult(
             status="ok",
             reason=None,

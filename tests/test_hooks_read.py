@@ -225,3 +225,22 @@ def test_existing_large_external_path_skips_without_extracting(tmp_path: Any) ->
     assert response.status == "skipped"
     assert response.additional_context is None
     assert response.trigger_files == []
+
+
+def test_repeated_full_read_same_session_is_throttled(tmp_path: Any) -> None:
+    source = tmp_path / "app.py"
+    source.write_text(
+        "import os\n\n"
+        "def helper(value: int) -> int:\n"
+        "    return value + 1\n\n"
+        "def main() -> int:\n"
+        "    return helper(1)\n" + "\n".join(f"VALUE_{i} = {i}" for i in range(300))
+    )
+
+    first = build_read_response(_event(tmp_path, "app.py", session_id="s1"))
+    second = build_read_response(_event(tmp_path, "app.py", session_id="s1"))
+
+    assert first.status == "ok"
+    assert "Functions:" in (first.additional_context or "")
+    assert second.status == "skipped"
+    assert second.noop_reason == "read_nav_map_recently_surfaced"

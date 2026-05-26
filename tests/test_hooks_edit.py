@@ -1,18 +1,26 @@
 from typing import Any
+
 from code_briefcase.hooks.edit import build_pre_edit_response
+from code_briefcase.hooks.read import build_read_response
 from code_briefcase.hooks.runtime import parse_hook_event
 
 
-def _event(tmp_path: Any, tool_name: Any, file_name: Any) -> Any:
-    return parse_hook_event(
-        {
-            "hook_event_name": "PreToolUse",
-            "tool_name": tool_name,
-            "tool_input": {"file_path": file_name},
-            "cwd": str(tmp_path),
-        },
-        client="claude",
-    )
+def _event(
+    tmp_path: Any,
+    tool_name: Any,
+    file_name: Any,
+    *,
+    session_id: str | None = None,
+) -> Any:
+    payload = {
+        "hook_event_name": "PreToolUse",
+        "tool_name": tool_name,
+        "tool_input": {"file_path": file_name},
+        "cwd": str(tmp_path),
+    }
+    if session_id:
+        payload["session_id"] = session_id
+    return parse_hook_event(payload, client="claude")
 
 
 def test_edit_event_on_code_file_returns_structure(tmp_path: Any) -> None:
@@ -28,7 +36,7 @@ def test_edit_event_on_code_file_returns_structure(tmp_path: Any) -> None:
 
     assert "login" in (response.additional_context or "")
     assert "AuthError" in (response.additional_context or "")
-    assert "BEFORE your pending edit lands" in (response.additional_context or "")
+    assert "[Code Briefcase pre-edit context:" in (response.additional_context or "")
 
 
 def test_write_new_file_noops_without_crashing(tmp_path: Any) -> None:
@@ -150,3 +158,69 @@ def test_likely_symbol_does_not_claim_deleted_symbol_will_reappear(
     assert "will appear in the file structure above after this edit applies" not in (
         response.additional_context or ""
     )
+
+
+def test_pre_edit_after_pre_read_same_session_is_throttled(tmp_path: Any) -> None:
+    source = tmp_path / "app.py"
+    source.write_text(
+        "import os\n\n"
+        "def helper(value: int) -> int:\n"
+        "    return value + 1\n\n"
+        "def main() -> int:\n"
+        "    return helper(1)\n" + "\n".join(f"VALUE_{i} = {i}" for i in range(300))
+    )
+
+    read_event = parse_hook_event(
+        {
+            "hook_event_name": "PreToolUse",
+            "tool_name": "Read",
+            "tool_input": {"file_path": "app.py"},
+            "cwd": str(tmp_path),
+            "session_id": "s1",
+        },
+        client="claude",
+    )
+    read_result = build_read_response(read_event)
+    edit_result = build_pre_edit_response(
+        _event(tmp_path, "Edit", "app.py", session_id="s1")
+    )
+
+    assert read_result.status == "ok"
+    assert edit_result.status == "skipped"
+    assert edit_result.noop_reason == "read_nav_map_recently_surfaced"
+
+
+def test_pre_edit_resurfaces_after_file_mtime_changes(tmp_path: Any) -> None:
+    source = tmp_path / "app.py"
+    source.write_text(
+        "def helper(value: int) -> int:\n"
+        "    return value + 1\n" + "\n".join(f"VALUE_{i} = {i}" for i in range(300))
+    )
+
+    read_event = parse_hook_event(
+        {
+            "hook_event_name": "PreToolUse",
+            "tool_name": "Read",
+            "tool_input": {"file_path": "app.py"},
+            "cwd": str(tmp_path),
+            "session_id": "s1",
+        },
+        client="claude",
+    )
+    assert build_read_response(read_event).status == "ok"
+    assert (
+        build_pre_edit_response(
+            _event(tmp_path, "Edit", "app.py", session_id="s1")
+        ).noop_reason
+        == "read_nav_map_recently_surfaced"
+    )
+
+    source.write_text(
+        source.read_text(encoding="utf-8") + "\ndef added() -> int:\n    return 0\n",
+        encoding="utf-8",
+    )
+    edit_after_touch = build_pre_edit_response(
+        _event(tmp_path, "Edit", "app.py", session_id="s1")
+    )
+    assert edit_after_touch.status == "ok"
+    assert "added" in (edit_after_touch.additional_context or "")
