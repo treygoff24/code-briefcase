@@ -1015,9 +1015,15 @@ Semantic Search:
         elif args.command == "structure":
             ignore_spec = get_ignore_spec(args.path)
             project_path = Path(args.path).resolve()
+            path_is_file = project_path.is_file()
 
             # Determine language(s) to analyze
-            if args.lang == "auto":
+            if args.lang == "auto" and path_is_file:
+                from .diagnostics import _detect_language
+
+                detected = _detect_language(str(project_path))
+                languages = [detected] if detected else ["python"]
+            elif args.lang == "auto":
                 # Use cached languages, or detect if no cache
                 cached = get_cached_languages(project_path)
                 if cached:
