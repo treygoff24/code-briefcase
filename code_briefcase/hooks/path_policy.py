@@ -203,10 +203,20 @@ def resolve_event_path(event: HookEvent, value: str | None) -> Path | None:
     return path.resolve()
 
 
-def _resolve_import_module(event: HookEvent, source: Path, module: str) -> Path | None:
-    module = (module or "").strip()
-    if not module or module.startswith(("http:", "https:")):
-        return None
+_TS_JS_SUFFIXES = (".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs")
+_TS_JS_SOURCE_SUFFIXES = {suffix for suffix in _TS_JS_SUFFIXES}
+_MAX_IMPORT_MODULE_LEN = 256
+
+
+def _candidate_allowed(event: HookEvent, candidate: Path) -> bool:
+    return candidate.exists() and not should_exclude_context_path(
+        event.cwd, candidate, include_tests=True
+    )
+
+
+def _resolve_import_module_python(
+    event: HookEvent, source: Path, module: str
+) -> Path | None:
     if module.startswith("."):
         base = source.parent
         parts = [part for part in module.split(".") if part]
@@ -215,18 +225,69 @@ def _resolve_import_module(event: HookEvent, source: Path, module: str) -> Path 
                 base = base / part
         candidates = [base.with_suffix(".py"), base / "__init__.py"]
         for candidate in candidates:
-            if candidate.exists() and not should_exclude_context_path(
-                event.cwd, candidate, include_tests=True
-            ):
+            if _candidate_allowed(event, candidate):
                 return candidate
         return None
     stem = module.split(".")[-1]
     same_dir = source.parent / f"{stem}.py"
-    if same_dir.exists() and not should_exclude_context_path(
-        event.cwd, same_dir, include_tests=True
-    ):
+    if _candidate_allowed(event, same_dir):
         return same_dir
     return None
+
+
+def _ts_js_import_candidates(base: Path) -> list[Path]:
+    resolved = base.resolve()
+    suffix = resolved.suffix.lower()
+    candidates: list[Path] = []
+    if suffix in _TS_JS_SOURCE_SUFFIXES:
+        candidates.append(resolved)
+        return candidates
+    for ext in _TS_JS_SUFFIXES:
+        candidates.append(Path(f"{resolved}{ext}"))
+    for ext in _TS_JS_SUFFIXES:
+        candidates.append(resolved / f"index{ext}")
+    return candidates
+
+
+def _resolve_import_module_ts_js(
+    event: HookEvent, source: Path, module: str
+) -> Path | None:
+    if not module.startswith(("./", "../")):
+        return None
+    base = (source.parent / module).resolve()
+    for candidate in _ts_js_import_candidates(base):
+        if _candidate_allowed(event, candidate):
+            return candidate
+    return None
+
+
+def _resolve_import_module_other(
+    event: HookEvent, source: Path, module: str
+) -> Path | None:
+    if module.startswith((".", "/")) or "/" in module:
+        return None
+    ext = source.suffix.lower()
+    if not ext:
+        return None
+    candidate = source.parent / f"{module}{ext}"
+    if _candidate_allowed(event, candidate):
+        return candidate
+    return None
+
+
+def _resolve_import_module(event: HookEvent, source: Path, module: str) -> Path | None:
+    module = (module or "").strip()
+    if not module or module.startswith(("http:", "https:")):
+        return None
+    if len(module) > _MAX_IMPORT_MODULE_LEN:
+        return None
+
+    suffix = source.suffix.lower()
+    if suffix == ".py":
+        return _resolve_import_module_python(event, source, module)
+    if suffix in _TS_JS_SOURCE_SUFFIXES:
+        return _resolve_import_module_ts_js(event, source, module)
+    return _resolve_import_module_other(event, source, module)
 
 
 def _relative_import_name_modules(module: str, names: Any) -> list[str]:
@@ -246,11 +307,23 @@ def _relative_import_name_modules(module: str, names: Any) -> list[str]:
 def _test_neighbor(source: Path) -> Path | None:
     stem = source.stem
     parent = source.parent
-    for candidate in (
-        parent / f"test_{stem}.py",
-        parent / f"{stem}_test.py",
-        parent.parent / "tests" / f"test_{stem}.py",
-    ):
+    suffix = source.suffix.lower()
+    if suffix in _TS_JS_SOURCE_SUFFIXES:
+        candidates = [
+            parent / f"{stem}.test.ts",
+            parent / f"{stem}.test.tsx",
+            parent / f"{stem}.spec.ts",
+            parent / f"{stem}.spec.tsx",
+            parent / "__tests__" / f"{stem}.test.ts",
+            parent / "__tests__" / f"{stem}.test.tsx",
+        ]
+    else:
+        candidates = [
+            parent / f"test_{stem}.py",
+            parent / f"{stem}_test.py",
+            parent.parent / "tests" / f"test_{stem}.py",
+        ]
+    for candidate in candidates:
         if candidate.exists():
             return candidate
     return None

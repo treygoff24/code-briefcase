@@ -568,20 +568,9 @@ class HybridExtractor:
 
             # Imports
             if node_type == "import_statement":
-                text = self._safe_decode(
-                    source[child.start_byte : child.end_byte]
-                ).rstrip(";")
-                # Strip "import " prefix since statement() will add it back
-                if text.startswith("import "):
-                    text = text[7:]
-                module_info.imports.append(
-                    ImportInfo(
-                        module=text,
-                        names=[],
-                        is_from=False,
-                        line_number=child.start_point[0] + 1,
-                    )
-                )
+                parsed = self._parse_ts_import_statement(child, source)
+                if parsed is not None:
+                    module_info.imports.append(parsed)
                 prev_comment = None
 
             # Functions (including CommonJS function_expression: exports.foo = function() {})
@@ -763,6 +752,69 @@ class HybridExtractor:
                     if c.type == "property_identifier":
                         return self._safe_decode(source[c.start_byte : c.end_byte])
         return None
+
+    def _parse_ts_import_statement(self, node: Any, source: bytes) -> ImportInfo | None:
+        """Parse a tree-sitter import_statement into ImportInfo."""
+        module: str | None = None
+        names: list[str] = []
+        has_import_clause = False
+
+        for child in node.children:
+            if child.type == "string":
+                module = self._safe_decode(
+                    source[child.start_byte : child.end_byte]
+                ).strip("'\"")
+            elif child.type == "import_clause":
+                has_import_clause = True
+                for clause_child in child.children:
+                    if clause_child.type == "identifier":
+                        names.append(
+                            self._safe_decode(
+                                source[clause_child.start_byte : clause_child.end_byte]
+                            )
+                        )
+                    elif clause_child.type == "namespace_import":
+                        for ns_child in clause_child.children:
+                            if ns_child.type == "identifier":
+                                alias = self._safe_decode(
+                                    source[ns_child.start_byte : ns_child.end_byte]
+                                )
+                                names.append(f"* as {alias}")
+                                break
+                    elif clause_child.type == "named_imports":
+                        for named in clause_child.children:
+                            if named.type != "import_specifier":
+                                continue
+                            spec_name = self._ts_import_specifier_name(named, source)
+                            if spec_name:
+                                names.append(spec_name)
+
+        if module is None:
+            return None
+
+        is_from = has_import_clause
+        if not has_import_clause:
+            names = []
+
+        return ImportInfo(
+            module=module,
+            names=names,
+            is_from=is_from,
+            line_number=node.start_point[0] + 1,
+        )
+
+    def _ts_import_specifier_name(self, node: Any, source: bytes) -> str | None:
+        identifiers: list[str] = []
+        for child in node.children:
+            if child.type == "identifier":
+                identifiers.append(
+                    self._safe_decode(source[child.start_byte : child.end_byte])
+                )
+        if not identifiers:
+            return None
+        if len(identifiers) == 1:
+            return identifiers[0]
+        return identifiers[-1]
 
     def _parse_jsdoc(self, comment: str) -> str:
         """Parse JSDoc comment into clean docstring."""
