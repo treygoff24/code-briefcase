@@ -253,21 +253,15 @@ def _post_edit_verbose_enabled() -> bool:
     legacy = os.environ.get(LEGACY_POST_EDIT_CLEAN_CONFIRM_ENV)
     if legacy is None:
         return False
-    if legacy.strip().lower() in FALSE_VALUES:
-        logger.warning(
-            "%s is deprecated; use %s=1 for clean-edit confirmation",
-            LEGACY_POST_EDIT_CLEAN_CONFIRM_ENV,
-            POST_EDIT_VERBOSE_ENV,
-        )
+    legacy_value = legacy.strip().lower()
+    if legacy_value not in TRUE_VALUES and legacy_value not in FALSE_VALUES:
         return False
-    if legacy.strip().lower() in TRUE_VALUES:
-        logger.warning(
-            "%s is deprecated; use %s=1 for clean-edit confirmation",
-            LEGACY_POST_EDIT_CLEAN_CONFIRM_ENV,
-            POST_EDIT_VERBOSE_ENV,
-        )
-        return True
-    return False
+    logger.warning(
+        "%s is deprecated; use %s=1 for clean-edit confirmation",
+        LEGACY_POST_EDIT_CLEAN_CONFIRM_ENV,
+        POST_EDIT_VERBOSE_ENV,
+    )
+    return legacy_value in TRUE_VALUES
 
 
 def _watch_diagnostics_enabled() -> bool:
