@@ -62,6 +62,28 @@ def test_clean_diagnostics_emits_confirmation(tmp_path: Any, monkeypatch: Any) -
     response = build_post_edit_response(
         _event(tmp_path, {"toolInput": {"file_path": "app.py"}})
     )
+    assert response.status == "noop"
+    assert response.noop_reason == "clean_no_diagnostics"
+    assert response.additional_context is None
+
+
+def test_clean_diagnostics_verbose_confirmation(
+    tmp_path: Any, monkeypatch: Any
+) -> None:
+    source = tmp_path / "app.py"
+    source.write_text("def main():\n    return 1\n")
+    monkeypatch.setenv("CODE_BRIEFCASE_POST_EDIT_VERBOSE", "1")
+    monkeypatch.setattr(
+        "code_briefcase.hooks.post_edit.get_diagnostics",
+        lambda *a, **k: {"diagnostics": [], "error_count": 0, "warning_count": 0},
+    )
+    monkeypatch.setattr(
+        "code_briefcase.hooks.post_edit.notify_daemon", lambda *a, **k: None
+    )
+
+    response = build_post_edit_response(
+        _event(tmp_path, {"toolInput": {"file_path": "app.py"}})
+    )
     assert response.status == "ok"
     assert response.noop_reason == "clean_no_diagnostics"
     assert "no diagnostics were surfaced" in (response.additional_context or "")
@@ -214,7 +236,7 @@ def test_test_file_post_edit_is_eligible(tmp_path: Any, monkeypatch: Any) -> Non
         _event(tmp_path, {"toolInput": {"file_path": "tests/test_app.py"}})
     )
 
-    assert response.status == "ok"
+    assert response.status == "noop"
     assert response.noop_reason == "clean_no_diagnostics"
 
 
@@ -253,7 +275,7 @@ def test_codex_tool_response_filepath_finds_file(
         _event(tmp_path, {"tool_response": {"filePath": "app.py"}})
     )
     assert response.noop_reason == "clean_no_diagnostics"
-    assert response.status == "ok"
+    assert response.status == "noop"
 
 
 def test_codex_toolresponse_filepath_finds_file(
@@ -510,7 +532,7 @@ def test_codex_apply_patch_keeps_missing_paths_when_other_paths_exist(
     assert [path.name for path in extract_edited_files(event)] == ["a.py", "b.py"]
 
 
-def test_clean_confirmation_can_be_disabled_via_env(
+def test_clean_confirmation_is_silent_by_default(
     tmp_path: Any, monkeypatch: Any
 ) -> None:
     source = tmp_path / "app.py"
@@ -522,7 +544,8 @@ def test_clean_confirmation_can_be_disabled_via_env(
     monkeypatch.setattr(
         "code_briefcase.hooks.post_edit.notify_daemon", lambda *a, **k: None
     )
-    monkeypatch.setenv("CODE_BRIEFCASE_POST_EDIT_CLEAN_CONFIRM", "0")
+    monkeypatch.delenv("CODE_BRIEFCASE_POST_EDIT_VERBOSE", raising=False)
+    monkeypatch.delenv("CODE_BRIEFCASE_POST_EDIT_CLEAN_CONFIRM", raising=False)
 
     response = build_post_edit_response(
         _event(tmp_path, {"toolInput": {"file_path": "app.py"}})
@@ -530,7 +553,7 @@ def test_clean_confirmation_can_be_disabled_via_env(
 
     assert response.status == "noop"
     assert response.noop_reason == "clean_no_diagnostics"
-    assert response.additional_context is None or response.additional_context == ""
+    assert response.additional_context is None
 
 
 def test_clean_confirmation_lists_multiple_files(
@@ -545,6 +568,7 @@ def test_clean_confirmation_lists_multiple_files(
     monkeypatch.setattr(
         "code_briefcase.hooks.post_edit.notify_daemon", lambda *a, **k: None
     )
+    monkeypatch.setenv("CODE_BRIEFCASE_POST_EDIT_VERBOSE", "1")
 
     response = build_post_edit_response(
         _event(

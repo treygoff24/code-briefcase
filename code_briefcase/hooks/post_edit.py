@@ -32,6 +32,8 @@ TRUE_VALUES = {"1", "true", "yes", "on", "enabled", "enable", "y", "t"}
 FALSE_VALUES = {"0", "false", "no", "off", "disabled", "disable", "n", "f", ""}
 WATCH_ENV = "CODE_BRIEFCASE_WATCH_DIAGNOSTICS"
 LEGACY_WATCH_ENV = "TLDR_WATCH_DIAGNOSTICS"
+POST_EDIT_VERBOSE_ENV = "CODE_BRIEFCASE_POST_EDIT_VERBOSE"
+LEGACY_POST_EDIT_CLEAN_CONFIRM_ENV = "CODE_BRIEFCASE_POST_EDIT_CLEAN_CONFIRM"
 WATCH_BUDGET_ENV = "CODE_BRIEFCASE_WATCH_DIAGNOSTICS_BUDGET_MS"
 WATCH_FALLBACK_STATUSES = {"fallback_required", "unhealthy"}
 WATCH_USED_STATUSES = {"fresh", "stale", "pending"}
@@ -202,7 +204,18 @@ def build_post_edit_response(event: HookEvent) -> HookExecutionResult:
     watch_summary = _summarize_watch_infos(watch_enabled, watch_infos)
     watcher_section = _format_watcher_notices(watcher_notices)
     if not messages:
-        if os.environ.get("CODE_BRIEFCASE_POST_EDIT_CLEAN_CONFIRM") == "0":
+        if not _post_edit_verbose_enabled():
+            if watcher_section:
+                return ok(
+                    HookResponse(
+                        message=watcher_section,
+                        additional_context=watcher_section,
+                        suppress_output=False,
+                    ),
+                    trigger_files=trigger,
+                    noop_reason="clean_no_diagnostics",
+                    **watch_summary,
+                )
             return noop(
                 reason="clean_no_diagnostics", trigger_files=trigger, **watch_summary
             )
@@ -231,6 +244,30 @@ def build_post_edit_response(event: HookEvent) -> HookExecutionResult:
         diagnostics_count=diagnostics_count,
         **watch_summary,
     )
+
+
+def _post_edit_verbose_enabled() -> bool:
+    raw = os.environ.get(POST_EDIT_VERBOSE_ENV)
+    if raw is not None:
+        return raw.strip().lower() in TRUE_VALUES
+    legacy = os.environ.get(LEGACY_POST_EDIT_CLEAN_CONFIRM_ENV)
+    if legacy is None:
+        return False
+    if legacy.strip().lower() in FALSE_VALUES:
+        logger.warning(
+            "%s is deprecated; use %s=1 for clean-edit confirmation",
+            LEGACY_POST_EDIT_CLEAN_CONFIRM_ENV,
+            POST_EDIT_VERBOSE_ENV,
+        )
+        return False
+    if legacy.strip().lower() in TRUE_VALUES:
+        logger.warning(
+            "%s is deprecated; use %s=1 for clean-edit confirmation",
+            LEGACY_POST_EDIT_CLEAN_CONFIRM_ENV,
+            POST_EDIT_VERBOSE_ENV,
+        )
+        return True
+    return False
 
 
 def _watch_diagnostics_enabled() -> bool:
