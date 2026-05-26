@@ -57,6 +57,7 @@ vendor/
 # Development notes
 thoughts/
 docs/plans/
+docs/dev-notes/
 
 # Per-project daemon/cache state
 .tldr/
